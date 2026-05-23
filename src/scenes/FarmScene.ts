@@ -46,6 +46,7 @@ const OFFLINE_STORAGE_SECONDS_PER_LEVEL = 1800;
 const SHOW_DEBUG_PANEL = true;
 const EXPANSION_COLUMNS = 3;
 const EXPANSION_ROWS = 1;
+const MODAL_OVERLAY_DEPTH = 18;
 const THEME = {
   sky: 0x9bd7f2,
   grass: 0x6fbd64,
@@ -139,8 +140,11 @@ export class FarmScene extends Phaser.Scene {
   private settingsPanel?: Phaser.GameObjects.Container;
   private helpPanel?: Phaser.GameObjects.Container;
   private upgradeShopPanel?: Phaser.GameObjects.Container;
+  private modalOverlay?: Phaser.GameObjects.Rectangle;
   private economyDebugPanel?: Phaser.GameObjects.Container;
   private economyDebugText?: Phaser.GameObjects.Text;
+  private activeDragSlotId: number | null = null;
+  private activeDragVisual?: MonsterVisual;
   private upgradeLevels: Record<UpgradeId, number> = this.createInitialUpgradeLevels();
   private settings: GameSettings = loadSettings();
   private resetConfirmationArmed = false;
@@ -174,8 +178,11 @@ export class FarmScene extends Phaser.Scene {
     this.settingsPanel = undefined;
     this.helpPanel = undefined;
     this.upgradeShopPanel = undefined;
+    this.modalOverlay = undefined;
     this.economyDebugPanel = undefined;
     this.economyDebugText = undefined;
+    this.activeDragSlotId = null;
+    this.activeDragVisual = undefined;
     this.upgradeLevels = this.createInitialUpgradeLevels();
     this.settings = loadSettings();
     this.syncAudioSettings();
@@ -336,6 +343,10 @@ export class FarmScene extends Phaser.Scene {
         slotTile
           .setInteractive({ useHandCursor: true })
           .on('pointerdown', () => {
+            if (this.isModalOpen()) {
+              return;
+            }
+
             this.selectSlot(slotId);
           });
 
@@ -600,6 +611,39 @@ export class FarmScene extends Phaser.Scene {
     return panelBackground;
   }
 
+  private showModalOverlay(): void {
+    this.hideModalOverlay();
+
+    const overlay = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x06170d, 0.36)
+      .setOrigin(0)
+      .setDepth(MODAL_OVERLAY_DEPTH)
+      .setInteractive(
+        new Phaser.Geom.Rectangle(0, 0, this.scale.width, this.scale.height),
+        Phaser.Geom.Rectangle.Contains,
+      );
+
+    overlay.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.stopPropagation();
+    });
+    overlay.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.stopPropagation();
+    });
+    overlay.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.stopPropagation();
+    });
+
+    this.modalOverlay = overlay;
+  }
+
+  private hideModalOverlay(): void {
+    this.modalOverlay?.destroy();
+    this.modalOverlay = undefined;
+  }
+
+  private isModalOpen(): boolean {
+    return Boolean(this.compendiumPanel || this.settingsPanel || this.helpPanel || this.upgradeShopPanel || this.modalOverlay);
+  }
+
   private registerKeyboardShortcuts(): void {
     this.input.keyboard?.on('keydown-C', () => {
       this.toggleCompendiumPanel();
@@ -646,7 +690,9 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closeUpgradeShopPanel();
     this.closeEconomyDebugPanel();
+    this.cancelActiveDrag();
     this.clearSelectedSlot();
+    this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
     const { width: panelWidth, height: panelHeight } = this.getPanelSize(360, 270);
@@ -768,8 +814,11 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private closeSettingsPanel(resetConfirmation = true): void {
-    this.settingsPanel?.destroy();
-    this.settingsPanel = undefined;
+    if (this.settingsPanel) {
+      this.settingsPanel.destroy();
+      this.settingsPanel = undefined;
+      this.hideModalOverlay();
+    }
 
     if (resetConfirmation) {
       this.resetConfirmationArmed = false;
@@ -791,7 +840,9 @@ export class FarmScene extends Phaser.Scene {
     this.closeSettingsPanel();
     this.closeUpgradeShopPanel();
     this.closeEconomyDebugPanel();
+    this.cancelActiveDrag();
     this.clearSelectedSlot();
+    this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
     const { width: panelWidth, height: panelHeight } = this.getPanelSize(500, 320);
@@ -871,8 +922,11 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private closeHelpPanel(): void {
-    this.helpPanel?.destroy();
-    this.helpPanel = undefined;
+    if (this.helpPanel) {
+      this.helpPanel.destroy();
+      this.helpPanel = undefined;
+      this.hideModalOverlay();
+    }
   }
 
   private toggleEconomyDebugPanel(): void {
@@ -996,7 +1050,9 @@ export class FarmScene extends Phaser.Scene {
     this.closeSettingsPanel();
     this.closeHelpPanel();
     this.closeEconomyDebugPanel();
+    this.cancelActiveDrag();
     this.clearSelectedSlot();
+    this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
     const { width: panelWidth, height: panelHeight } = this.getPanelSize(580, 390);
@@ -1122,8 +1178,11 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private closeUpgradeShopPanel(): void {
-    this.upgradeShopPanel?.destroy();
-    this.upgradeShopPanel = undefined;
+    if (this.upgradeShopPanel) {
+      this.upgradeShopPanel.destroy();
+      this.upgradeShopPanel = undefined;
+      this.hideModalOverlay();
+    }
   }
 
   private createInitialFarmSlots(): FarmSlotState[] {
@@ -1368,7 +1427,9 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closeUpgradeShopPanel();
     this.closeEconomyDebugPanel();
+    this.cancelActiveDrag();
     this.clearSelectedSlot();
+    this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
     const { width: panelWidth, height: panelHeight } = this.getPanelSize(430, 310);
@@ -1415,8 +1476,11 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private closeCompendiumPanel(): void {
-    this.compendiumPanel?.destroy();
-    this.compendiumPanel = undefined;
+    if (this.compendiumPanel) {
+      this.compendiumPanel.destroy();
+      this.compendiumPanel = undefined;
+      this.hideModalOverlay();
+    }
   }
 
   private refreshCompendiumPanel(): void {
@@ -1517,6 +1581,18 @@ export class FarmScene extends Phaser.Scene {
     this.selectionHighlight = undefined;
     this.monsterTooltip?.destroy();
     this.monsterTooltip = undefined;
+  }
+
+  private cancelActiveDrag(): void {
+    if (this.activeDragSlotId === null || !this.activeDragVisual) {
+      return;
+    }
+
+    this.activeDragVisual.setScale(1);
+    this.activeDragVisual.setDepth(0);
+    this.returnMonsterVisualToSlot(this.activeDragSlotId, this.activeDragVisual);
+    this.activeDragSlotId = null;
+    this.activeDragVisual = undefined;
   }
 
   private showSelectionHighlight(slotId: number): void {
@@ -1626,11 +1702,19 @@ export class FarmScene extends Phaser.Scene {
 
     visual
       .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        if (this.isModalOpen()) {
+          return;
+        }
+
         pointerDownX = pointer.worldX;
         pointerDownY = pointer.worldY;
         wasDragged = false;
       })
       .on('pointerup', (pointer: Phaser.Input.Pointer) => {
+        if (this.isModalOpen()) {
+          return;
+        }
+
         const movedDistance = Phaser.Math.Distance.Between(
           pointerDownX,
           pointerDownY,
@@ -1643,18 +1727,40 @@ export class FarmScene extends Phaser.Scene {
         }
       })
       .on('dragstart', () => {
+        if (this.isModalOpen()) {
+          this.returnMonsterVisualToSlot(slot.id, visual);
+          return;
+        }
+
         wasDragged = true;
+        this.activeDragSlotId = slot.id;
+        this.activeDragVisual = visual;
         this.clearSelectedSlot();
         visual.setScale(1.08);
         visual.setDepth(10);
       })
       .on('drag', (_pointer: Phaser.Input.Pointer, dragX: number, dragY: number) => {
+        if (this.isModalOpen()) {
+          this.cancelActiveDrag();
+          return;
+        }
+
         visual.setPosition(dragX, dragY);
       })
       .on('dragend', (pointer: Phaser.Input.Pointer) => {
         visual.setScale(1);
         visual.setDepth(0);
+
+        if (this.isModalOpen()) {
+          this.returnMonsterVisualToSlot(slot.id, visual);
+          this.activeDragSlotId = null;
+          this.activeDragVisual = undefined;
+          return;
+        }
+
         this.handleMonsterDrop(slot.id, pointer.worldX, pointer.worldY, visual);
+        this.activeDragSlotId = null;
+        this.activeDragVisual = undefined;
       });
 
     this.monsterVisuals[slot.id] = visual;
@@ -1794,6 +1900,11 @@ export class FarmScene extends Phaser.Scene {
     dropWorldY: number,
     visual: MonsterVisual,
   ): void {
+    if (this.isModalOpen()) {
+      this.returnMonsterVisualToSlot(sourceSlotId, visual);
+      return;
+    }
+
     const targetSlotId = this.findSlotIdAtPoint(dropWorldX, dropWorldY);
 
     if (targetSlotId === null || !this.canMergeSlots(sourceSlotId, targetSlotId)) {
