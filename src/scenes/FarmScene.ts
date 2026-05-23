@@ -12,6 +12,7 @@ import {
   SAVE_VERSION,
   writeSaveData,
 } from '../systems/saveSystem';
+import { loadSettings, writeSettings, type GameSettings } from '../systems/settingsSystem';
 import type {
   CurrencyState,
   FarmSlotState,
@@ -60,6 +61,9 @@ export class FarmScene extends Phaser.Scene {
   private skipSavingUntilProgress = false;
   private discoveredMonsters = new Set<DiscoveryKey>();
   private compendiumPanel?: Phaser.GameObjects.Container;
+  private settingsPanel?: Phaser.GameObjects.Container;
+  private settings: GameSettings = loadSettings();
+  private resetConfirmationArmed = false;
 
   private readonly handlePageHide = (): void => {
     this.saveProgress();
@@ -87,6 +91,9 @@ export class FarmScene extends Phaser.Scene {
     this.skipSavingUntilProgress = false;
     this.discoveredMonsters = new Set<DiscoveryKey>();
     this.compendiumPanel = undefined;
+    this.settingsPanel = undefined;
+    this.settings = loadSettings();
+    this.resetConfirmationArmed = false;
     this.selectedSlotId = null;
     this.selectionHighlight = undefined;
     this.monsterTooltip = undefined;
@@ -102,7 +109,7 @@ export class FarmScene extends Phaser.Scene {
     this.createExpansionPlaceholder();
     this.createHud();
     this.createHatchArea();
-    this.createResetSaveControl();
+    this.createSettingsControl();
     this.createCompendiumControl();
     this.loadProgress();
     this.registerPersistenceEvents();
@@ -258,8 +265,8 @@ export class FarmScene extends Phaser.Scene {
     this.updateHatchCooldownUi();
   }
 
-  private createResetSaveControl(): void {
-    const resetText = this.add.text(this.scale.width - 24, 22, 'Reset Save', {
+  private createSettingsControl(): void {
+    const settingsText = this.add.text(this.scale.width - 24, 22, 'Settings', {
       color: '#f7ffe8',
       fontFamily: 'Arial, sans-serif',
       fontSize: '15px',
@@ -271,15 +278,11 @@ export class FarmScene extends Phaser.Scene {
       },
     }).setOrigin(1, 0);
 
-    resetText
+    settingsText
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
-        this.resetProgress();
+        this.toggleSettingsPanel();
       });
-
-    this.input.keyboard?.on('keydown-R', () => {
-      this.resetProgress();
-    });
   }
 
   private createCompendiumControl(): void {
@@ -300,6 +303,150 @@ export class FarmScene extends Phaser.Scene {
       .on('pointerdown', () => {
         this.toggleCompendiumPanel();
       });
+  }
+
+  private toggleSettingsPanel(): void {
+    if (this.settingsPanel) {
+      this.closeSettingsPanel();
+      return;
+    }
+
+    this.resetConfirmationArmed = false;
+    this.openSettingsPanel();
+  }
+
+  private openSettingsPanel(): void {
+    this.closeSettingsPanel(false);
+    this.closeCompendiumPanel();
+    this.clearSelectedSlot();
+
+    const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
+    const panelWidth = 360;
+    const panelHeight = 270;
+
+    panel.setDepth(25);
+
+    const panelBackground = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x14291d, 0.97)
+      .setStrokeStyle(3, 0xd7f5a2, 0.75)
+      .setInteractive();
+
+    panelBackground.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event.stopPropagation();
+    });
+
+    panel.add(panelBackground);
+
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Settings', {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '24px',
+      fontStyle: 'bold',
+    }));
+
+    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, 'Close', {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+      backgroundColor: '#2f2a45',
+      padding: {
+        x: 9,
+        y: 5,
+      },
+    }).setOrigin(1, 0);
+
+    closeText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.closeSettingsPanel();
+      });
+
+    panel.add(closeText);
+
+    this.addSettingsToggle(panel, 'Music', this.settings.musicEnabled, -48, () => {
+      this.settings.musicEnabled = !this.settings.musicEnabled;
+      writeSettings(this.settings);
+      this.openSettingsPanel();
+    });
+
+    this.addSettingsToggle(panel, 'Sound', this.settings.soundEnabled, 16, () => {
+      this.settings.soundEnabled = !this.settings.soundEnabled;
+      writeSettings(this.settings);
+      this.openSettingsPanel();
+    });
+
+    const resetText = this.add.text(0, 92, this.resetConfirmationArmed ? 'Click again to confirm reset' : 'Reset Save', {
+      color: this.resetConfirmationArmed ? '#fff4a8' : '#ffffff',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '17px',
+      fontStyle: 'bold',
+      backgroundColor: this.resetConfirmationArmed ? '#6d4b16' : '#6d2430',
+      padding: {
+        x: 14,
+        y: 8,
+      },
+    }).setOrigin(0.5);
+
+    resetText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        if (!this.resetConfirmationArmed) {
+          this.resetConfirmationArmed = true;
+          this.openSettingsPanel();
+          return;
+        }
+
+        this.resetProgress();
+        this.openSettingsPanel();
+      });
+
+    panel.add(resetText);
+    this.settingsPanel = panel;
+  }
+
+  private addSettingsToggle(
+    panel: Phaser.GameObjects.Container,
+    label: string,
+    isEnabled: boolean,
+    y: number,
+    onToggle: () => void,
+  ): void {
+    panel.add(this.add.text(-132, y - 11, label, {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '18px',
+      fontStyle: 'bold',
+    }));
+
+    const toggleColor = isEnabled ? 0x3c7a3f : 0x6d2430;
+    const toggleText = this.add.text(132, y - 14, isEnabled ? 'ON' : 'OFF', {
+      color: '#ffffff',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '16px',
+      fontStyle: 'bold',
+      backgroundColor: `#${toggleColor.toString(16).padStart(6, '0')}`,
+      padding: {
+        x: 18,
+        y: 7,
+      },
+    }).setOrigin(1, 0);
+
+    toggleText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        onToggle();
+      });
+
+    panel.add(toggleText);
+  }
+
+  private closeSettingsPanel(resetConfirmation = true): void {
+    this.settingsPanel?.destroy();
+    this.settingsPanel = undefined;
+
+    if (resetConfirmation) {
+      this.resetConfirmationArmed = false;
+    }
   }
 
   private createInitialFarmSlots(): FarmSlotState[] {
@@ -393,6 +540,7 @@ export class FarmScene extends Phaser.Scene {
 
   private openCompendiumPanel(): void {
     this.closeCompendiumPanel();
+    this.closeSettingsPanel();
     this.clearSelectedSlot();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
@@ -956,6 +1104,7 @@ export class FarmScene extends Phaser.Scene {
     this.saveThrottleAccumulatorMs = 0;
     this.hasUnsavedProgress = false;
     this.skipSavingUntilProgress = true;
+    this.resetConfirmationArmed = false;
     this.discoveredMonsters = new Set<DiscoveryKey>();
     this.farmSlots = this.createInitialFarmSlots();
 
