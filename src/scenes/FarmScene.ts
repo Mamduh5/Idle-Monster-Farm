@@ -1,5 +1,10 @@
 import Phaser from 'phaser';
-import { BABY_SLIME, getMonsterDefinition, getNextMonsterDefinition } from '../data/monsters';
+import {
+  BABY_SLIME,
+  getMonsterDefinition,
+  getNextMonsterDefinition,
+  MONSTER_DEFINITIONS,
+} from '../data/monsters';
 import {
   clearSaveData,
   loadSaveData,
@@ -11,6 +16,7 @@ import type {
   CurrencyState,
   FarmSlotState,
   MonsterDefinition,
+  MonsterFamily,
   MonsterInstance,
 } from '../types/game-state';
 
@@ -23,6 +29,7 @@ const SAVE_THROTTLE_MS = 5000;
 const MAX_OFFLINE_SECONDS = 7200;
 
 type MonsterVisual = Phaser.GameObjects.Container;
+type DiscoveryKey = `${MonsterFamily}:${number}`;
 
 export class FarmScene extends Phaser.Scene {
   private currency: CurrencyState = {
@@ -40,6 +47,8 @@ export class FarmScene extends Phaser.Scene {
   private saveThrottleAccumulatorMs = 0;
   private hasUnsavedProgress = false;
   private skipSavingUntilProgress = false;
+  private discoveredMonsters = new Set<DiscoveryKey>();
+  private compendiumPanel?: Phaser.GameObjects.Container;
 
   private readonly handlePageHide = (): void => {
     this.saveProgress();
@@ -64,6 +73,8 @@ export class FarmScene extends Phaser.Scene {
     this.saveThrottleAccumulatorMs = 0;
     this.hasUnsavedProgress = false;
     this.skipSavingUntilProgress = false;
+    this.discoveredMonsters = new Set<DiscoveryKey>();
+    this.compendiumPanel = undefined;
     this.fullFarmText = undefined;
     this.farmSlots = this.createInitialFarmSlots();
     this.monsterVisuals = Array.from({ length: GRID_COLUMNS * GRID_ROWS }, () => null);
@@ -72,6 +83,7 @@ export class FarmScene extends Phaser.Scene {
     this.createHud();
     this.createHatchArea();
     this.createResetSaveControl();
+    this.createCompendiumControl();
     this.loadProgress();
     this.registerPersistenceEvents();
     this.updateHud();
@@ -194,6 +206,26 @@ export class FarmScene extends Phaser.Scene {
     });
   }
 
+  private createCompendiumControl(): void {
+    const compendiumText = this.add.text(this.scale.width - 24, 62, 'Compendium', {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+      backgroundColor: '#10291a',
+      padding: {
+        x: 10,
+        y: 6,
+      },
+    }).setOrigin(1, 0);
+
+    compendiumText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.toggleCompendiumPanel();
+      });
+  }
+
   private createInitialFarmSlots(): FarmSlotState[] {
     return Array.from({ length: GRID_COLUMNS * GRID_ROWS }, (_, index) => ({
       id: index,
@@ -210,6 +242,7 @@ export class FarmScene extends Phaser.Scene {
     }
 
     emptySlot.monster = this.createMonsterInstance(BABY_SLIME);
+    this.discoverMonster(BABY_SLIME);
     this.hideFullFarmMessage();
     this.renderMonsterInSlot(emptySlot);
     this.updateHud();
@@ -225,6 +258,167 @@ export class FarmScene extends Phaser.Scene {
       ...definition,
       id: `monster-${monsterId}`,
     };
+  }
+
+  private discoverMonster(monster: MonsterDefinition): void {
+    this.discoveredMonsters.add(this.getDiscoveryKey(monster.family, monster.level));
+    this.refreshCompendiumPanel();
+  }
+
+  private getDiscoveryKey(family: MonsterFamily, level: number): DiscoveryKey {
+    return `${family}:${level}`;
+  }
+
+  private isMonsterDiscovered(monster: MonsterDefinition): boolean {
+    return this.discoveredMonsters.has(this.getDiscoveryKey(monster.family, monster.level));
+  }
+
+  private toggleCompendiumPanel(): void {
+    if (this.compendiumPanel) {
+      this.closeCompendiumPanel();
+      return;
+    }
+
+    this.openCompendiumPanel();
+  }
+
+  private openCompendiumPanel(): void {
+    this.closeCompendiumPanel();
+
+    const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
+    const panelWidth = 430;
+    const panelHeight = 310;
+
+    panel.setDepth(20);
+    const panelBackground = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x14291d, 0.96)
+      .setStrokeStyle(3, 0xd7f5a2, 0.75)
+      .setInteractive();
+
+    panelBackground.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event.stopPropagation();
+    });
+
+    panel.add(panelBackground);
+
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Monster Compendium', {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '22px',
+      fontStyle: 'bold',
+    }));
+
+    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 20, 'Close', {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+      backgroundColor: '#2f2a45',
+      padding: {
+        x: 9,
+        y: 5,
+      },
+    }).setOrigin(1, 0);
+
+    closeText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.closeCompendiumPanel();
+      });
+
+    panel.add(closeText);
+
+    MONSTER_DEFINITIONS
+      .filter((definition) => definition.family === 'Slime')
+      .sort((first, second) => first.level - second.level)
+      .forEach((definition, index) => {
+        this.addCompendiumRow(panel, definition, -panelHeight / 2 + 78 + index * 68);
+      });
+
+    this.compendiumPanel = panel;
+  }
+
+  private closeCompendiumPanel(): void {
+    this.compendiumPanel?.destroy();
+    this.compendiumPanel = undefined;
+  }
+
+  private refreshCompendiumPanel(): void {
+    if (this.compendiumPanel) {
+      this.openCompendiumPanel();
+    }
+  }
+
+  private addCompendiumRow(
+    panel: Phaser.GameObjects.Container,
+    monster: MonsterDefinition,
+    rowY: number,
+  ): void {
+    const panelWidth = 430;
+    const isDiscovered = this.isMonsterDiscovered(monster);
+    const rowColor = isDiscovered ? 0x234936 : 0x202726;
+    const textColor = isDiscovered ? '#f7ffe8' : '#9ca79f';
+
+    panel.add(this.add.rectangle(0, rowY, panelWidth - 48, 52, rowColor, 0.92)
+      .setStrokeStyle(2, isDiscovered ? 0x8ecf62 : 0x46524b, 0.8));
+
+    this.addCompendiumIcon(panel, monster, isDiscovered, -panelWidth / 2 + 56, rowY);
+
+    panel.add(this.add.text(-panelWidth / 2 + 94, rowY - 17, isDiscovered ? monster.name : '???', {
+      color: textColor,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '17px',
+      fontStyle: 'bold',
+    }));
+
+    panel.add(this.add.text(-panelWidth / 2 + 94, rowY + 6, `Level ${monster.level}`, {
+      color: textColor,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '14px',
+    }));
+
+    panel.add(this.add.text(panelWidth / 2 - 42, rowY - 8, isDiscovered ? `+${monster.incomePerSecond}/sec` : 'Unknown', {
+      color: isDiscovered ? '#fff4a8' : '#9ca79f',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+    }).setOrigin(1, 0));
+  }
+
+  private addCompendiumIcon(
+    panel: Phaser.GameObjects.Container,
+    monster: MonsterDefinition,
+    isDiscovered: boolean,
+    iconX: number,
+    iconY: number,
+  ): void {
+    if (!isDiscovered) {
+      panel.add(this.add.circle(iconX, iconY, 18, 0x303735)
+        .setStrokeStyle(2, 0x707a73, 0.85));
+      panel.add(this.add.text(iconX, iconY - 11, '?', {
+        color: '#d9d6ec',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '22px',
+        fontStyle: 'bold',
+      }).setOrigin(0.5, 0));
+      return;
+    }
+
+    const visualStyle = this.getMonsterVisualStyle(monster.level);
+
+    panel.add(this.add.ellipse(iconX, iconY, 34, 28, visualStyle.bodyColor)
+      .setStrokeStyle(2, visualStyle.strokeColor, 0.95));
+    panel.add(this.add.circle(iconX - 7, iconY - 3, 3, 0x10291a));
+    panel.add(this.add.circle(iconX + 7, iconY - 3, 3, 0x10291a));
+
+    if (monster.level >= 2) {
+      panel.add(this.add.circle(iconX, iconY - 14, 5, 0xd7f5ff, 0.95)
+        .setStrokeStyle(1, visualStyle.strokeColor, 0.8));
+    }
+
+    if (monster.level >= 3) {
+      panel.add(this.add.star(iconX, iconY, 5, 5, 10, 0xf7e27c, 0.9)
+        .setStrokeStyle(1, 0x7d5f16, 0.8));
+    }
   }
 
   private renderMonsterInSlot(slot: FarmSlotState): void {
@@ -394,6 +588,7 @@ export class FarmScene extends Phaser.Scene {
 
     this.farmSlots[sourceSlotId].monster = null;
     this.farmSlots[targetSlotId].monster = this.createMonsterInstance(nextMonsterDefinition);
+    this.discoverMonster(nextMonsterDefinition);
 
     this.clearMonsterVisual(sourceSlotId);
     this.renderMonsterInSlot(this.farmSlots[targetSlotId]);
@@ -470,6 +665,14 @@ export class FarmScene extends Phaser.Scene {
 
     this.currency.coins = sanitizeSavedCoins(saveData.coins);
 
+    saveData.discoveredMonsters.forEach((savedDiscovery) => {
+      const monsterDefinition = getMonsterDefinition(savedDiscovery.family, savedDiscovery.level);
+
+      if (monsterDefinition) {
+        this.discoverMonster(monsterDefinition);
+      }
+    });
+
     saveData.grid.forEach((savedSlot, slotId) => {
       if (!savedSlot) {
         return;
@@ -483,6 +686,7 @@ export class FarmScene extends Phaser.Scene {
 
       const slot = this.farmSlots[slotId];
       slot.monster = this.createMonsterInstance(monsterDefinition);
+      this.discoverMonster(monsterDefinition);
       this.renderMonsterInSlot(slot);
     });
 
@@ -515,6 +719,14 @@ export class FarmScene extends Phaser.Scene {
         };
       }),
       lastActiveAt: Date.now(),
+      discoveredMonsters: Array.from(this.discoveredMonsters).map((discoveryKey) => {
+        const [family, level] = discoveryKey.split(':');
+
+        return {
+          family: family as MonsterFamily,
+          level: Number(level),
+        };
+      }),
     });
 
     this.hasUnsavedProgress = false;
@@ -542,6 +754,7 @@ export class FarmScene extends Phaser.Scene {
     this.saveThrottleAccumulatorMs = 0;
     this.hasUnsavedProgress = false;
     this.skipSavingUntilProgress = true;
+    this.discoveredMonsters = new Set<DiscoveryKey>();
     this.farmSlots = this.createInitialFarmSlots();
 
     this.monsterVisuals.forEach((visual) => {
@@ -550,6 +763,7 @@ export class FarmScene extends Phaser.Scene {
     this.monsterVisuals = Array.from({ length: GRID_COLUMNS * GRID_ROWS }, () => null);
 
     this.hideFullFarmMessage();
+    this.closeCompendiumPanel();
     this.updateHud();
   }
 

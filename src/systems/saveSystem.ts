@@ -8,11 +8,17 @@ export type SavedMonsterSlot = {
   level: number;
 } | null;
 
+export type SavedMonsterDiscovery = {
+  family: MonsterFamily;
+  level: number;
+};
+
 export type LocalSaveData = {
   version: typeof SAVE_VERSION;
   coins: number;
   grid: SavedMonsterSlot[];
   lastActiveAt: number;
+  discoveredMonsters: SavedMonsterDiscovery[];
 };
 
 export function loadSaveData(slotCount: number): LocalSaveData | null {
@@ -67,12 +73,19 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
   }
 
   const rawGrid = Array.isArray(rawData.grid) ? rawData.grid : [];
+  const rawDiscoveries = Array.isArray(rawData.discoveredMonsters)
+    ? rawData.discoveredMonsters
+    : [];
 
   return {
     version: SAVE_VERSION,
     coins: sanitizeSavedCoins(Number(rawData.coins)),
     grid: Array.from({ length: slotCount }, (_, index) => normalizeSavedSlot(rawGrid[index])),
     lastActiveAt: normalizeTimestamp(rawData.lastActiveAt),
+    discoveredMonsters: rawDiscoveries.flatMap((rawDiscovery) => {
+      const discovery = normalizeSavedMonsterReference(rawDiscovery);
+      return discovery ? [discovery] : [];
+    }),
   };
 }
 
@@ -81,14 +94,22 @@ function normalizeSavedSlot(rawSlot: unknown): SavedMonsterSlot {
     return null;
   }
 
-  const level = Number(rawSlot.level);
+  return normalizeSavedMonsterReference(rawSlot);
+}
 
-  if (typeof rawSlot.family !== 'string' || !Number.isInteger(level) || level <= 0) {
+function normalizeSavedMonsterReference(rawMonster: unknown): SavedMonsterDiscovery | null {
+  if (!isRecord(rawMonster)) {
+    return null;
+  }
+
+  const level = Number(rawMonster.level);
+
+  if (typeof rawMonster.family !== 'string' || !Number.isInteger(level) || level <= 0) {
     return null;
   }
 
   return {
-    family: rawSlot.family as MonsterFamily,
+    family: rawMonster.family as MonsterFamily,
     level,
   };
 }
