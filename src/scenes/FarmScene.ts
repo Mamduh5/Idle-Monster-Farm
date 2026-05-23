@@ -44,7 +44,7 @@ const MIN_HATCH_COOLDOWN_MS = 1200;
 const INCOME_BOOST_PER_LEVEL = 0.1;
 const HATCH_SPEED_REDUCTION_PER_LEVEL = 0.05;
 const OFFLINE_STORAGE_SECONDS_PER_LEVEL = 1800;
-const SHOW_DEBUG_PANEL = true;
+const SHOW_DEBUG_PANEL = false;
 const EXPANSION_COLUMNS = 3;
 const EXPANSION_ROWS = 1;
 const MODAL_OVERLAY_DEPTH = 18;
@@ -77,6 +77,12 @@ const THEME = {
 };
 
 type MonsterVisual = Phaser.GameObjects.Container;
+type MonsterVisualStyle = {
+  bodyColor: number;
+  strokeColor: number;
+  bodyWidth: number;
+  bodyHeight: number;
+};
 type DiscoveryKey = `${MonsterFamily}:${number}`;
 type ToastVariant = 'info' | 'success' | 'warning';
 type MenuButtonVisual = {
@@ -1643,7 +1649,13 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = this.getPanelSize(430, 310);
+    const slimeDefinitions = MONSTER_DEFINITIONS
+      .filter((definition) => definition.family === 'Slime')
+      .sort((first, second) => first.level - second.level);
+    const { width: panelWidth, height: panelHeight } = this.getPanelSize(430, 560);
+    const rowGap = Math.min(56, Math.max(44, (panelHeight - 116) / Math.max(1, slimeDefinitions.length)));
+    const rowHeight = Math.min(48, rowGap - 4);
+    const firstRowY = -panelHeight / 2 + 82;
 
     panel.setDepth(20);
     this.addPanelBackground(panel, panelWidth, panelHeight);
@@ -1676,12 +1688,9 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(closeText);
 
-    MONSTER_DEFINITIONS
-      .filter((definition) => definition.family === 'Slime')
-      .sort((first, second) => first.level - second.level)
-      .forEach((definition, index) => {
-        this.addCompendiumRow(panel, definition, -panelHeight / 2 + 78 + index * 68, panelWidth);
-      });
+    slimeDefinitions.forEach((definition, index) => {
+      this.addCompendiumRow(panel, definition, firstRowY + index * rowGap, panelWidth, rowHeight);
+    });
 
     this.compendiumPanel = panel;
   }
@@ -1705,33 +1714,40 @@ export class FarmScene extends Phaser.Scene {
     monster: MonsterDefinition,
     rowY: number,
     panelWidth: number,
+    rowHeight: number,
   ): void {
     const isDiscovered = this.isMonsterDiscovered(monster);
     const rowColor = isDiscovered ? THEME.panelAlt : 0x29362f;
     const textColor = isDiscovered ? '#f7ffe8' : '#9ca79f';
+    const isCompactPanel = panelWidth < 390;
+    const iconX = -panelWidth / 2 + (isCompactPanel ? 45 : 56);
+    const textX = -panelWidth / 2 + (isCompactPanel ? 78 : 94);
 
-    panel.add(this.add.rectangle(0, rowY, panelWidth - 48, 52, rowColor, 0.92)
+    panel.add(this.add.rectangle(0, rowY, panelWidth - 48, rowHeight, rowColor, 0.92)
       .setStrokeStyle(2, isDiscovered ? THEME.slot : THEME.lockedBorder, 0.75));
 
-    this.addCompendiumIcon(panel, monster, isDiscovered, -panelWidth / 2 + 56, rowY);
+    this.addCompendiumIcon(panel, monster, isDiscovered, iconX, rowY);
 
-    panel.add(this.add.text(-panelWidth / 2 + 94, rowY - 17, isDiscovered ? monster.name : '???', {
+    panel.add(this.add.text(textX, rowY - 16, isDiscovered ? monster.name : '???', {
       color: textColor,
       fontFamily: 'Arial, sans-serif',
-      fontSize: '17px',
+      fontSize: isCompactPanel ? '15px' : '16px',
       fontStyle: 'bold',
+      wordWrap: {
+        width: Math.max(120, panelWidth - (isCompactPanel ? 190 : 220)),
+      },
     }));
 
-    panel.add(this.add.text(-panelWidth / 2 + 94, rowY + 6, `Level ${monster.level}`, {
+    panel.add(this.add.text(textX, rowY + 5, `Level ${monster.level}`, {
       color: textColor,
       fontFamily: 'Arial, sans-serif',
-      fontSize: '14px',
+      fontSize: isCompactPanel ? '12px' : '13px',
     }));
 
     panel.add(this.add.text(panelWidth / 2 - 42, rowY - 8, isDiscovered ? `+${monster.incomePerSecond}/sec` : 'Unknown', {
       color: isDiscovered ? '#fff4a8' : '#9ca79f',
       fontFamily: 'Arial, sans-serif',
-      fontSize: '15px',
+      fontSize: isCompactPanel ? '13px' : '14px',
       fontStyle: 'bold',
     }).setOrigin(1, 0));
   }
@@ -1761,16 +1777,7 @@ export class FarmScene extends Phaser.Scene {
       .setStrokeStyle(2, visualStyle.strokeColor, 0.95));
     panel.add(this.add.circle(iconX - 7, iconY - 3, 3, 0x10291a));
     panel.add(this.add.circle(iconX + 7, iconY - 3, 3, 0x10291a));
-
-    if (monster.level >= 2) {
-      panel.add(this.add.circle(iconX, iconY - 14, 5, 0xd7f5ff, 0.95)
-        .setStrokeStyle(1, visualStyle.strokeColor, 0.8));
-    }
-
-    if (monster.level >= 3) {
-      panel.add(this.add.star(iconX, iconY, 5, 5, 10, 0xf7e27c, 0.9)
-        .setStrokeStyle(1, 0x7d5f16, 0.8));
-    }
+    this.addSlimeDecorations(panel, monster.level, visualStyle, iconX, iconY, 0.55);
   }
 
   private selectSlot(slotId: number): void {
@@ -1882,15 +1889,7 @@ export class FarmScene extends Phaser.Scene {
     visual.add(this.add.ellipse(-17, 4, 6, 4, 0xff9fb1, 0.35));
     visual.add(this.add.ellipse(17, 4, 6, 4, 0xff9fb1, 0.35));
 
-    if (monster.level >= 2) {
-      visual.add(this.add.circle(0, -18, 7, 0xd7f5ff, 0.95)
-        .setStrokeStyle(2, visualStyle.strokeColor, 0.8));
-    }
-
-    if (monster.level >= 3) {
-      visual.add(this.add.star(0, -2, 5, 9, 15, 0xf7e27c, 0.9)
-        .setStrokeStyle(2, 0x7d5f16, 0.8));
-    }
+    this.addSlimeDecorations(visual, monster.level, visualStyle);
 
     visual.add(this.add.text(0, 27, `Lv ${monster.level}`, {
       color: '#f7ffe8',
@@ -1977,13 +1976,53 @@ export class FarmScene extends Phaser.Scene {
     this.monsterVisuals[slot.id] = visual;
   }
 
-  private getMonsterVisualStyle(level: number): {
-    bodyColor: number;
-    strokeColor: number;
-    bodyWidth: number;
-    bodyHeight: number;
-  } {
-    if (level >= 3) {
+  private getMonsterVisualStyle(level: number): MonsterVisualStyle {
+    if (level >= 8) {
+      return {
+        bodyColor: 0x4f4bb8,
+        strokeColor: 0x24205f,
+        bodyWidth: 64,
+        bodyHeight: 52,
+      };
+    }
+
+    if (level === 7) {
+      return {
+        bodyColor: 0x7bb36a,
+        strokeColor: 0x395e32,
+        bodyWidth: 62,
+        bodyHeight: 52,
+      };
+    }
+
+    if (level === 6) {
+      return {
+        bodyColor: 0x8ae8f2,
+        strokeColor: 0x267c94,
+        bodyWidth: 60,
+        bodyHeight: 50,
+      };
+    }
+
+    if (level === 5) {
+      return {
+        bodyColor: 0xf0a45d,
+        strokeColor: 0x945024,
+        bodyWidth: 62,
+        bodyHeight: 50,
+      };
+    }
+
+    if (level === 4) {
+      return {
+        bodyColor: 0x9ee45d,
+        strokeColor: 0x4b8732,
+        bodyWidth: 58,
+        bodyHeight: 48,
+      };
+    }
+
+    if (level === 3) {
       return {
         bodyColor: 0xb28df0,
         strokeColor: 0x6543a1,
@@ -2007,6 +2046,80 @@ export class FarmScene extends Phaser.Scene {
       bodyWidth: 46,
       bodyHeight: 38,
     };
+  }
+
+  private addSlimeDecorations(
+    container: Phaser.GameObjects.Container,
+    level: number,
+    visualStyle: MonsterVisualStyle,
+    x = 0,
+    y = 0,
+    scale = 1,
+  ): void {
+    const strokeWidth = Math.max(1, Math.round(2 * scale));
+
+    if (level === 2) {
+      container.add(this.add.circle(x, y - 18 * scale, 7 * scale, 0xd7f5ff, 0.95)
+        .setStrokeStyle(strokeWidth, visualStyle.strokeColor, 0.8));
+      return;
+    }
+
+    if (level === 3) {
+      container.add(this.add.star(x, y - 2 * scale, 5, 9 * scale, 15 * scale, 0xf7e27c, 0.9)
+        .setStrokeStyle(strokeWidth, 0x7d5f16, 0.8));
+      return;
+    }
+
+    if (level === 4) {
+      container.add(this.add.triangle(x - 17 * scale, y - 18 * scale, 0, 13 * scale, 8 * scale, -8 * scale, 16 * scale, 13 * scale, 0xffdf9c, 0.96)
+        .setStrokeStyle(strokeWidth, 0x8d5a24, 0.85));
+      container.add(this.add.triangle(x + 17 * scale, y - 18 * scale, 0, 13 * scale, 8 * scale, -8 * scale, 16 * scale, 13 * scale, 0xffdf9c, 0.96)
+        .setStrokeStyle(strokeWidth, 0x8d5a24, 0.85));
+      return;
+    }
+
+    if (level === 5) {
+      container.add(this.add.rectangle(x, y - 22 * scale, 28 * scale, 8 * scale, 0xf7d35f, 0.98)
+        .setStrokeStyle(strokeWidth, 0x8f6b18, 0.9));
+      container.add(this.add.triangle(x - 10 * scale, y - 28 * scale, 0, 12 * scale, 6 * scale, -7 * scale, 12 * scale, 12 * scale, 0xf7d35f, 0.98)
+        .setStrokeStyle(strokeWidth, 0x8f6b18, 0.85));
+      container.add(this.add.triangle(x, y - 31 * scale, 0, 14 * scale, 7 * scale, -8 * scale, 14 * scale, 14 * scale, 0xffe98d, 0.98)
+        .setStrokeStyle(strokeWidth, 0x8f6b18, 0.85));
+      container.add(this.add.triangle(x + 10 * scale, y - 28 * scale, 0, 12 * scale, 6 * scale, -7 * scale, 12 * scale, 12 * scale, 0xf7d35f, 0.98)
+        .setStrokeStyle(strokeWidth, 0x8f6b18, 0.85));
+      container.add(this.add.circle(x, y - 23 * scale, 2.4 * scale, 0xe94c74, 0.95));
+      return;
+    }
+
+    if (level === 6) {
+      container.add(this.add.triangle(x - 14 * scale, y - 19 * scale, 0, 17 * scale, 6 * scale, -12 * scale, 12 * scale, 17 * scale, 0xd7fbff, 0.95)
+        .setStrokeStyle(strokeWidth, 0x257a93, 0.85));
+      container.add(this.add.triangle(x, y - 24 * scale, 0, 20 * scale, 7 * scale, -14 * scale, 14 * scale, 20 * scale, 0xb7f4ff, 0.98)
+        .setStrokeStyle(strokeWidth, 0x257a93, 0.9));
+      container.add(this.add.triangle(x + 14 * scale, y - 19 * scale, 0, 17 * scale, 6 * scale, -12 * scale, 12 * scale, 17 * scale, 0xd7fbff, 0.95)
+        .setStrokeStyle(strokeWidth, 0x257a93, 0.85));
+      return;
+    }
+
+    if (level === 7) {
+      container.add(this.add.ellipse(x - 14 * scale, y + 1 * scale, 9 * scale, 15 * scale, 0xf0dca4, 0)
+        .setStrokeStyle(strokeWidth, 0xf0dca4, 0.8));
+      container.add(this.add.ellipse(x + 14 * scale, y + 1 * scale, 9 * scale, 15 * scale, 0xf0dca4, 0)
+        .setStrokeStyle(strokeWidth, 0xf0dca4, 0.8));
+      container.add(this.add.circle(x, y - 13 * scale, 5 * scale, 0xf0dca4, 0)
+        .setStrokeStyle(strokeWidth, 0xf0dca4, 0.85));
+      container.add(this.add.circle(x, y - 13 * scale, 2 * scale, 0xf0dca4, 0.9));
+      return;
+    }
+
+    if (level >= 8) {
+      container.add(this.add.ellipse(x, y - 3 * scale, 52 * scale, 18 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, 0xb9d9ff, 0.78));
+      container.add(this.add.star(x - 12 * scale, y - 13 * scale, 5, 3 * scale, 6 * scale, 0xfff4a8, 0.95));
+      container.add(this.add.star(x + 14 * scale, y + 3 * scale, 5, 3 * scale, 6 * scale, 0xd7f5ff, 0.95));
+      container.add(this.add.circle(x + 22 * scale, y - 7 * scale, 3.5 * scale, 0xff8bc8, 0.95)
+        .setStrokeStyle(1, 0xffffff, 0.65));
+    }
   }
 
   private isFarmFull(): boolean {

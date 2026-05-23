@@ -21,10 +21,50 @@ export const LEVEL_3_SLIME: MonsterDefinition = {
   incomePerSecond: 8,
 };
 
+export const LEVEL_4_SLIME: MonsterDefinition = {
+  family: 'Slime',
+  level: 4,
+  name: 'Horned Slime',
+  incomePerSecond: 20,
+};
+
+export const LEVEL_5_SLIME: MonsterDefinition = {
+  family: 'Slime',
+  level: 5,
+  name: 'King Slime',
+  incomePerSecond: 48,
+};
+
+export const LEVEL_6_SLIME: MonsterDefinition = {
+  family: 'Slime',
+  level: 6,
+  name: 'Crystal Slime',
+  incomePerSecond: 115,
+};
+
+export const LEVEL_7_SLIME: MonsterDefinition = {
+  family: 'Slime',
+  level: 7,
+  name: 'Ancient Slime',
+  incomePerSecond: 275,
+};
+
+export const LEVEL_8_SLIME: MonsterDefinition = {
+  family: 'Slime',
+  level: 8,
+  name: 'Galaxy Slime',
+  incomePerSecond: 660,
+};
+
 export const MONSTER_DEFINITIONS: MonsterDefinition[] = [
   BABY_SLIME,
   LEVEL_2_SLIME,
   LEVEL_3_SLIME,
+  LEVEL_4_SLIME,
+  LEVEL_5_SLIME,
+  LEVEL_6_SLIME,
+  LEVEL_7_SLIME,
+  LEVEL_8_SLIME,
 ];
 
 export function getNextMonsterDefinition(
