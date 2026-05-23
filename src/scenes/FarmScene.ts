@@ -78,6 +78,10 @@ const THEME = {
 type MonsterVisual = Phaser.GameObjects.Container;
 type DiscoveryKey = `${MonsterFamily}:${number}`;
 type ToastVariant = 'info' | 'success' | 'warning';
+type MenuButtonVisual = {
+  text: Phaser.GameObjects.Text;
+  defaultBackgroundColor: string;
+};
 type FarmSceneLayout = {
   isNarrow: boolean;
   margin: number;
@@ -126,6 +130,8 @@ export class FarmScene extends Phaser.Scene {
   private hatchLabelText?: Phaser.GameObjects.Text;
   private hatchStatusText?: Phaser.GameObjects.Text;
   private hatchProgressFill?: Phaser.GameObjects.Rectangle;
+  private hatchPanel?: Phaser.GameObjects.Rectangle;
+  private menuButtons: MenuButtonVisual[] = [];
   private hatchProgressWidth = HATCH_PROGRESS_WIDTH;
   private cellSize = CELL_SIZE;
   private gridGap = GRID_GAP;
@@ -194,6 +200,8 @@ export class FarmScene extends Phaser.Scene {
     this.hatchLabelText = undefined;
     this.hatchStatusText = undefined;
     this.hatchProgressFill = undefined;
+    this.hatchPanel = undefined;
+    this.menuButtons = [];
     this.productionStatsText = undefined;
     this.currentEggCost = STARTING_EGG_COST;
     this.clearToast();
@@ -461,14 +469,24 @@ export class FarmScene extends Phaser.Scene {
     const hatchPanel = this.add.rectangle(x, y, panelWidth, panelHeight, 0x49395d, 0.92)
       .setOrigin(0)
       .setStrokeStyle(3, THEME.panelBorder, 0.9);
+    this.hatchPanel = hatchPanel;
 
     hatchPanel
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
+        if (this.isModalOpen()) {
+          return;
+        }
+
         this.playButtonClickSound();
         this.hatchBabySlime();
       })
       .on('pointerover', () => {
+        if (this.isModalOpen()) {
+          this.resetFarmControlHoverState();
+          return;
+        }
+
         hatchPanel.setFillStyle(0x58456f, 0.96);
       })
       .on('pointerout', () => {
@@ -558,15 +576,29 @@ export class FarmScene extends Phaser.Scene {
       },
     }).setOrigin(1, 0);
 
+    this.menuButtons.push({
+      text: button,
+      defaultBackgroundColor: backgroundColor,
+    });
+
     button
       .setInteractive({ useHandCursor: true })
       .on('pointerover', () => {
+        if (this.isModalOpen()) {
+          this.resetFarmControlHoverState();
+          return;
+        }
+
         button.setBackgroundColor(`#${THEME.buttonHover.toString(16).padStart(6, '0')}`);
       })
       .on('pointerout', () => {
         button.setBackgroundColor(backgroundColor);
       })
       .on('pointerdown', () => {
+        if (this.isModalOpen()) {
+          return;
+        }
+
         this.playButtonClickSound();
         onClick();
       });
@@ -613,8 +645,9 @@ export class FarmScene extends Phaser.Scene {
 
   private showModalOverlay(): void {
     this.hideModalOverlay();
+    this.setModalOpenVisualState(true);
 
-    const overlay = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x06170d, 0.36)
+    const overlay = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x06170d, 0.44)
       .setOrigin(0)
       .setDepth(MODAL_OVERLAY_DEPTH)
       .setInteractive(
@@ -638,10 +671,28 @@ export class FarmScene extends Phaser.Scene {
   private hideModalOverlay(): void {
     this.modalOverlay?.destroy();
     this.modalOverlay = undefined;
+    this.setModalOpenVisualState(false);
   }
 
   private isModalOpen(): boolean {
     return Boolean(this.compendiumPanel || this.settingsPanel || this.helpPanel || this.upgradeShopPanel || this.modalOverlay);
+  }
+
+  private setModalOpenVisualState(isOpen: boolean): void {
+    this.resetFarmControlHoverState();
+    this.hatchPanel?.setAlpha(isOpen ? 0.82 : 1);
+
+    this.menuButtons.forEach(({ text }) => {
+      text.setAlpha(isOpen ? 0.72 : 1);
+    });
+  }
+
+  private resetFarmControlHoverState(): void {
+    this.hatchPanel?.setFillStyle(0x49395d, 0.92);
+
+    this.menuButtons.forEach(({ text, defaultBackgroundColor }) => {
+      text.setBackgroundColor(defaultBackgroundColor);
+    });
   }
 
   private registerKeyboardShortcuts(): void {
