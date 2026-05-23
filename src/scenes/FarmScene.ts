@@ -1,6 +1,11 @@
 import Phaser from 'phaser';
-import { BABY_SLIME, LEVEL_2_SLIME } from '../data/monsters';
-import type { CurrencyState, FarmSlotState, MonsterInstance } from '../types/game-state';
+import { BABY_SLIME, getNextMonsterDefinition } from '../data/monsters';
+import type {
+  CurrencyState,
+  FarmSlotState,
+  MonsterDefinition,
+  MonsterInstance,
+} from '../types/game-state';
 
 const GRID_COLUMNS = 3;
 const GRID_ROWS = 3;
@@ -170,25 +175,26 @@ export class FarmScene extends Phaser.Scene {
 
     const center = this.slotCenters[slot.id];
     const monster = slot.monster;
-    const isLevelTwo = monster.level === 2;
 
     this.clearMonsterVisual(slot.id);
 
     const visual = this.add.container(center.x, center.y);
-    const bodyColor = isLevelTwo ? 0x54c6d8 : 0x75d96d;
-    const strokeColor = isLevelTwo ? 0x1e6d83 : 0x22692d;
-    const bodyWidth = isLevelTwo ? 54 : 46;
-    const bodyHeight = isLevelTwo ? 46 : 38;
+    const visualStyle = this.getMonsterVisualStyle(monster.level);
 
-    visual.add(this.add.ellipse(0, 6, bodyWidth, bodyHeight - 4, 0x2f7d40, 0.35));
-    visual.add(this.add.ellipse(0, 0, bodyWidth, bodyHeight, bodyColor)
-      .setStrokeStyle(3, strokeColor, 0.95));
+    visual.add(this.add.ellipse(0, 6, visualStyle.bodyWidth, visualStyle.bodyHeight - 4, 0x2f7d40, 0.35));
+    visual.add(this.add.ellipse(0, 0, visualStyle.bodyWidth, visualStyle.bodyHeight, visualStyle.bodyColor)
+      .setStrokeStyle(3, visualStyle.strokeColor, 0.95));
     visual.add(this.add.circle(-11, -4, 4, 0x10291a));
     visual.add(this.add.circle(11, -4, 4, 0x10291a));
 
-    if (isLevelTwo) {
+    if (monster.level >= 2) {
       visual.add(this.add.circle(0, -18, 7, 0xd7f5ff, 0.95)
-        .setStrokeStyle(2, 0x1e6d83, 0.8));
+        .setStrokeStyle(2, visualStyle.strokeColor, 0.8));
+    }
+
+    if (monster.level >= 3) {
+      visual.add(this.add.star(0, -1, 5, 9, 15, 0xf7e27c, 0.9)
+        .setStrokeStyle(2, 0x7d5f16, 0.8));
     }
 
     visual.add(this.add.text(0, 27, `Lv ${monster.level}`, {
@@ -221,6 +227,38 @@ export class FarmScene extends Phaser.Scene {
       });
 
     this.monsterVisuals[slot.id] = visual;
+  }
+
+  private getMonsterVisualStyle(level: number): {
+    bodyColor: number;
+    strokeColor: number;
+    bodyWidth: number;
+    bodyHeight: number;
+  } {
+    if (level >= 3) {
+      return {
+        bodyColor: 0x9c77e5,
+        strokeColor: 0x523c93,
+        bodyWidth: 60,
+        bodyHeight: 50,
+      };
+    }
+
+    if (level === 2) {
+      return {
+        bodyColor: 0x54c6d8,
+        strokeColor: 0x1e6d83,
+        bodyWidth: 54,
+        bodyHeight: 46,
+      };
+    }
+
+    return {
+      bodyColor: 0x75d96d,
+      strokeColor: 0x22692d,
+      bodyWidth: 46,
+      bodyHeight: 38,
+    };
   }
 
   private showFullFarmMessage(): void {
@@ -282,24 +320,41 @@ export class FarmScene extends Phaser.Scene {
     const sourceMonster = this.farmSlots[sourceSlotId]?.monster;
     const targetMonster = this.farmSlots[targetSlotId]?.monster;
 
-    return Boolean(
-      sourceMonster
-      && targetMonster
-      && sourceMonster.family === 'Slime'
-      && targetMonster.family === 'Slime'
-      && sourceMonster.level === 1
-      && targetMonster.level === 1,
-    );
+    return Boolean(this.getMergeResultDefinition(sourceMonster, targetMonster));
   }
 
   private mergeSlots(sourceSlotId: number, targetSlotId: number): void {
+    const nextMonsterDefinition = this.getMergeResultDefinition(
+      this.farmSlots[sourceSlotId]?.monster,
+      this.farmSlots[targetSlotId]?.monster,
+    );
+
+    if (!nextMonsterDefinition) {
+      return;
+    }
+
     this.farmSlots[sourceSlotId].monster = null;
-    this.farmSlots[targetSlotId].monster = this.createMonsterInstance(LEVEL_2_SLIME);
+    this.farmSlots[targetSlotId].monster = this.createMonsterInstance(nextMonsterDefinition);
 
     this.clearMonsterVisual(sourceSlotId);
     this.renderMonsterInSlot(this.farmSlots[targetSlotId]);
     this.showMergeFeedback(targetSlotId);
     this.updateHud();
+  }
+
+  private getMergeResultDefinition(
+    sourceMonster: MonsterInstance | null | undefined,
+    targetMonster: MonsterInstance | null | undefined,
+  ): MonsterDefinition | undefined {
+    if (!sourceMonster || !targetMonster) {
+      return undefined;
+    }
+
+    if (sourceMonster.family !== targetMonster.family || sourceMonster.level !== targetMonster.level) {
+      return undefined;
+    }
+
+    return getNextMonsterDefinition(sourceMonster.family, sourceMonster.level);
   }
 
   private clearMonsterVisual(slotId: number): void {
