@@ -8,6 +8,7 @@ export type MonsterDefinition = {
   family: MonsterFamily;
   level: number;
   name: string;
+  incomePerSecond: number;
 };
 
 export type MonsterInstance = MonsterDefinition & {

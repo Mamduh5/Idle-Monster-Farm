@@ -6,6 +6,7 @@ const GRID_COLUMNS = 3;
 const GRID_ROWS = 3;
 const CELL_SIZE = 72;
 const GRID_GAP = 10;
+const MILLISECONDS_PER_SECOND = 1000;
 
 export class FarmScene extends Phaser.Scene {
   private currency: CurrencyState = {
@@ -13,10 +14,12 @@ export class FarmScene extends Phaser.Scene {
   };
 
   private coinText?: Phaser.GameObjects.Text;
+  private incomeText?: Phaser.GameObjects.Text;
   private fullFarmText?: Phaser.GameObjects.Text;
   private farmSlots: FarmSlotState[] = [];
   private slotCenters: Phaser.Math.Vector2[] = [];
   private nextMonsterId = 1;
+  private incomeAccumulatorMs = 0;
 
   constructor() {
     super('FarmScene');
@@ -24,12 +27,17 @@ export class FarmScene extends Phaser.Scene {
 
   create(): void {
     this.nextMonsterId = 1;
+    this.incomeAccumulatorMs = 0;
     this.fullFarmText = undefined;
     this.farmSlots = this.createInitialFarmSlots();
     this.createFarmBackground();
     this.createFarmGrid();
     this.createHud();
     this.createHatchArea();
+  }
+
+  update(_time: number, delta: number): void {
+    this.addPassiveIncome(delta);
   }
 
   private createFarmBackground(): void {
@@ -62,7 +70,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private createHud(): void {
-    this.add.rectangle(24, 20, 220, 48, 0x10291a, 0.82)
+    this.add.rectangle(24, 20, 220, 64, 0x10291a, 0.82)
       .setOrigin(0)
       .setStrokeStyle(2, 0xd7f5a2, 0.6);
 
@@ -70,6 +78,13 @@ export class FarmScene extends Phaser.Scene {
       color: '#fff4a8',
       fontFamily: 'Arial, sans-serif',
       fontSize: '24px',
+      fontStyle: 'bold',
+    });
+
+    this.incomeText = this.add.text(44, 59, '+0/sec', {
+      color: '#cdebb3',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
       fontStyle: 'bold',
     });
   }
@@ -131,6 +146,7 @@ export class FarmScene extends Phaser.Scene {
     emptySlot.monster = this.createMonsterInstance();
     this.hideFullFarmMessage();
     this.renderMonsterInSlot(emptySlot);
+    this.updateHud();
   }
 
   private createMonsterInstance(): MonsterInstance {
@@ -184,5 +200,53 @@ export class FarmScene extends Phaser.Scene {
 
   private hideFullFarmMessage(): void {
     this.fullFarmText?.setVisible(false);
+  }
+
+  private addPassiveIncome(deltaMs: number): void {
+    const incomePerSecond = this.getTotalIncomePerSecond();
+
+    if (incomePerSecond <= 0 || !Number.isFinite(deltaMs) || deltaMs <= 0) {
+      this.updateHud();
+      return;
+    }
+
+    this.incomeAccumulatorMs += deltaMs;
+
+    if (this.incomeAccumulatorMs < MILLISECONDS_PER_SECOND) {
+      this.updateHud();
+      return;
+    }
+
+    const elapsedSeconds = Math.floor(this.incomeAccumulatorMs / MILLISECONDS_PER_SECOND);
+    this.incomeAccumulatorMs -= elapsedSeconds * MILLISECONDS_PER_SECOND;
+    this.currency.coins += incomePerSecond * elapsedSeconds;
+    this.currency.coins = this.sanitizeCoins(this.currency.coins);
+    this.updateHud();
+  }
+
+  private getTotalIncomePerSecond(): number {
+    return this.farmSlots.reduce((totalIncome, slot) => {
+      const income = slot.monster?.incomePerSecond ?? 0;
+
+      if (!Number.isFinite(income) || income <= 0) {
+        return totalIncome;
+      }
+
+      return totalIncome + income;
+    }, 0);
+  }
+
+  private sanitizeCoins(coins: number): number {
+    if (!Number.isFinite(coins) || coins < 0) {
+      return 0;
+    }
+
+    return Math.floor(coins);
+  }
+
+  private updateHud(): void {
+    this.currency.coins = this.sanitizeCoins(this.currency.coins);
+    this.coinText?.setText(`Coins: ${this.currency.coins}`);
+    this.incomeText?.setText(`+${this.getTotalIncomePerSecond()}/sec`);
   }
 }
