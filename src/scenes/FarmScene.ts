@@ -154,6 +154,7 @@ export class FarmScene extends Phaser.Scene {
   private upgradeLevels: Record<UpgradeId, number> = this.createInitialUpgradeLevels();
   private settings: GameSettings = loadSettings();
   private resetConfirmationArmed = false;
+  private lastBlockedOutsideTapToastAt = 0;
 
   private readonly handlePageHide = (): void => {
     this.saveProgress();
@@ -193,6 +194,7 @@ export class FarmScene extends Phaser.Scene {
     this.settings = loadSettings();
     this.syncAudioSettings();
     this.resetConfirmationArmed = false;
+    this.lastBlockedOutsideTapToastAt = 0;
     this.selectedSlotId = null;
     this.selectionHighlight = undefined;
     this.monsterTooltip = undefined;
@@ -657,6 +659,7 @@ export class FarmScene extends Phaser.Scene {
 
     overlay.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       pointer.event?.stopPropagation();
+      this.handleModalOverlayTap();
     });
     overlay.on('pointerup', (pointer: Phaser.Input.Pointer) => {
       pointer.event?.stopPropagation();
@@ -676,6 +679,49 @@ export class FarmScene extends Phaser.Scene {
 
   private isModalOpen(): boolean {
     return Boolean(this.compendiumPanel || this.settingsPanel || this.helpPanel || this.upgradeShopPanel || this.modalOverlay);
+  }
+
+  private handleModalOverlayTap(): void {
+    if (this.resetConfirmationArmed) {
+      this.showBlockedOutsideTapToast();
+      return;
+    }
+
+    if (!this.settings.outsideTapClosesPanels) {
+      return;
+    }
+
+    this.closeActiveOutsideClosableModal();
+  }
+
+  private closeActiveOutsideClosableModal(): void {
+    if (this.settingsPanel) {
+      this.closeSettingsPanel();
+      return;
+    }
+
+    if (this.upgradeShopPanel) {
+      this.closeUpgradeShopPanel();
+      return;
+    }
+
+    if (this.helpPanel) {
+      this.closeHelpPanel();
+      return;
+    }
+
+    if (this.compendiumPanel) {
+      this.closeCompendiumPanel();
+    }
+  }
+
+  private showBlockedOutsideTapToast(): void {
+    if (this.time.now - this.lastBlockedOutsideTapToastAt < 1400) {
+      return;
+    }
+
+    this.lastBlockedOutsideTapToastAt = this.time.now;
+    this.showToast('Use Close or Reset', 'warning');
   }
 
   private setModalOpenVisualState(isOpen: boolean): void {
@@ -746,7 +792,7 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = this.getPanelSize(360, 270);
+    const { width: panelWidth, height: panelHeight } = this.getPanelSize(360, 320);
 
     panel.setDepth(25);
 
@@ -780,7 +826,7 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(closeText);
 
-    this.addSettingsToggle(panel, 'Music', this.settings.musicEnabled, -48, () => {
+    this.addSettingsToggle(panel, 'Music', this.settings.musicEnabled, -70, () => {
       this.settings.musicEnabled = !this.settings.musicEnabled;
       writeSettings(this.settings);
       this.syncAudioSettings();
@@ -788,7 +834,7 @@ export class FarmScene extends Phaser.Scene {
       this.showToast(this.settings.musicEnabled ? 'Music on' : 'Music off', this.settings.musicEnabled ? 'success' : 'info');
     });
 
-    this.addSettingsToggle(panel, 'Sound', this.settings.soundEnabled, 16, () => {
+    this.addSettingsToggle(panel, 'Sound', this.settings.soundEnabled, -18, () => {
       this.settings.soundEnabled = !this.settings.soundEnabled;
       writeSettings(this.settings);
       this.syncAudioSettings();
@@ -796,7 +842,23 @@ export class FarmScene extends Phaser.Scene {
       this.showToast(this.settings.soundEnabled ? 'Sound on' : 'Sound off', this.settings.soundEnabled ? 'success' : 'info');
     });
 
-    const resetText = this.add.text(0, 92, this.resetConfirmationArmed ? 'Click again to confirm reset' : 'Reset Save', {
+    this.addSettingsToggle(panel, 'Outside tap', this.settings.outsideTapClosesPanels, 34, () => {
+      this.settings.outsideTapClosesPanels = !this.settings.outsideTapClosesPanels;
+      writeSettings(this.settings);
+      this.openSettingsPanel();
+      this.showToast(
+        this.settings.outsideTapClosesPanels ? 'Outside tap close on' : 'Outside tap close off',
+        this.settings.outsideTapClosesPanels ? 'success' : 'info',
+      );
+    });
+
+    panel.add(this.add.text(-132, 52, 'closes panels', {
+      color: THEME.mutedText,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '12px',
+    }));
+
+    const resetText = this.add.text(0, 116, this.resetConfirmationArmed ? 'Click again to confirm reset' : 'Reset Save', {
       color: this.resetConfirmationArmed ? '#fff4a8' : '#ffffff',
       fontFamily: 'Arial, sans-serif',
       fontSize: '17px',

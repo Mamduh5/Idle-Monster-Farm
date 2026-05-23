@@ -3,11 +3,13 @@ export const SETTINGS_STORAGE_KEY = 'idle-monster-farm-settings';
 export type GameSettings = {
   musicEnabled: boolean;
   soundEnabled: boolean;
+  outsideTapClosesPanels: boolean;
 };
 
 export const DEFAULT_SETTINGS: GameSettings = {
   musicEnabled: true,
   soundEnabled: true,
+  outsideTapClosesPanels: true,
 };
 
 export function loadSettings(): GameSettings {
@@ -46,5 +48,8 @@ function normalizeSettings(rawSettings: unknown): GameSettings {
     soundEnabled: typeof settingsRecord.soundEnabled === 'boolean'
       ? settingsRecord.soundEnabled
       : DEFAULT_SETTINGS.soundEnabled,
+    outsideTapClosesPanels: typeof settingsRecord.outsideTapClosesPanels === 'boolean'
+      ? settingsRecord.outsideTapClosesPanels
+      : DEFAULT_SETTINGS.outsideTapClosesPanels,
   };
 }
