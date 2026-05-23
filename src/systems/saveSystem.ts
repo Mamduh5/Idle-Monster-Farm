@@ -1,3 +1,4 @@
+import { STARTING_EGG_COST } from '../data/economy';
 import { UPGRADE_DEFINITIONS, type UpgradeId } from '../data/upgrades';
 import type { MonsterFamily } from '../types/game-state';
 
@@ -21,6 +22,7 @@ export type LocalSaveData = {
   lastActiveAt: number;
   discoveredMonsters: SavedMonsterDiscovery[];
   upgrades: Record<UpgradeId, number>;
+  currentEggCost: number;
 };
 
 export function loadSaveData(slotCount: number): LocalSaveData | null {
@@ -89,7 +91,18 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
       return discovery ? [discovery] : [];
     }),
     upgrades: normalizeUpgradeLevels(rawData.upgrades),
+    currentEggCost: normalizeEggCost(rawData.currentEggCost),
   };
+}
+
+function normalizeEggCost(rawEggCost: unknown): number {
+  const eggCost = Number(rawEggCost);
+
+  if (!Number.isFinite(eggCost) || eggCost < STARTING_EGG_COST) {
+    return STARTING_EGG_COST;
+  }
+
+  return Math.ceil(eggCost);
 }
 
 function normalizeUpgradeLevels(rawUpgrades: unknown): Record<UpgradeId, number> {

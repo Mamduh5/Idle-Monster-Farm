@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { EGG_COST_MULTIPLIER, STARTING_EGG_COST } from '../data/economy';
 import {
   BABY_SLIME,
   getMonsterDefinition,
@@ -36,8 +37,7 @@ const SAVE_THROTTLE_MS = 5000;
 const MAX_OFFLINE_SECONDS = 7200;
 const HATCH_COOLDOWN_MS = 3000;
 const HATCH_PROGRESS_WIDTH = 142;
-const HATCH_EGG_COST = 10;
-const STARTING_COINS = HATCH_EGG_COST;
+const STARTING_COINS = STARTING_EGG_COST;
 const MIN_HATCH_COOLDOWN_MS = 1200;
 const INCOME_BOOST_PER_LEVEL = 0.1;
 const HATCH_SPEED_REDUCTION_PER_LEVEL = 0.05;
@@ -66,6 +66,7 @@ export class FarmScene extends Phaser.Scene {
   private hatchLabelText?: Phaser.GameObjects.Text;
   private hatchStatusText?: Phaser.GameObjects.Text;
   private hatchProgressFill?: Phaser.GameObjects.Rectangle;
+  private currentEggCost = STARTING_EGG_COST;
   private nextMonsterId = 1;
   private incomeAccumulatorMs = 0;
   private saveThrottleAccumulatorMs = 0;
@@ -119,6 +120,7 @@ export class FarmScene extends Phaser.Scene {
     this.hatchLabelText = undefined;
     this.hatchStatusText = undefined;
     this.hatchProgressFill = undefined;
+    this.currentEggCost = STARTING_EGG_COST;
     this.farmMessageText = undefined;
     this.farmSlots = this.createInitialFarmSlots();
     this.monsterVisuals = Array.from({ length: GRID_COLUMNS * GRID_ROWS }, () => null);
@@ -905,8 +907,9 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    this.currency.coins = this.sanitizeCoins(this.currency.coins - HATCH_EGG_COST);
+    this.currency.coins = this.sanitizeCoins(this.currency.coins - this.currentEggCost);
     emptySlot.monster = this.createMonsterInstance(BABY_SLIME);
+    this.currentEggCost = this.getNextEggCost(this.currentEggCost);
     this.discoverMonster(BABY_SLIME);
     this.hideFarmMessage();
     this.renderMonsterInSlot(emptySlot);
@@ -932,7 +935,19 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private canAffordHatch(): boolean {
-    return this.currency.coins >= HATCH_EGG_COST;
+    return this.currency.coins >= this.currentEggCost;
+  }
+
+  private getNextEggCost(currentEggCost: number): number {
+    return Math.max(STARTING_EGG_COST, Math.ceil(this.sanitizeEggCost(currentEggCost) * EGG_COST_MULTIPLIER));
+  }
+
+  private sanitizeEggCost(eggCost: number): number {
+    if (!Number.isFinite(eggCost) || eggCost < STARTING_EGG_COST) {
+      return STARTING_EGG_COST;
+    }
+
+    return Math.ceil(eggCost);
   }
 
   private updateHatchCooldown(deltaMs: number): void {
@@ -955,16 +970,16 @@ export class FarmScene extends Phaser.Scene {
 
     if (!isReady) {
       this.hatchLabelText?.setText('Hatching...');
-      this.hatchStatusText?.setText(`${Math.ceil((cooldownMs - this.hatchCooldownMs) / 1000)}s - Cost: ${HATCH_EGG_COST}`);
+      this.hatchStatusText?.setText(`${Math.ceil((cooldownMs - this.hatchCooldownMs) / 1000)}s - Cost: ${this.currentEggCost}`);
     } else if (isFull) {
       this.hatchLabelText?.setText('Farm Full');
       this.hatchStatusText?.setText('Merge to free a slot');
     } else if (!canAfford) {
       this.hatchLabelText?.setText('Need Coins');
-      this.hatchStatusText?.setText(`Cost: ${HATCH_EGG_COST} coins`);
+      this.hatchStatusText?.setText(`Cost: ${this.currentEggCost} coins`);
     } else {
       this.hatchLabelText?.setText('Hatch Egg');
-      this.hatchStatusText?.setText(`Cost: ${HATCH_EGG_COST} coins`);
+      this.hatchStatusText?.setText(`Cost: ${this.currentEggCost} coins`);
     }
 
     this.hatchStatusText?.setColor(statusColor);
@@ -1515,6 +1530,7 @@ export class FarmScene extends Phaser.Scene {
       ...this.createInitialUpgradeLevels(),
       ...saveData.upgrades,
     };
+    this.currentEggCost = this.sanitizeEggCost(saveData.currentEggCost);
 
     const offlineCoins = this.calculateOfflineCoins(saveData.lastActiveAt);
 
@@ -1555,6 +1571,7 @@ export class FarmScene extends Phaser.Scene {
         };
       }),
       upgrades: this.getSanitizedUpgradeLevels(),
+      currentEggCost: this.sanitizeEggCost(this.currentEggCost),
     });
 
     this.hasUnsavedProgress = false;
@@ -1585,6 +1602,7 @@ export class FarmScene extends Phaser.Scene {
     this.resetConfirmationArmed = false;
     this.discoveredMonsters = new Set<DiscoveryKey>();
     this.upgradeLevels = this.createInitialUpgradeLevels();
+    this.currentEggCost = STARTING_EGG_COST;
     this.farmSlots = this.createInitialFarmSlots();
 
     this.monsterVisuals.forEach((visual) => {
@@ -1615,11 +1633,15 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private hasAnyProgress(): boolean {
-    return this.currency.coins !== STARTING_COINS || this.farmSlots.some((slot) => slot.monster !== null);
+    return (
+      this.currency.coins !== STARTING_COINS
+      || this.currentEggCost !== STARTING_EGG_COST
+      || this.farmSlots.some((slot) => slot.monster !== null)
+    );
   }
 
   private ensureStarterCoinsForEmptyFarm(): void {
-    if (this.farmSlots.some((slot) => slot.monster !== null) || this.currency.coins >= HATCH_EGG_COST) {
+    if (this.farmSlots.some((slot) => slot.monster !== null) || this.currency.coins >= STARTING_EGG_COST) {
       return;
     }
 
