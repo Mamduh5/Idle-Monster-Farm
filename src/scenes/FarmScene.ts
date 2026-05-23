@@ -111,6 +111,7 @@ export class FarmScene extends Phaser.Scene {
     this.createHatchArea();
     this.createSettingsControl();
     this.createCompendiumControl();
+    this.registerKeyboardShortcuts();
     this.loadProgress();
     this.registerPersistenceEvents();
     this.updateHud();
@@ -266,7 +267,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private createSettingsControl(): void {
-    const settingsText = this.add.text(this.scale.width - 24, 22, 'Settings', {
+    const settingsText = this.add.text(this.scale.width - 24, 22, 'Settings (S)', {
       color: '#f7ffe8',
       fontFamily: 'Arial, sans-serif',
       fontSize: '15px',
@@ -286,7 +287,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private createCompendiumControl(): void {
-    const compendiumText = this.add.text(this.scale.width - 24, 62, 'Compendium', {
+    const compendiumText = this.add.text(this.scale.width - 24, 62, 'Compendium (C)', {
       color: '#f7ffe8',
       fontFamily: 'Arial, sans-serif',
       fontSize: '15px',
@@ -303,6 +304,20 @@ export class FarmScene extends Phaser.Scene {
       .on('pointerdown', () => {
         this.toggleCompendiumPanel();
       });
+  }
+
+  private registerKeyboardShortcuts(): void {
+    this.input.keyboard?.on('keydown-C', () => {
+      this.toggleCompendiumPanel();
+    });
+
+    this.input.keyboard?.on('keydown-S', () => {
+      if (this.resetConfirmationArmed) {
+        return;
+      }
+
+      this.toggleSettingsPanel();
+    });
   }
 
   private toggleSettingsPanel(): void {
