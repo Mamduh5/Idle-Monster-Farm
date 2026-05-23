@@ -42,6 +42,7 @@ const MIN_HATCH_COOLDOWN_MS = 1200;
 const INCOME_BOOST_PER_LEVEL = 0.1;
 const HATCH_SPEED_REDUCTION_PER_LEVEL = 0.05;
 const OFFLINE_STORAGE_SECONDS_PER_LEVEL = 1800;
+const SHOW_DEBUG_PANEL = true;
 const EXPANSION_COLUMNS = 3;
 const EXPANSION_ROWS = 1;
 
@@ -77,6 +78,8 @@ export class FarmScene extends Phaser.Scene {
   private settingsPanel?: Phaser.GameObjects.Container;
   private helpPanel?: Phaser.GameObjects.Container;
   private upgradeShopPanel?: Phaser.GameObjects.Container;
+  private economyDebugPanel?: Phaser.GameObjects.Container;
+  private economyDebugText?: Phaser.GameObjects.Text;
   private upgradeLevels: Record<UpgradeId, number> = this.createInitialUpgradeLevels();
   private settings: GameSettings = loadSettings();
   private resetConfirmationArmed = false;
@@ -110,6 +113,8 @@ export class FarmScene extends Phaser.Scene {
     this.settingsPanel = undefined;
     this.helpPanel = undefined;
     this.upgradeShopPanel = undefined;
+    this.economyDebugPanel = undefined;
+    this.economyDebugText = undefined;
     this.upgradeLevels = this.createInitialUpgradeLevels();
     this.settings = loadSettings();
     this.resetConfirmationArmed = false;
@@ -133,6 +138,7 @@ export class FarmScene extends Phaser.Scene {
     this.createCompendiumControl();
     this.createHelpControl();
     this.createUpgradeShopControl();
+    this.createEconomyDebugControl();
     this.registerKeyboardShortcuts();
     this.loadProgress();
     this.registerPersistenceEvents();
@@ -143,6 +149,7 @@ export class FarmScene extends Phaser.Scene {
     this.updateHatchCooldown(delta);
     this.addPassiveIncome(delta);
     this.saveProgressWhenReady(delta);
+    this.refreshEconomyDebugPanel();
   }
 
   private createFarmBackground(): void {
@@ -368,6 +375,30 @@ export class FarmScene extends Phaser.Scene {
       });
   }
 
+  private createEconomyDebugControl(): void {
+    if (!SHOW_DEBUG_PANEL) {
+      return;
+    }
+
+    const debugText = this.add.text(this.scale.width - 24, 182, 'Debug (D)', {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+      backgroundColor: '#3b2b10',
+      padding: {
+        x: 10,
+        y: 6,
+      },
+    }).setOrigin(1, 0);
+
+    debugText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.toggleEconomyDebugPanel();
+      });
+  }
+
   private registerKeyboardShortcuts(): void {
     this.input.keyboard?.on('keydown-C', () => {
       this.toggleCompendiumPanel();
@@ -388,6 +419,14 @@ export class FarmScene extends Phaser.Scene {
 
       this.toggleHelpPanel();
     });
+
+    this.input.keyboard?.on('keydown-D', () => {
+      if (this.resetConfirmationArmed || !SHOW_DEBUG_PANEL) {
+        return;
+      }
+
+      this.toggleEconomyDebugPanel();
+    });
   }
 
   private toggleSettingsPanel(): void {
@@ -405,6 +444,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeHelpPanel();
     this.closeUpgradeShopPanel();
+    this.closeEconomyDebugPanel();
     this.clearSelectedSlot();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
@@ -550,6 +590,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeUpgradeShopPanel();
+    this.closeEconomyDebugPanel();
     this.clearSelectedSlot();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
@@ -638,6 +679,120 @@ export class FarmScene extends Phaser.Scene {
     this.helpPanel = undefined;
   }
 
+  private toggleEconomyDebugPanel(): void {
+    if (this.economyDebugPanel) {
+      this.closeEconomyDebugPanel();
+      return;
+    }
+
+    this.openEconomyDebugPanel();
+  }
+
+  private openEconomyDebugPanel(): void {
+    this.closeEconomyDebugPanel();
+    this.closeCompendiumPanel();
+    this.closeSettingsPanel();
+    this.closeHelpPanel();
+    this.closeUpgradeShopPanel();
+    this.clearSelectedSlot();
+
+    const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
+    const panelWidth = 390;
+    const panelHeight = 310;
+
+    panel.setDepth(28);
+
+    const panelBackground = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x201a10, 0.98)
+      .setStrokeStyle(3, 0xf3d06b, 0.82)
+      .setInteractive();
+
+    panelBackground.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event.stopPropagation();
+    });
+
+    panel.add(panelBackground);
+
+    panel.add(this.add.text(-panelWidth / 2 + 20, -panelHeight / 2 + 18, 'Economy Debug', {
+      color: '#fff4a8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '22px',
+      fontStyle: 'bold',
+    }));
+
+    panel.add(this.add.text(-panelWidth / 2 + 20, -panelHeight / 2 + 45, 'Development only', {
+      color: '#d9d6ec',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '12px',
+    }));
+
+    const closeText = this.add.text(panelWidth / 2 - 20, -panelHeight / 2 + 20, 'Close', {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+      backgroundColor: '#2f2a45',
+      padding: {
+        x: 9,
+        y: 5,
+      },
+    }).setOrigin(1, 0);
+
+    closeText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.closeEconomyDebugPanel();
+      });
+
+    panel.add(closeText);
+
+    this.economyDebugText = this.add.text(-panelWidth / 2 + 20, -panelHeight / 2 + 78, '', {
+      color: '#f7ffe8',
+      fontFamily: 'Consolas, monospace',
+      fontSize: '14px',
+      lineSpacing: 5,
+    });
+
+    panel.add(this.economyDebugText);
+    this.economyDebugPanel = panel;
+    this.refreshEconomyDebugPanel();
+  }
+
+  private closeEconomyDebugPanel(): void {
+    this.economyDebugPanel?.destroy();
+    this.economyDebugPanel = undefined;
+    this.economyDebugText = undefined;
+  }
+
+  private refreshEconomyDebugPanel(): void {
+    if (!this.economyDebugText) {
+      return;
+    }
+
+    this.economyDebugText.setText(this.getEconomyDebugText());
+  }
+
+  private getEconomyDebugText(): string {
+    const cooldownMs = this.getHatchCooldownMs();
+    const remainingMs = Math.max(0, cooldownMs - this.hatchCooldownMs);
+    const hatchState = this.isHatchReady()
+      ? 'Ready'
+      : `${(remainingMs / MILLISECONDS_PER_SECOND).toFixed(1)}s remaining`;
+    const upgradeLines = UPGRADE_DEFINITIONS
+      .map((upgrade) => `${upgrade.name}: Lv ${this.getUpgradeLevel(upgrade.id)}/${upgrade.maxLevel}`)
+      .join('\n');
+
+    return [
+      `Egg cost: ${this.currentEggCost}`,
+      `Income/sec: ${this.formatCoinAmount(this.getTotalIncomePerSecond())}`,
+      `Hatch cooldown: ${(cooldownMs / MILLISECONDS_PER_SECOND).toFixed(1)}s`,
+      `Hatch state: ${hatchState}`,
+      `Offline cap: ${this.formatDuration(this.getOfflineCapSeconds())}`,
+      '',
+      'Upgrade levels:',
+      upgradeLines,
+    ].join('\n');
+  }
+
   private toggleUpgradeShopPanel(): void {
     if (this.upgradeShopPanel) {
       this.closeUpgradeShopPanel();
@@ -652,6 +807,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closeEconomyDebugPanel();
     this.clearSelectedSlot();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
@@ -1014,6 +1170,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeSettingsPanel();
     this.closeHelpPanel();
     this.closeUpgradeShopPanel();
+    this.closeEconomyDebugPanel();
     this.clearSelectedSlot();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
@@ -1615,6 +1772,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeHelpPanel();
     this.closeUpgradeShopPanel();
+    this.closeEconomyDebugPanel();
     this.updateHatchCooldownUi();
     this.updateHud();
   }
