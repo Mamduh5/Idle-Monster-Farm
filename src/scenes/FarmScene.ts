@@ -62,6 +62,7 @@ export class FarmScene extends Phaser.Scene {
   private discoveredMonsters = new Set<DiscoveryKey>();
   private compendiumPanel?: Phaser.GameObjects.Container;
   private settingsPanel?: Phaser.GameObjects.Container;
+  private helpPanel?: Phaser.GameObjects.Container;
   private settings: GameSettings = loadSettings();
   private resetConfirmationArmed = false;
 
@@ -92,6 +93,7 @@ export class FarmScene extends Phaser.Scene {
     this.discoveredMonsters = new Set<DiscoveryKey>();
     this.compendiumPanel = undefined;
     this.settingsPanel = undefined;
+    this.helpPanel = undefined;
     this.settings = loadSettings();
     this.resetConfirmationArmed = false;
     this.selectedSlotId = null;
@@ -111,6 +113,7 @@ export class FarmScene extends Phaser.Scene {
     this.createHatchArea();
     this.createSettingsControl();
     this.createCompendiumControl();
+    this.createHelpControl();
     this.registerKeyboardShortcuts();
     this.loadProgress();
     this.registerPersistenceEvents();
@@ -306,6 +309,26 @@ export class FarmScene extends Phaser.Scene {
       });
   }
 
+  private createHelpControl(): void {
+    const helpText = this.add.text(this.scale.width - 24, 102, 'Help (H)', {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+      backgroundColor: '#10291a',
+      padding: {
+        x: 10,
+        y: 6,
+      },
+    }).setOrigin(1, 0);
+
+    helpText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.toggleHelpPanel();
+      });
+  }
+
   private registerKeyboardShortcuts(): void {
     this.input.keyboard?.on('keydown-C', () => {
       this.toggleCompendiumPanel();
@@ -317,6 +340,14 @@ export class FarmScene extends Phaser.Scene {
       }
 
       this.toggleSettingsPanel();
+    });
+
+    this.input.keyboard?.on('keydown-H', () => {
+      if (this.resetConfirmationArmed) {
+        return;
+      }
+
+      this.toggleHelpPanel();
     });
   }
 
@@ -333,6 +364,7 @@ export class FarmScene extends Phaser.Scene {
   private openSettingsPanel(): void {
     this.closeSettingsPanel(false);
     this.closeCompendiumPanel();
+    this.closeHelpPanel();
     this.clearSelectedSlot();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
@@ -464,6 +496,107 @@ export class FarmScene extends Phaser.Scene {
     }
   }
 
+  private toggleHelpPanel(): void {
+    if (this.helpPanel) {
+      this.closeHelpPanel();
+      return;
+    }
+
+    this.openHelpPanel();
+  }
+
+  private openHelpPanel(): void {
+    this.closeHelpPanel();
+    this.closeCompendiumPanel();
+    this.closeSettingsPanel();
+    this.clearSelectedSlot();
+
+    const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
+    const panelWidth = 500;
+    const panelHeight = 320;
+
+    panel.setDepth(26);
+
+    const panelBackground = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x14291d, 0.97)
+      .setStrokeStyle(3, 0xd7f5a2, 0.75)
+      .setInteractive();
+
+    panelBackground.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event.stopPropagation();
+    });
+
+    panel.add(panelBackground);
+
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Help', {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '24px',
+      fontStyle: 'bold',
+    }));
+
+    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, 'Close', {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+      backgroundColor: '#2f2a45',
+      padding: {
+        x: 9,
+        y: 5,
+      },
+    }).setOrigin(1, 0);
+
+    closeText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.closeHelpPanel();
+      });
+
+    panel.add(closeText);
+
+    const helpLines = [
+      ['Hatch Egg', 'Click/tap Hatch Egg when ready.'],
+      ['Drag-to-merge', 'Drag matching same-family, same-level monsters onto each other.'],
+      ['Monster info', 'Click/tap a monster to show its tooltip.'],
+      ['Compendium', 'Press C or click Compendium.'],
+      ['Settings', 'Press S or click Settings.'],
+    ];
+
+    helpLines.forEach(([label, description], index) => {
+      this.addHelpLine(panel, label, description, -panelHeight / 2 + 82 + index * 42);
+    });
+
+    this.helpPanel = panel;
+  }
+
+  private addHelpLine(
+    panel: Phaser.GameObjects.Container,
+    label: string,
+    description: string,
+    y: number,
+  ): void {
+    panel.add(this.add.text(-214, y, label, {
+      color: '#fff4a8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '16px',
+      fontStyle: 'bold',
+    }).setOrigin(0, 0.5));
+
+    panel.add(this.add.text(-76, y, description, {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      wordWrap: {
+        width: 300,
+      },
+    }).setOrigin(0, 0.5));
+  }
+
+  private closeHelpPanel(): void {
+    this.helpPanel?.destroy();
+    this.helpPanel = undefined;
+  }
+
   private createInitialFarmSlots(): FarmSlotState[] {
     return Array.from({ length: GRID_COLUMNS * GRID_ROWS }, (_, index) => ({
       id: index,
@@ -556,6 +689,7 @@ export class FarmScene extends Phaser.Scene {
   private openCompendiumPanel(): void {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
+    this.closeHelpPanel();
     this.clearSelectedSlot();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
@@ -1131,6 +1265,7 @@ export class FarmScene extends Phaser.Scene {
     this.hideFullFarmMessage();
     this.clearSelectedSlot();
     this.closeCompendiumPanel();
+    this.closeHelpPanel();
     this.updateHatchCooldownUi();
     this.updateHud();
   }
