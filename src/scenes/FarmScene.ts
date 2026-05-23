@@ -6,6 +6,12 @@ import {
   MONSTER_DEFINITIONS,
 } from '../data/monsters';
 import {
+  getUpgradeCost,
+  UPGRADE_DEFINITIONS,
+  type UpgradeDefinition,
+  type UpgradeId,
+} from '../data/upgrades';
+import {
   clearSaveData,
   loadSaveData,
   sanitizeSavedCoins,
@@ -32,6 +38,10 @@ const HATCH_COOLDOWN_MS = 3000;
 const HATCH_PROGRESS_WIDTH = 142;
 const HATCH_EGG_COST = 10;
 const STARTING_COINS = HATCH_EGG_COST;
+const MIN_HATCH_COOLDOWN_MS = 1200;
+const INCOME_BOOST_PER_LEVEL = 0.1;
+const HATCH_SPEED_REDUCTION_PER_LEVEL = 0.05;
+const OFFLINE_STORAGE_SECONDS_PER_LEVEL = 1800;
 const EXPANSION_COLUMNS = 3;
 const EXPANSION_ROWS = 1;
 
@@ -65,6 +75,8 @@ export class FarmScene extends Phaser.Scene {
   private compendiumPanel?: Phaser.GameObjects.Container;
   private settingsPanel?: Phaser.GameObjects.Container;
   private helpPanel?: Phaser.GameObjects.Container;
+  private upgradeShopPanel?: Phaser.GameObjects.Container;
+  private upgradeLevels: Record<UpgradeId, number> = this.createInitialUpgradeLevels();
   private settings: GameSettings = loadSettings();
   private resetConfirmationArmed = false;
 
@@ -96,6 +108,8 @@ export class FarmScene extends Phaser.Scene {
     this.compendiumPanel = undefined;
     this.settingsPanel = undefined;
     this.helpPanel = undefined;
+    this.upgradeShopPanel = undefined;
+    this.upgradeLevels = this.createInitialUpgradeLevels();
     this.settings = loadSettings();
     this.resetConfirmationArmed = false;
     this.selectedSlotId = null;
@@ -116,6 +130,7 @@ export class FarmScene extends Phaser.Scene {
     this.createSettingsControl();
     this.createCompendiumControl();
     this.createHelpControl();
+    this.createUpgradeShopControl();
     this.registerKeyboardShortcuts();
     this.loadProgress();
     this.registerPersistenceEvents();
@@ -331,6 +346,26 @@ export class FarmScene extends Phaser.Scene {
       });
   }
 
+  private createUpgradeShopControl(): void {
+    const upgradeText = this.add.text(this.scale.width - 24, 142, 'Upgrade Shop', {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+      backgroundColor: '#10291a',
+      padding: {
+        x: 10,
+        y: 6,
+      },
+    }).setOrigin(1, 0);
+
+    upgradeText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.toggleUpgradeShopPanel();
+      });
+  }
+
   private registerKeyboardShortcuts(): void {
     this.input.keyboard?.on('keydown-C', () => {
       this.toggleCompendiumPanel();
@@ -367,6 +402,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeSettingsPanel(false);
     this.closeCompendiumPanel();
     this.closeHelpPanel();
+    this.closeUpgradeShopPanel();
     this.clearSelectedSlot();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
@@ -511,6 +547,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
+    this.closeUpgradeShopPanel();
     this.clearSelectedSlot();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
@@ -599,11 +636,256 @@ export class FarmScene extends Phaser.Scene {
     this.helpPanel = undefined;
   }
 
+  private toggleUpgradeShopPanel(): void {
+    if (this.upgradeShopPanel) {
+      this.closeUpgradeShopPanel();
+      return;
+    }
+
+    this.openUpgradeShopPanel();
+  }
+
+  private openUpgradeShopPanel(): void {
+    this.closeUpgradeShopPanel();
+    this.closeCompendiumPanel();
+    this.closeSettingsPanel();
+    this.closeHelpPanel();
+    this.clearSelectedSlot();
+
+    const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
+    const panelWidth = 580;
+    const panelHeight = 390;
+
+    panel.setDepth(24);
+
+    const panelBackground = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x14291d, 0.97)
+      .setStrokeStyle(3, 0xd7f5a2, 0.75)
+      .setInteractive();
+
+    panelBackground.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event.stopPropagation();
+    });
+
+    panel.add(panelBackground);
+
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Upgrade Shop', {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '24px',
+      fontStyle: 'bold',
+    }));
+
+    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, 'Close', {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+      backgroundColor: '#2f2a45',
+      padding: {
+        x: 9,
+        y: 5,
+      },
+    }).setOrigin(1, 0);
+
+    closeText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.closeUpgradeShopPanel();
+      });
+
+    panel.add(closeText);
+
+    UPGRADE_DEFINITIONS.forEach((upgrade, index) => {
+      this.addUpgradeRow(panel, upgrade, -panelHeight / 2 + 92 + index * 92);
+    });
+
+    this.upgradeShopPanel = panel;
+  }
+
+  private addUpgradeRow(
+    panel: Phaser.GameObjects.Container,
+    upgrade: UpgradeDefinition,
+    rowY: number,
+  ): void {
+    const panelWidth = 580;
+    const level = this.getUpgradeLevel(upgrade.id);
+    const isMaxLevel = level >= upgrade.maxLevel;
+    const cost = this.getUpgradeCostForLevel(upgrade, level);
+    const canAfford = this.currency.coins >= cost && !isMaxLevel;
+
+    panel.add(this.add.rectangle(0, rowY, panelWidth - 48, 74, 0x234936, 0.92)
+      .setStrokeStyle(2, canAfford ? 0x8ecf62 : 0x46524b, 0.8));
+
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowY - 28, upgrade.name, {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '17px',
+      fontStyle: 'bold',
+    }));
+
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowY - 4, `Level ${level}/${upgrade.maxLevel}`, {
+      color: '#cdebb3',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '14px',
+      fontStyle: 'bold',
+    }));
+
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowY + 19, `${upgrade.effect} - ${this.getUpgradeCurrentEffectText(upgrade.id)}`, {
+      color: '#d9d6ec',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '13px',
+      wordWrap: {
+        width: 340,
+      },
+    }));
+
+    panel.add(this.add.text(panelWidth / 2 - 154, rowY - 24, isMaxLevel ? 'Maxed' : `Cost: ${cost}`, {
+      color: isMaxLevel ? '#cdebb3' : '#fff4a8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+    }).setOrigin(1, 0));
+
+    const buyText = this.add.text(panelWidth / 2 - 42, rowY - 14, isMaxLevel ? 'MAX' : 'Buy', {
+      color: '#ffffff',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '16px',
+      fontStyle: 'bold',
+      backgroundColor: isMaxLevel ? '#46524b' : canAfford ? '#3c7a3f' : '#6d2430',
+      padding: {
+        x: 15,
+        y: 8,
+      },
+    }).setOrigin(1, 0);
+
+    if (!isMaxLevel) {
+      buyText
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          this.buyUpgrade(upgrade.id);
+        });
+    }
+
+    panel.add(buyText);
+  }
+
+  private closeUpgradeShopPanel(): void {
+    this.upgradeShopPanel?.destroy();
+    this.upgradeShopPanel = undefined;
+  }
+
   private createInitialFarmSlots(): FarmSlotState[] {
     return Array.from({ length: GRID_COLUMNS * GRID_ROWS }, (_, index) => ({
       id: index,
       monster: null,
     }));
+  }
+
+  private createInitialUpgradeLevels(): Record<UpgradeId, number> {
+    return Object.fromEntries(
+      UPGRADE_DEFINITIONS.map((upgrade) => [upgrade.id, 0]),
+    ) as Record<UpgradeId, number>;
+  }
+
+  private getUpgradeLevel(upgradeId: UpgradeId): number {
+    const upgrade = UPGRADE_DEFINITIONS.find((definition) => definition.id === upgradeId);
+    const level = this.upgradeLevels[upgradeId] ?? 0;
+
+    if (!upgrade || !Number.isFinite(level)) {
+      return 0;
+    }
+
+    return Phaser.Math.Clamp(Math.floor(level), 0, upgrade.maxLevel);
+  }
+
+  private getSanitizedUpgradeLevels(): Record<UpgradeId, number> {
+    return Object.fromEntries(
+      UPGRADE_DEFINITIONS.map((upgrade) => [upgrade.id, this.getUpgradeLevel(upgrade.id)]),
+    ) as Record<UpgradeId, number>;
+  }
+
+  private getUpgradeCostForLevel(upgrade: UpgradeDefinition, level: number): number {
+    return getUpgradeCost(upgrade, this.sanitizeUpgradeLevel(level, upgrade.maxLevel));
+  }
+
+  private sanitizeUpgradeLevel(level: number, maxLevel: number): number {
+    if (!Number.isFinite(level) || level < 0) {
+      return 0;
+    }
+
+    return Phaser.Math.Clamp(Math.floor(level), 0, maxLevel);
+  }
+
+  private buyUpgrade(upgradeId: UpgradeId): void {
+    const upgrade = UPGRADE_DEFINITIONS.find((definition) => definition.id === upgradeId);
+
+    if (!upgrade) {
+      return;
+    }
+
+    const currentLevel = this.getUpgradeLevel(upgradeId);
+
+    if (currentLevel >= upgrade.maxLevel) {
+      return;
+    }
+
+    const cost = this.getUpgradeCostForLevel(upgrade, currentLevel);
+
+    if (this.currency.coins < cost) {
+      this.showNotEnoughCoinsMessage();
+      return;
+    }
+
+    this.currency.coins = this.sanitizeCoins(this.currency.coins - cost);
+    this.upgradeLevels[upgradeId] = currentLevel + 1;
+    this.hatchCooldownMs = Math.min(this.hatchCooldownMs, this.getHatchCooldownMs());
+    this.hideFarmMessage();
+    this.updateHud();
+    this.saveProgress();
+    this.openUpgradeShopPanel();
+  }
+
+  private getUpgradeCurrentEffectText(upgradeId: UpgradeId): string {
+    if (upgradeId === 'slime-income-boost') {
+      return `current income x${this.getIncomeMultiplier().toFixed(1)}`;
+    }
+
+    if (upgradeId === 'hatch-speed') {
+      return `cooldown ${(this.getHatchCooldownMs() / MILLISECONDS_PER_SECOND).toFixed(1)}s`;
+    }
+
+    return `offline cap ${this.formatDuration(this.getOfflineCapSeconds())}`;
+  }
+
+  private getIncomeMultiplier(): number {
+    return 1 + this.getUpgradeLevel('slime-income-boost') * INCOME_BOOST_PER_LEVEL;
+  }
+
+  private getHatchCooldownMs(): number {
+    const reduction = this.getUpgradeLevel('hatch-speed') * HATCH_SPEED_REDUCTION_PER_LEVEL;
+    const cooldown = HATCH_COOLDOWN_MS * Math.max(0, 1 - reduction);
+
+    return Math.max(MIN_HATCH_COOLDOWN_MS, Math.floor(cooldown));
+  }
+
+  private getOfflineCapSeconds(): number {
+    return MAX_OFFLINE_SECONDS + this.getUpgradeLevel('offline-storage') * OFFLINE_STORAGE_SECONDS_PER_LEVEL;
+  }
+
+  private formatDuration(seconds: number): string {
+    const safeSeconds = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
+    const hours = Math.floor(safeSeconds / 3600);
+    const minutes = Math.floor((safeSeconds % 3600) / 60);
+
+    if (hours > 0 && minutes > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+
+    if (hours > 0) {
+      return `${hours}h`;
+    }
+
+    return `${minutes}m`;
   }
 
   private hatchBabySlime(): void {
@@ -646,7 +928,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private isHatchReady(): boolean {
-    return this.hatchCooldownMs >= HATCH_COOLDOWN_MS;
+    return this.hatchCooldownMs >= this.getHatchCooldownMs();
   }
 
   private canAffordHatch(): boolean {
@@ -659,16 +941,13 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    this.hatchCooldownMs = Phaser.Math.Clamp(
-      this.hatchCooldownMs + deltaMs,
-      0,
-      HATCH_COOLDOWN_MS,
-    );
+    this.hatchCooldownMs = Phaser.Math.Clamp(this.hatchCooldownMs + deltaMs, 0, this.getHatchCooldownMs());
     this.updateHatchCooldownUi();
   }
 
   private updateHatchCooldownUi(): void {
-    const progress = Phaser.Math.Clamp(this.hatchCooldownMs / HATCH_COOLDOWN_MS, 0, 1);
+    const cooldownMs = this.getHatchCooldownMs();
+    const progress = Phaser.Math.Clamp(this.hatchCooldownMs / cooldownMs, 0, 1);
     const isReady = progress >= 1;
     const isFull = this.isFarmFull();
     const canAfford = this.canAffordHatch();
@@ -676,7 +955,7 @@ export class FarmScene extends Phaser.Scene {
 
     if (!isReady) {
       this.hatchLabelText?.setText('Hatching...');
-      this.hatchStatusText?.setText(`${Math.ceil((HATCH_COOLDOWN_MS - this.hatchCooldownMs) / 1000)}s - Cost: ${HATCH_EGG_COST}`);
+      this.hatchStatusText?.setText(`${Math.ceil((cooldownMs - this.hatchCooldownMs) / 1000)}s - Cost: ${HATCH_EGG_COST}`);
     } else if (isFull) {
       this.hatchLabelText?.setText('Farm Full');
       this.hatchStatusText?.setText('Merge to free a slot');
@@ -719,6 +998,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closeUpgradeShopPanel();
     this.clearSelectedSlot();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
@@ -1231,6 +1511,11 @@ export class FarmScene extends Phaser.Scene {
       this.renderMonsterInSlot(slot);
     });
 
+    this.upgradeLevels = {
+      ...this.createInitialUpgradeLevels(),
+      ...saveData.upgrades,
+    };
+
     const offlineCoins = this.calculateOfflineCoins(saveData.lastActiveAt);
 
     if (offlineCoins > 0) {
@@ -1269,6 +1554,7 @@ export class FarmScene extends Phaser.Scene {
           level: Number(level),
         };
       }),
+      upgrades: this.getSanitizedUpgradeLevels(),
     });
 
     this.hasUnsavedProgress = false;
@@ -1298,6 +1584,7 @@ export class FarmScene extends Phaser.Scene {
     this.skipSavingUntilProgress = true;
     this.resetConfirmationArmed = false;
     this.discoveredMonsters = new Set<DiscoveryKey>();
+    this.upgradeLevels = this.createInitialUpgradeLevels();
     this.farmSlots = this.createInitialFarmSlots();
 
     this.monsterVisuals.forEach((visual) => {
@@ -1309,6 +1596,7 @@ export class FarmScene extends Phaser.Scene {
     this.clearSelectedSlot();
     this.closeCompendiumPanel();
     this.closeHelpPanel();
+    this.closeUpgradeShopPanel();
     this.updateHatchCooldownUi();
     this.updateHud();
   }
@@ -1350,7 +1638,7 @@ export class FarmScene extends Phaser.Scene {
     }
 
     const elapsedSeconds = Math.floor(elapsedMilliseconds / MILLISECONDS_PER_SECOND);
-    const cappedElapsedSeconds = Math.min(elapsedSeconds, MAX_OFFLINE_SECONDS);
+    const cappedElapsedSeconds = Math.min(elapsedSeconds, this.getOfflineCapSeconds());
     const incomePerSecond = this.getTotalIncomePerSecond();
     const offlineCoins = cappedElapsedSeconds * incomePerSecond;
 
@@ -1361,7 +1649,7 @@ export class FarmScene extends Phaser.Scene {
     const popup = this.add.text(
       this.scale.width / 2,
       96,
-      `Welcome back! You earned ${offlineCoins} coins while away.`,
+      `Welcome back! You earned ${this.formatCoinAmount(offlineCoins)} coins while away.`,
       {
         color: '#fff4a8',
         fontFamily: 'Arial, sans-serif',
@@ -1414,9 +1702,9 @@ export class FarmScene extends Phaser.Scene {
 
   private showCoinGainIndicators(): void {
     this.farmSlots.forEach((slot) => {
-      const income = slot.monster?.incomePerSecond ?? 0;
+      const income = this.getEffectiveMonsterIncome(slot.monster);
 
-      if (!slot.monster || !Number.isFinite(income) || income <= 0) {
+      if (!Number.isFinite(income) || income <= 0) {
         return;
       }
 
@@ -1426,7 +1714,7 @@ export class FarmScene extends Phaser.Scene {
 
   private showCoinGainIndicator(slotId: number, amount: number): void {
     const center = this.slotCenters[slotId];
-    const indicator = this.add.text(center.x, center.y - 34, `+${amount}`, {
+    const indicator = this.add.text(center.x, center.y - 34, `+${this.formatCoinAmount(amount)}`, {
       color: '#fff4a8',
       fontFamily: 'Arial, sans-serif',
       fontSize: '18px',
@@ -1450,7 +1738,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getTotalIncomePerSecond(): number {
-    return this.farmSlots.reduce((totalIncome, slot) => {
+    const baseIncome = this.farmSlots.reduce((totalIncome, slot) => {
       const income = slot.monster?.incomePerSecond ?? 0;
 
       if (!Number.isFinite(income) || income <= 0) {
@@ -1459,6 +1747,16 @@ export class FarmScene extends Phaser.Scene {
 
       return totalIncome + income;
     }, 0);
+
+    return this.roundCurrency(baseIncome * this.getIncomeMultiplier());
+  }
+
+  private getEffectiveMonsterIncome(monster: MonsterInstance | null | undefined): number {
+    if (!monster || !Number.isFinite(monster.incomePerSecond) || monster.incomePerSecond <= 0) {
+      return 0;
+    }
+
+    return this.roundCurrency(monster.incomePerSecond * this.getIncomeMultiplier());
   }
 
   private sanitizeCoins(coins: number): number {
@@ -1466,13 +1764,27 @@ export class FarmScene extends Phaser.Scene {
       return 0;
     }
 
-    return Math.floor(coins);
+    return this.roundCurrency(coins);
+  }
+
+  private roundCurrency(coins: number): number {
+    return Math.round(coins * 100) / 100;
+  }
+
+  private formatCoinAmount(coins: number): string {
+    const safeCoins = this.sanitizeCoins(coins);
+
+    if (Number.isInteger(safeCoins)) {
+      return `${safeCoins}`;
+    }
+
+    return safeCoins.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
   }
 
   private updateHud(): void {
     this.currency.coins = this.sanitizeCoins(this.currency.coins);
-    this.coinText?.setText(`Coins: ${this.currency.coins}`);
-    this.incomeText?.setText(`+${this.getTotalIncomePerSecond()}/sec`);
+    this.coinText?.setText(`Coins: ${this.formatCoinAmount(this.currency.coins)}`);
+    this.incomeText?.setText(`+${this.formatCoinAmount(this.getTotalIncomePerSecond())}/sec`);
     this.updateHatchCooldownUi();
   }
 }

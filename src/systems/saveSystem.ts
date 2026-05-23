@@ -1,3 +1,4 @@
+import { UPGRADE_DEFINITIONS, type UpgradeId } from '../data/upgrades';
 import type { MonsterFamily } from '../types/game-state';
 
 export const SAVE_STORAGE_KEY = 'idle-monster-farm-save';
@@ -19,6 +20,7 @@ export type LocalSaveData = {
   grid: SavedMonsterSlot[];
   lastActiveAt: number;
   discoveredMonsters: SavedMonsterDiscovery[];
+  upgrades: Record<UpgradeId, number>;
 };
 
 export function loadSaveData(slotCount: number): LocalSaveData | null {
@@ -56,7 +58,7 @@ export function sanitizeSavedCoins(coins: number): number {
     return 0;
   }
 
-  return Math.floor(coins);
+  return Math.round(coins * 100) / 100;
 }
 
 function readStorageValue(): string | null {
@@ -86,7 +88,33 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
       const discovery = normalizeSavedMonsterReference(rawDiscovery);
       return discovery ? [discovery] : [];
     }),
+    upgrades: normalizeUpgradeLevels(rawData.upgrades),
   };
+}
+
+function normalizeUpgradeLevels(rawUpgrades: unknown): Record<UpgradeId, number> {
+  const upgrades = Object.fromEntries(
+    UPGRADE_DEFINITIONS.map((upgrade) => [upgrade.id, 0]),
+  ) as Record<UpgradeId, number>;
+
+  if (!isRecord(rawUpgrades)) {
+    return upgrades;
+  }
+
+  UPGRADE_DEFINITIONS.forEach((upgrade) => {
+    const level = Number(rawUpgrades[upgrade.id]);
+
+    if (!Number.isFinite(level)) {
+      return;
+    }
+
+    upgrades[upgrade.id] = Math.min(
+      Math.max(Math.floor(level), 0),
+      upgrade.maxLevel,
+    );
+  });
+
+  return upgrades;
 }
 
 function normalizeSavedSlot(rawSlot: unknown): SavedMonsterSlot {
