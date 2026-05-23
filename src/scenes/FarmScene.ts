@@ -42,6 +42,9 @@ export class FarmScene extends Phaser.Scene {
   private farmSlots: FarmSlotState[] = [];
   private slotCenters: Phaser.Math.Vector2[] = [];
   private monsterVisuals: Array<MonsterVisual | null> = [];
+  private selectedSlotId: number | null = null;
+  private selectionHighlight?: Phaser.GameObjects.Rectangle;
+  private monsterTooltip?: Phaser.GameObjects.Container;
   private nextMonsterId = 1;
   private incomeAccumulatorMs = 0;
   private saveThrottleAccumulatorMs = 0;
@@ -75,6 +78,9 @@ export class FarmScene extends Phaser.Scene {
     this.skipSavingUntilProgress = false;
     this.discoveredMonsters = new Set<DiscoveryKey>();
     this.compendiumPanel = undefined;
+    this.selectedSlotId = null;
+    this.selectionHighlight = undefined;
+    this.monsterTooltip = undefined;
     this.fullFarmText = undefined;
     this.farmSlots = this.createInitialFarmSlots();
     this.monsterVisuals = Array.from({ length: GRID_COLUMNS * GRID_ROWS }, () => null);
@@ -114,9 +120,16 @@ export class FarmScene extends Phaser.Scene {
         const x = startX + column * (CELL_SIZE + GRID_GAP);
         const y = startY + row * (CELL_SIZE + GRID_GAP);
 
-        this.add.rectangle(x, y, CELL_SIZE, CELL_SIZE, 0x8ecf62)
+        const slotId = this.slotCenters.length;
+        const slotTile = this.add.rectangle(x, y, CELL_SIZE, CELL_SIZE, 0x8ecf62)
           .setOrigin(0)
           .setStrokeStyle(3, 0x3c7a3f, 0.95);
+
+        slotTile
+          .setInteractive({ useHandCursor: true })
+          .on('pointerdown', () => {
+            this.selectSlot(slotId);
+          });
 
         this.slotCenters.push(new Phaser.Math.Vector2(x + CELL_SIZE / 2, y + CELL_SIZE / 2));
       }
@@ -284,6 +297,7 @@ export class FarmScene extends Phaser.Scene {
 
   private openCompendiumPanel(): void {
     this.closeCompendiumPanel();
+    this.clearSelectedSlot();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
     const panelWidth = 430;
@@ -421,6 +435,73 @@ export class FarmScene extends Phaser.Scene {
     }
   }
 
+  private selectSlot(slotId: number): void {
+    const slot = this.farmSlots[slotId];
+
+    if (!slot?.monster) {
+      this.clearSelectedSlot();
+      return;
+    }
+
+    this.selectedSlotId = slotId;
+    this.showSelectionHighlight(slotId);
+    this.showMonsterTooltip(slotId, slot.monster);
+  }
+
+  private clearSelectedSlot(): void {
+    this.selectedSlotId = null;
+    this.selectionHighlight?.destroy();
+    this.selectionHighlight = undefined;
+    this.monsterTooltip?.destroy();
+    this.monsterTooltip = undefined;
+  }
+
+  private showSelectionHighlight(slotId: number): void {
+    const center = this.slotCenters[slotId];
+
+    this.selectionHighlight?.destroy();
+    this.selectionHighlight = this.add.rectangle(center.x, center.y, CELL_SIZE + 8, CELL_SIZE + 8, 0xfff4a8, 0)
+      .setStrokeStyle(4, 0xfff4a8, 0.95)
+      .setDepth(4);
+  }
+
+  private showMonsterTooltip(slotId: number, monster: MonsterInstance): void {
+    const definition = getMonsterDefinition(monster.family, monster.level) ?? monster;
+    const center = this.slotCenters[slotId];
+    const tooltipWidth = 220;
+    const tooltipHeight = 88;
+    const tooltipX = center.x + tooltipWidth + 30 > this.scale.width
+      ? center.x - tooltipWidth / 2 - CELL_SIZE / 2 - 18
+      : center.x + tooltipWidth / 2 + CELL_SIZE / 2 + 18;
+    const tooltipY = Phaser.Math.Clamp(center.y, 72, this.scale.height - tooltipHeight / 2 - 18);
+
+    this.monsterTooltip?.destroy();
+
+    const tooltip = this.add.container(tooltipX, tooltipY);
+    tooltip.setDepth(30);
+    tooltip.add(this.add.rectangle(0, 0, tooltipWidth, tooltipHeight, 0x10291a, 0.95)
+      .setStrokeStyle(2, 0xd7f5a2, 0.75));
+    tooltip.add(this.add.text(-tooltipWidth / 2 + 14, -tooltipHeight / 2 + 12, definition.name, {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '18px',
+      fontStyle: 'bold',
+    }));
+    tooltip.add(this.add.text(-tooltipWidth / 2 + 14, -tooltipHeight / 2 + 40, `Level ${definition.level}`, {
+      color: '#cdebb3',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+    }));
+    tooltip.add(this.add.text(-tooltipWidth / 2 + 14, -tooltipHeight / 2 + 62, `Income: +${definition.incomePerSecond}/sec`, {
+      color: '#fff4a8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+    }));
+
+    this.monsterTooltip = tooltip;
+  }
+
   private renderMonsterInSlot(slot: FarmSlotState): void {
     if (!slot.monster) {
       return;
@@ -465,8 +546,31 @@ export class FarmScene extends Phaser.Scene {
 
     this.input.setDraggable(visual);
 
+    let pointerDownX = 0;
+    let pointerDownY = 0;
+    let wasDragged = false;
+
     visual
+      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointerDownX = pointer.worldX;
+        pointerDownY = pointer.worldY;
+        wasDragged = false;
+      })
+      .on('pointerup', (pointer: Phaser.Input.Pointer) => {
+        const movedDistance = Phaser.Math.Distance.Between(
+          pointerDownX,
+          pointerDownY,
+          pointer.worldX,
+          pointer.worldY,
+        );
+
+        if (!wasDragged && movedDistance < 8) {
+          this.selectSlot(slot.id);
+        }
+      })
       .on('dragstart', () => {
+        wasDragged = true;
+        this.clearSelectedSlot();
         visual.setScale(1.08);
         visual.setDepth(10);
       })
@@ -586,6 +690,7 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
+    this.clearSelectedSlot();
     this.farmSlots[sourceSlotId].monster = null;
     this.farmSlots[targetSlotId].monster = this.createMonsterInstance(nextMonsterDefinition);
     this.discoverMonster(nextMonsterDefinition);
@@ -594,6 +699,7 @@ export class FarmScene extends Phaser.Scene {
     this.renderMonsterInSlot(this.farmSlots[targetSlotId]);
     this.showMergeFeedback(targetSlotId);
     this.updateHud();
+    this.selectSlot(targetSlotId);
     this.skipSavingUntilProgress = false;
     this.saveProgress();
   }
@@ -763,6 +869,7 @@ export class FarmScene extends Phaser.Scene {
     this.monsterVisuals = Array.from({ length: GRID_COLUMNS * GRID_ROWS }, () => null);
 
     this.hideFullFarmMessage();
+    this.clearSelectedSlot();
     this.closeCompendiumPanel();
     this.updateHud();
   }
