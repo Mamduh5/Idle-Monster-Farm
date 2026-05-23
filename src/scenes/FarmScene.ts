@@ -2660,11 +2660,35 @@ export class FarmScene extends Phaser.Scene {
   private formatCoinAmount(coins: number): string {
     const safeCoins = this.sanitizeCoins(coins);
 
+    if (safeCoins >= 1_000_000_000) {
+      return `${this.formatCompactAmount(safeCoins / 1_000_000_000)}B`;
+    }
+
+    if (safeCoins >= 1_000_000) {
+      return `${this.formatCompactAmount(safeCoins / 1_000_000)}M`;
+    }
+
+    if (safeCoins >= 100_000) {
+      return `${this.formatCompactAmount(safeCoins / 1_000)}K`;
+    }
+
     if (Number.isInteger(safeCoins)) {
       return `${safeCoins}`;
     }
 
     return safeCoins.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+  }
+
+  private formatCompactAmount(amount: number): string {
+    if (amount >= 100) {
+      return Math.floor(amount).toString();
+    }
+
+    if (amount >= 10) {
+      return amount.toFixed(1).replace(/\.0$/, '');
+    }
+
+    return amount.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
   }
 
   private updateHud(): void {
