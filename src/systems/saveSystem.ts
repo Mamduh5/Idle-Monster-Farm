@@ -1,6 +1,6 @@
 import { STARTING_EGG_COST } from '../data/economy';
 import { UPGRADE_DEFINITIONS, type UpgradeId } from '../data/upgrades';
-import type { MonsterFamily } from '../types/game-state';
+import { ONBOARDING_HINT_IDS, type MonsterFamily, type OnboardingHintId } from '../types/game-state';
 
 export const SAVE_STORAGE_KEY = 'idle-monster-farm-save';
 export const SAVE_VERSION = 1;
@@ -23,6 +23,7 @@ export type LocalSaveData = {
   discoveredMonsters: SavedMonsterDiscovery[];
   upgrades: Record<UpgradeId, number>;
   currentEggCost: number;
+  onboardingHintsSeen: OnboardingHintId[];
 };
 
 export function loadSaveData(slotCount: number): LocalSaveData | null {
@@ -92,7 +93,18 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
     }),
     upgrades: normalizeUpgradeLevels(rawData.upgrades),
     currentEggCost: normalizeEggCost(rawData.currentEggCost),
+    onboardingHintsSeen: normalizeOnboardingHints(rawData.onboardingHintsSeen),
   };
+}
+
+function normalizeOnboardingHints(rawHints: unknown): OnboardingHintId[] {
+  if (!Array.isArray(rawHints)) {
+    return [];
+  }
+
+  return rawHints.filter((hint): hint is OnboardingHintId => (
+    typeof hint === 'string' && ONBOARDING_HINT_IDS.includes(hint as OnboardingHintId)
+  ));
 }
 
 function normalizeEggCost(rawEggCost: unknown): number {

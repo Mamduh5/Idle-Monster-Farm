@@ -27,6 +27,7 @@ import type {
   MonsterDefinition,
   MonsterFamily,
   MonsterInstance,
+  OnboardingHintId,
 } from '../types/game-state';
 
 const GRID_COLUMNS = 3;
@@ -142,6 +143,7 @@ export class FarmScene extends Phaser.Scene {
   private hasUnsavedProgress = false;
   private skipSavingUntilProgress = false;
   private discoveredMonsters = new Set<DiscoveryKey>();
+  private onboardingHintsSeen = new Set<OnboardingHintId>();
   private compendiumPanel?: Phaser.GameObjects.Container;
   private settingsPanel?: Phaser.GameObjects.Container;
   private helpPanel?: Phaser.GameObjects.Container;
@@ -181,6 +183,7 @@ export class FarmScene extends Phaser.Scene {
     this.hasUnsavedProgress = false;
     this.skipSavingUntilProgress = false;
     this.discoveredMonsters = new Set<DiscoveryKey>();
+    this.onboardingHintsSeen = new Set<OnboardingHintId>();
     this.compendiumPanel = undefined;
     this.settingsPanel = undefined;
     this.helpPanel = undefined;
@@ -223,11 +226,13 @@ export class FarmScene extends Phaser.Scene {
     this.loadProgress();
     this.registerPersistenceEvents();
     this.updateHud();
+    this.scheduleInitialOnboardingHints();
   }
 
   update(_time: number, delta: number): void {
     this.updateHatchCooldown(delta);
     this.addPassiveIncome(delta);
+    this.updateOnboardingHints();
     this.saveProgressWhenReady(delta);
     this.refreshEconomyDebugPanel();
   }
@@ -958,7 +963,7 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = this.getPanelSize(500, 320);
+    const { width: panelWidth, height: panelHeight } = this.getPanelSize(500, 390);
 
     panel.setDepth(26);
 
@@ -1000,10 +1005,32 @@ export class FarmScene extends Phaser.Scene {
       ['Settings', 'Press S or click Settings.'],
     ];
 
+    const lineGap = panelWidth < 420 ? 52 : 44;
+
     helpLines.forEach(([label, description], index) => {
-      this.addHelpLine(panel, label, description, -panelHeight / 2 + 82 + index * 42, panelWidth);
+      this.addHelpLine(panel, label, description, -panelHeight / 2 + 82 + index * lineGap, panelWidth);
     });
 
+    const resetHintsText = this.add.text(0, panelHeight / 2 - 30, 'Reset hints', {
+      color: THEME.text,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+      backgroundColor: `#${THEME.buttonWarm.toString(16).padStart(6, '0')}`,
+      padding: {
+        x: 12,
+        y: 6,
+      },
+    }).setOrigin(0.5);
+
+    resetHintsText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.playButtonClickSound();
+        this.resetOnboardingHints();
+      });
+
+    panel.add(resetHintsText);
     this.helpPanel = panel;
   }
 
@@ -1207,6 +1234,7 @@ export class FarmScene extends Phaser.Scene {
     });
 
     this.upgradeShopPanel = panel;
+    this.showOnboardingHint('upgrades', 'Upgrade Shop boosts your farm production.');
   }
 
   private addUpgradeRow(
@@ -1370,6 +1398,74 @@ export class FarmScene extends Phaser.Scene {
     this.showToast('Upgrade purchased', 'success');
   }
 
+  private scheduleInitialOnboardingHints(): void {
+    this.time.delayedCall(450, () => {
+      if (this.farmSlots.some((slot) => slot.monster)) {
+        this.showOnboardingHint('income', 'Monsters earn coins every second.');
+        this.checkMergeOnboardingHint();
+        return;
+      }
+
+      this.showOnboardingHint('welcome', 'Welcome! Build a monster farm.');
+
+      this.time.delayedCall(1500, () => {
+        if (this.farmSlots.every((slot) => slot.monster === null)) {
+          this.showOnboardingHint('hatch', 'Tap Hatch Egg to create monsters.');
+        }
+      });
+    });
+  }
+
+  private updateOnboardingHints(): void {
+    if (
+      !this.onboardingHintsSeen.has('upgrades')
+      && UPGRADE_DEFINITIONS.some((upgrade) => (
+        this.getUpgradeLevel(upgrade.id) < upgrade.maxLevel
+        && this.currency.coins >= this.getUpgradeCostForLevel(upgrade, this.getUpgradeLevel(upgrade.id))
+      ))
+    ) {
+      this.showOnboardingHint('upgrades', 'Upgrade Shop boosts your farm production.');
+    }
+  }
+
+  private checkMergeOnboardingHint(): void {
+    if (this.hasMergeableMonsterPair()) {
+      this.showOnboardingHint('merge', 'Drag matching monsters together to merge.');
+    }
+  }
+
+  private hasMergeableMonsterPair(): boolean {
+    const monsterCounts = new Map<string, number>();
+
+    this.farmSlots.forEach((slot) => {
+      if (!slot.monster || !getNextMonsterDefinition(slot.monster.family, slot.monster.level)) {
+        return;
+      }
+
+      const key = `${slot.monster.family}:${slot.monster.level}`;
+      monsterCounts.set(key, (monsterCounts.get(key) ?? 0) + 1);
+    });
+
+    return Array.from(monsterCounts.values()).some((count) => count >= 2);
+  }
+
+  private showOnboardingHint(hintId: OnboardingHintId, message: string): void {
+    if (this.onboardingHintsSeen.has(hintId)) {
+      return;
+    }
+
+    this.onboardingHintsSeen.add(hintId);
+    this.showToast(message, 'info');
+    this.saveProgress();
+  }
+
+  private resetOnboardingHints(): void {
+    this.onboardingHintsSeen.clear();
+    this.saveProgress();
+    this.showToast('Hints reset', 'success');
+    this.scheduleInitialOnboardingHints();
+  }
+
   private getUpgradeCurrentEffectText(upgradeId: UpgradeId): string {
     if (upgradeId === 'slime-income-boost') {
       return `current income x${this.getIncomeMultiplier().toFixed(1)}`;
@@ -1439,6 +1535,8 @@ export class FarmScene extends Phaser.Scene {
     this.hideFarmMessage();
     this.renderMonsterInSlot(emptySlot);
     this.updateHud();
+    this.showOnboardingHint('income', 'Monsters earn coins every second.');
+    this.checkMergeOnboardingHint();
     this.hatchCooldownMs = 0;
     this.updateHatchCooldownUi();
     this.skipSavingUntilProgress = false;
@@ -2073,6 +2171,7 @@ export class FarmScene extends Phaser.Scene {
     this.showMergeFeedback(targetSlotId);
     this.updateHud();
     this.selectSlot(targetSlotId);
+    this.showOnboardingHint('upgrades', 'Upgrade Shop boosts your farm production.');
     this.skipSavingUntilProgress = false;
     this.saveProgress();
   }
@@ -2174,12 +2273,16 @@ export class FarmScene extends Phaser.Scene {
       ...saveData.upgrades,
     };
     this.currentEggCost = this.sanitizeEggCost(saveData.currentEggCost);
+    this.onboardingHintsSeen = new Set(saveData.onboardingHintsSeen);
 
     const offlineCoins = this.calculateOfflineCoins(saveData.lastActiveAt);
 
     if (offlineCoins > 0) {
       this.currency.coins = this.sanitizeCoins(this.currency.coins + offlineCoins);
       this.showOfflineEarningsMessage(offlineCoins);
+      this.time.delayedCall(1800, () => {
+        this.showOnboardingHint('offline', 'Your monsters can earn while you are away.');
+      });
     }
 
     this.ensureStarterCoinsForEmptyFarm();
@@ -2215,6 +2318,7 @@ export class FarmScene extends Phaser.Scene {
       }),
       upgrades: this.getSanitizedUpgradeLevels(),
       currentEggCost: this.sanitizeEggCost(this.currentEggCost),
+      onboardingHintsSeen: Array.from(this.onboardingHintsSeen),
     });
 
     this.hasUnsavedProgress = false;
@@ -2244,6 +2348,7 @@ export class FarmScene extends Phaser.Scene {
     this.skipSavingUntilProgress = true;
     this.resetConfirmationArmed = false;
     this.discoveredMonsters = new Set<DiscoveryKey>();
+    this.onboardingHintsSeen = new Set<OnboardingHintId>();
     this.upgradeLevels = this.createInitialUpgradeLevels();
     this.currentEggCost = STARTING_EGG_COST;
     this.farmSlots = this.createInitialFarmSlots();

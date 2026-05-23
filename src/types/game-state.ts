@@ -19,3 +19,14 @@ export type FarmSlotState = {
   id: number;
   monster: MonsterInstance | null;
 };
+
+export const ONBOARDING_HINT_IDS = [
+  'welcome',
+  'hatch',
+  'income',
+  'merge',
+  'upgrades',
+  'offline',
+] as const;
+
+export type OnboardingHintId = typeof ONBOARDING_HINT_IDS[number];
