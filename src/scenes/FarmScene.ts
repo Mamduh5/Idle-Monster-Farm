@@ -60,6 +60,8 @@ const THEME = {
   buttonHover: 0x3c8156,
   buttonWarm: 0x7b5628,
   danger: 0x8f3044,
+  success: 0x3f8c43,
+  warning: 0x9a6a22,
   slot: 0xa4dc72,
   slotInner: 0xbee98f,
   slotBorder: 0x3f8c43,
@@ -74,6 +76,7 @@ const THEME = {
 
 type MonsterVisual = Phaser.GameObjects.Container;
 type DiscoveryKey = `${MonsterFamily}:${number}`;
+type ToastVariant = 'info' | 'success' | 'warning';
 type FarmSceneLayout = {
   isNarrow: boolean;
   margin: number;
@@ -110,7 +113,8 @@ export class FarmScene extends Phaser.Scene {
   private coinText?: Phaser.GameObjects.Text;
   private incomeText?: Phaser.GameObjects.Text;
   private productionStatsText?: Phaser.GameObjects.Text;
-  private farmMessageText?: Phaser.GameObjects.Text;
+  private toastContainer?: Phaser.GameObjects.Container;
+  private toastTween?: Phaser.Tweens.Tween;
   private farmSlots: FarmSlotState[] = [];
   private slotCenters: Phaser.Math.Vector2[] = [];
   private monsterVisuals: Array<MonsterVisual | null> = [];
@@ -185,7 +189,7 @@ export class FarmScene extends Phaser.Scene {
     this.hatchProgressFill = undefined;
     this.productionStatsText = undefined;
     this.currentEggCost = STARTING_EGG_COST;
-    this.farmMessageText = undefined;
+    this.clearToast();
     this.farmSlots = this.createInitialFarmSlots();
     this.monsterVisuals = Array.from({ length: GRID_COLUMNS * GRID_ROWS }, () => null);
     this.createFarmBackground();
@@ -684,6 +688,7 @@ export class FarmScene extends Phaser.Scene {
       writeSettings(this.settings);
       this.syncAudioSettings();
       this.openSettingsPanel();
+      this.showToast(this.settings.musicEnabled ? 'Music on' : 'Music off', this.settings.musicEnabled ? 'success' : 'info');
     });
 
     this.addSettingsToggle(panel, 'Sound', this.settings.soundEnabled, 16, () => {
@@ -691,6 +696,7 @@ export class FarmScene extends Phaser.Scene {
       writeSettings(this.settings);
       this.syncAudioSettings();
       this.openSettingsPanel();
+      this.showToast(this.settings.soundEnabled ? 'Sound on' : 'Sound off', this.settings.soundEnabled ? 'success' : 'info');
     });
 
     const resetText = this.add.text(0, 92, this.resetConfirmationArmed ? 'Click again to confirm reset' : 'Reset Save', {
@@ -717,6 +723,7 @@ export class FarmScene extends Phaser.Scene {
 
         this.resetProgress();
         this.openSettingsPanel();
+        this.showToast('Progress reset', 'success');
       });
 
     panel.add(resetText);
@@ -1188,6 +1195,7 @@ export class FarmScene extends Phaser.Scene {
     this.updateHud();
     this.saveProgress();
     this.openUpgradeShopPanel();
+    this.showToast('Upgrade purchased', 'success');
   }
 
   private getUpgradeCurrentEffectText(upgradeId: UpgradeId): string {
@@ -1242,6 +1250,7 @@ export class FarmScene extends Phaser.Scene {
     }
 
     if (!this.isHatchReady()) {
+      this.showToast('Hatching...', 'info');
       return;
     }
 
@@ -1688,34 +1697,95 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private showFullFarmMessage(): void {
-    this.showFarmMessage('Farm is full!');
+    this.showFarmMessage('Farm is full', 'warning');
   }
 
   private showNotEnoughCoinsMessage(): void {
-    this.showFarmMessage('Not enough coins!');
+    this.showFarmMessage('Not enough coins', 'warning');
   }
 
-  private showFarmMessage(message: string): void {
-    if (!this.farmMessageText) {
-      this.farmMessageText = this.add.text(this.scale.width / 2, 96, message, {
-        color: THEME.goldText,
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '24px',
-        fontStyle: 'bold',
-        backgroundColor: `#${THEME.panel.toString(16).padStart(6, '0')}`,
-        padding: {
-          x: 14,
-          y: 8,
-        },
-      }).setOrigin(0.5);
-    }
-
-    this.farmMessageText.setText(message);
-    this.farmMessageText.setVisible(true);
+  private showFarmMessage(message: string, variant: ToastVariant = 'info'): void {
+    this.showToast(message, variant);
   }
 
   private hideFarmMessage(): void {
-    this.farmMessageText?.setVisible(false);
+    this.clearToast();
+  }
+
+  private showToast(message: string, variant: ToastVariant = 'info'): void {
+    this.clearToast();
+
+    const fillColor = this.getToastFillColor(variant);
+    const borderColor = variant === 'success' ? 0xc9f5b5 : variant === 'warning' ? 0xffe0a0 : THEME.panelBorder;
+    const layout = this.getLayout();
+    const toastWidth = Math.min(280, Math.max(220, this.scale.width - 28));
+    const toastHeight = 38;
+    const x = this.scale.width / 2;
+    const preferredY = layout.isNarrow ? layout.hatchY - 26 : layout.gridStartY - 28;
+    const y = Phaser.Math.Clamp(preferredY, 116, this.scale.height - 104);
+
+    const container = this.add.container(x, y).setDepth(80).setAlpha(0);
+    const shadow = this.add.rectangle(2, 3, toastWidth, toastHeight, THEME.shadow, 0.28);
+    const background = this.add.rectangle(0, 0, toastWidth, toastHeight, fillColor, 0.96)
+      .setStrokeStyle(2, borderColor, 0.95)
+      .setInteractive({ useHandCursor: false });
+    const text = this.add.text(0, 0, message, {
+      color: THEME.text,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: this.scale.width < 380 ? '14px' : '15px',
+      fontStyle: 'bold',
+      align: 'center',
+      fixedWidth: toastWidth - 24,
+    }).setOrigin(0.5);
+
+    background.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.stopPropagation();
+    });
+
+    container.add([shadow, background, text]);
+    this.toastContainer = container;
+
+    this.toastTween = this.tweens.add({
+      targets: container,
+      alpha: 1,
+      y: y - 4,
+      duration: 120,
+      ease: 'Sine.easeOut',
+      onComplete: () => {
+        this.toastTween = this.tweens.add({
+          targets: container,
+          alpha: 0,
+          y: y - 18,
+          delay: 1350,
+          duration: 260,
+          ease: 'Sine.easeIn',
+          onComplete: () => {
+            if (this.toastContainer === container) {
+              this.clearToast();
+            }
+          },
+        });
+      },
+    });
+  }
+
+  private getToastFillColor(variant: ToastVariant): number {
+    if (variant === 'success') {
+      return THEME.success;
+    }
+
+    if (variant === 'warning') {
+      return THEME.warning;
+    }
+
+    return THEME.panelAlt;
+  }
+
+  private clearToast(): void {
+    this.toastTween?.stop();
+    this.toastTween = undefined;
+    this.toastContainer?.destroy();
+    this.toastContainer = undefined;
   }
 
   private handleMonsterDrop(
@@ -1976,6 +2046,7 @@ export class FarmScene extends Phaser.Scene {
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.saveProgress();
+      this.clearToast();
       window.removeEventListener('pagehide', this.handlePageHide);
       window.removeEventListener('beforeunload', this.handlePageHide);
       document.removeEventListener('visibilitychange', this.handleVisibilityChange);
