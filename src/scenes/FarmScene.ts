@@ -957,19 +957,23 @@ export class FarmScene extends Phaser.Scene {
     rowY: number,
     panelWidth: number,
   ): void {
+    const isCompactPanel = panelWidth < 500;
     const level = this.getUpgradeLevel(upgrade.id);
     const isMaxLevel = level >= upgrade.maxLevel;
     const cost = this.getUpgradeCostForLevel(upgrade, level);
     const canAfford = this.currency.coins >= cost && !isMaxLevel;
 
-    panel.add(this.add.rectangle(0, rowY, panelWidth - 48, 74, 0x234936, 0.92)
+    panel.add(this.add.rectangle(0, rowY, panelWidth - 48, isCompactPanel ? 84 : 74, 0x234936, 0.92)
       .setStrokeStyle(2, canAfford ? 0x8ecf62 : 0x46524b, 0.8));
 
     panel.add(this.add.text(-panelWidth / 2 + 42, rowY - 28, upgrade.name, {
       color: '#f7ffe8',
       fontFamily: 'Arial, sans-serif',
-      fontSize: '17px',
+      fontSize: isCompactPanel ? '15px' : '17px',
       fontStyle: 'bold',
+      wordWrap: {
+        width: isCompactPanel ? panelWidth - 170 : panelWidth - 210,
+      },
     }));
 
     panel.add(this.add.text(-panelWidth / 2 + 42, rowY - 4, `Level ${level}/${upgrade.maxLevel}`, {
@@ -979,23 +983,28 @@ export class FarmScene extends Phaser.Scene {
       fontStyle: 'bold',
     }));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, rowY + 19, `${upgrade.effect} - ${this.getUpgradeCurrentEffectText(upgrade.id)}`, {
+    panel.add(this.add.text(
+      -panelWidth / 2 + 42,
+      rowY + 19,
+      isCompactPanel ? this.getUpgradeCurrentEffectText(upgrade.id) : `${upgrade.effect} - ${this.getUpgradeCurrentEffectText(upgrade.id)}`,
+      {
       color: '#d9d6ec',
       fontFamily: 'Arial, sans-serif',
       fontSize: '13px',
       wordWrap: {
-        width: Math.max(170, panelWidth - 240),
+        width: isCompactPanel ? panelWidth - 160 : Math.max(170, panelWidth - 240),
       },
-    }));
+      },
+    ));
 
-    panel.add(this.add.text(panelWidth / 2 - 154, rowY - 24, isMaxLevel ? 'Maxed' : `Cost: ${cost}`, {
+    panel.add(this.add.text(panelWidth / 2 - 42, rowY - 34, isMaxLevel ? 'Maxed' : `Cost: ${cost}`, {
       color: isMaxLevel ? '#cdebb3' : '#fff4a8',
       fontFamily: 'Arial, sans-serif',
-      fontSize: '15px',
+      fontSize: isCompactPanel ? '13px' : '15px',
       fontStyle: 'bold',
     }).setOrigin(1, 0));
 
-    const buyText = this.add.text(panelWidth / 2 - 42, rowY - 14, isMaxLevel ? 'MAX' : 'Buy', {
+    const buyText = this.add.text(panelWidth / 2 - 42, rowY - 10, isMaxLevel ? 'MAX' : 'Buy', {
       color: '#ffffff',
       fontFamily: 'Arial, sans-serif',
       fontSize: '16px',
