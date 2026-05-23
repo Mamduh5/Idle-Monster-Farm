@@ -29,6 +29,8 @@ const SAVE_THROTTLE_MS = 5000;
 const MAX_OFFLINE_SECONDS = 7200;
 const HATCH_COOLDOWN_MS = 3000;
 const HATCH_PROGRESS_WIDTH = 142;
+const EXPANSION_COLUMNS = 3;
+const EXPANSION_ROWS = 1;
 
 type MonsterVisual = Phaser.GameObjects.Container;
 type DiscoveryKey = `${MonsterFamily}:${number}`;
@@ -97,6 +99,7 @@ export class FarmScene extends Phaser.Scene {
     this.monsterVisuals = Array.from({ length: GRID_COLUMNS * GRID_ROWS }, () => null);
     this.createFarmBackground();
     this.createFarmGrid();
+    this.createExpansionPlaceholder();
     this.createHud();
     this.createHatchArea();
     this.createResetSaveControl();
@@ -144,6 +147,45 @@ export class FarmScene extends Phaser.Scene {
           });
 
         this.slotCenters.push(new Phaser.Math.Vector2(x + CELL_SIZE / 2, y + CELL_SIZE / 2));
+      }
+    }
+  }
+
+  private createExpansionPlaceholder(): void {
+    const totalWidth = EXPANSION_COLUMNS * CELL_SIZE + (EXPANSION_COLUMNS - 1) * GRID_GAP;
+    const startX = (this.scale.width - totalWidth) / 2;
+    const activeGridHeight = GRID_ROWS * CELL_SIZE + (GRID_ROWS - 1) * GRID_GAP;
+    const labelY = 126 + activeGridHeight + 20;
+    const startY = labelY + 34;
+
+    this.add.text(this.scale.width / 2, labelY, 'Farm Expansion - Coming soon', {
+      color: '#d9d6ec',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '16px',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+
+    for (let row = 0; row < EXPANSION_ROWS; row += 1) {
+      for (let column = 0; column < EXPANSION_COLUMNS; column += 1) {
+        const x = startX + column * (CELL_SIZE + GRID_GAP);
+        const y = startY + row * (CELL_SIZE + GRID_GAP);
+
+        this.add.rectangle(x, y, CELL_SIZE, CELL_SIZE, 0x26352c, 0.62)
+          .setOrigin(0)
+          .setStrokeStyle(3, 0x6a756d, 0.7);
+
+        this.add.text(x + CELL_SIZE / 2, y + CELL_SIZE / 2 - 8, 'LOCK', {
+          color: '#aeb8b1',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: '14px',
+          fontStyle: 'bold',
+        }).setOrigin(0.5);
+
+        this.add.text(x + CELL_SIZE / 2, y + CELL_SIZE / 2 + 13, 'Soon', {
+          color: '#87928b',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: '12px',
+        }).setOrigin(0.5);
       }
     }
   }
