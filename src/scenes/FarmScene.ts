@@ -27,6 +27,8 @@ const GRID_GAP = 10;
 const MILLISECONDS_PER_SECOND = 1000;
 const SAVE_THROTTLE_MS = 5000;
 const MAX_OFFLINE_SECONDS = 7200;
+const HATCH_COOLDOWN_MS = 3000;
+const HATCH_PROGRESS_WIDTH = 142;
 
 type MonsterVisual = Phaser.GameObjects.Container;
 type DiscoveryKey = `${MonsterFamily}:${number}`;
@@ -45,6 +47,10 @@ export class FarmScene extends Phaser.Scene {
   private selectedSlotId: number | null = null;
   private selectionHighlight?: Phaser.GameObjects.Rectangle;
   private monsterTooltip?: Phaser.GameObjects.Container;
+  private hatchCooldownMs = HATCH_COOLDOWN_MS;
+  private hatchLabelText?: Phaser.GameObjects.Text;
+  private hatchStatusText?: Phaser.GameObjects.Text;
+  private hatchProgressFill?: Phaser.GameObjects.Rectangle;
   private nextMonsterId = 1;
   private incomeAccumulatorMs = 0;
   private saveThrottleAccumulatorMs = 0;
@@ -73,6 +79,7 @@ export class FarmScene extends Phaser.Scene {
     };
     this.nextMonsterId = 1;
     this.incomeAccumulatorMs = 0;
+    this.hatchCooldownMs = HATCH_COOLDOWN_MS;
     this.saveThrottleAccumulatorMs = 0;
     this.hasUnsavedProgress = false;
     this.skipSavingUntilProgress = false;
@@ -81,6 +88,10 @@ export class FarmScene extends Phaser.Scene {
     this.selectedSlotId = null;
     this.selectionHighlight = undefined;
     this.monsterTooltip = undefined;
+    this.hatchCooldownMs = HATCH_COOLDOWN_MS;
+    this.hatchLabelText = undefined;
+    this.hatchStatusText = undefined;
+    this.hatchProgressFill = undefined;
     this.fullFarmText = undefined;
     this.farmSlots = this.createInitialFarmSlots();
     this.monsterVisuals = Array.from({ length: GRID_COLUMNS * GRID_ROWS }, () => null);
@@ -96,6 +107,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
+    this.updateHatchCooldown(delta);
     this.addPassiveIncome(delta);
     this.saveProgressWhenReady(delta);
   }
@@ -181,18 +193,27 @@ export class FarmScene extends Phaser.Scene {
     this.add.ellipse(x + 48, y + 38, 44, 56, 0xf7e2a1)
       .setStrokeStyle(3, 0x9f6a2a, 0.95);
 
-    this.add.text(x + 88, y + 20, 'Hatch Egg', {
+    this.hatchLabelText = this.add.text(x + 88, y + 16, 'Hatch Egg', {
       color: '#ffffff',
       fontFamily: 'Arial, sans-serif',
       fontSize: '24px',
       fontStyle: 'bold',
     });
 
-    this.add.text(x + 88, y + 48, 'Placeholder button area', {
+    this.hatchStatusText = this.add.text(x + 88, y + 44, 'Ready', {
       color: '#d9d6ec',
       fontFamily: 'Arial, sans-serif',
       fontSize: '14px',
     });
+
+    this.add.rectangle(x + 88, y + 61, HATCH_PROGRESS_WIDTH, 8, 0x17152a, 0.9)
+      .setOrigin(0)
+      .setStrokeStyle(1, 0xf3d06b, 0.55);
+
+    this.hatchProgressFill = this.add.rectangle(x + 88, y + 61, HATCH_PROGRESS_WIDTH, 8, 0x8ecf62, 0.95)
+      .setOrigin(0);
+
+    this.updateHatchCooldownUi();
   }
 
   private createResetSaveControl(): void {
@@ -254,11 +275,17 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
+    if (!this.isHatchReady()) {
+      return;
+    }
+
     emptySlot.monster = this.createMonsterInstance(BABY_SLIME);
     this.discoverMonster(BABY_SLIME);
     this.hideFullFarmMessage();
     this.renderMonsterInSlot(emptySlot);
     this.updateHud();
+    this.hatchCooldownMs = 0;
+    this.updateHatchCooldownUi();
     this.skipSavingUntilProgress = false;
     this.saveProgress();
   }
@@ -271,6 +298,33 @@ export class FarmScene extends Phaser.Scene {
       ...definition,
       id: `monster-${monsterId}`,
     };
+  }
+
+  private isHatchReady(): boolean {
+    return this.hatchCooldownMs >= HATCH_COOLDOWN_MS;
+  }
+
+  private updateHatchCooldown(deltaMs: number): void {
+    if (!Number.isFinite(deltaMs) || deltaMs <= 0 || this.isHatchReady()) {
+      this.updateHatchCooldownUi();
+      return;
+    }
+
+    this.hatchCooldownMs = Phaser.Math.Clamp(
+      this.hatchCooldownMs + deltaMs,
+      0,
+      HATCH_COOLDOWN_MS,
+    );
+    this.updateHatchCooldownUi();
+  }
+
+  private updateHatchCooldownUi(): void {
+    const progress = Phaser.Math.Clamp(this.hatchCooldownMs / HATCH_COOLDOWN_MS, 0, 1);
+    const isReady = progress >= 1;
+
+    this.hatchLabelText?.setText(isReady ? 'Hatch Egg' : 'Hatching...');
+    this.hatchStatusText?.setText(isReady ? 'Ready' : `${Math.ceil((HATCH_COOLDOWN_MS - this.hatchCooldownMs) / 1000)}s`);
+    this.hatchProgressFill?.setDisplaySize(HATCH_PROGRESS_WIDTH * progress, 8);
   }
 
   private discoverMonster(monster: MonsterDefinition): void {
@@ -871,6 +925,7 @@ export class FarmScene extends Phaser.Scene {
     this.hideFullFarmMessage();
     this.clearSelectedSlot();
     this.closeCompendiumPanel();
+    this.updateHatchCooldownUi();
     this.updateHud();
   }
 
