@@ -19,6 +19,7 @@ import {
   SAVE_VERSION,
   writeSaveData,
 } from '../systems/saveSystem';
+import { audioSystem } from '../systems/audioSystem';
 import { loadSettings, writeSettings, type GameSettings } from '../systems/settingsSystem';
 import type {
   CurrencyState,
@@ -173,6 +174,7 @@ export class FarmScene extends Phaser.Scene {
     this.economyDebugText = undefined;
     this.upgradeLevels = this.createInitialUpgradeLevels();
     this.settings = loadSettings();
+    this.syncAudioSettings();
     this.resetConfirmationArmed = false;
     this.selectedSlotId = null;
     this.selectionHighlight = undefined;
@@ -448,6 +450,7 @@ export class FarmScene extends Phaser.Scene {
     hatchPanel
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
+        this.playButtonClickSound();
         this.hatchBabySlime();
       })
       .on('pointerover', () => {
@@ -549,8 +552,19 @@ export class FarmScene extends Phaser.Scene {
         button.setBackgroundColor(backgroundColor);
       })
       .on('pointerdown', () => {
+        this.playButtonClickSound();
         onClick();
       });
+  }
+
+  private syncAudioSettings(): void {
+    audioSystem.setSoundEnabled(this.settings.soundEnabled);
+    audioSystem.setMusicEnabled(this.settings.musicEnabled);
+  }
+
+  private playButtonClickSound(): void {
+    audioSystem.resume();
+    audioSystem.playButtonClick();
   }
 
   private getPanelSize(preferredWidth: number, preferredHeight: number): { width: number; height: number } {
@@ -659,6 +673,7 @@ export class FarmScene extends Phaser.Scene {
     closeText
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
+        this.playButtonClickSound();
         this.closeSettingsPanel();
       });
 
@@ -667,12 +682,14 @@ export class FarmScene extends Phaser.Scene {
     this.addSettingsToggle(panel, 'Music', this.settings.musicEnabled, -48, () => {
       this.settings.musicEnabled = !this.settings.musicEnabled;
       writeSettings(this.settings);
+      this.syncAudioSettings();
       this.openSettingsPanel();
     });
 
     this.addSettingsToggle(panel, 'Sound', this.settings.soundEnabled, 16, () => {
       this.settings.soundEnabled = !this.settings.soundEnabled;
       writeSettings(this.settings);
+      this.syncAudioSettings();
       this.openSettingsPanel();
     });
 
@@ -691,6 +708,7 @@ export class FarmScene extends Phaser.Scene {
     resetText
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
+        this.playButtonClickSound();
         if (!this.resetConfirmationArmed) {
           this.resetConfirmationArmed = true;
           this.openSettingsPanel();
@@ -735,6 +753,7 @@ export class FarmScene extends Phaser.Scene {
     toggleText
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
+        this.playButtonClickSound();
         onToggle();
       });
 
@@ -796,6 +815,7 @@ export class FarmScene extends Phaser.Scene {
     closeText
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
+        this.playButtonClickSound();
         this.closeHelpPanel();
       });
 
@@ -900,6 +920,7 @@ export class FarmScene extends Phaser.Scene {
     closeText
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
+        this.playButtonClickSound();
         this.closeEconomyDebugPanel();
       });
 
@@ -999,6 +1020,7 @@ export class FarmScene extends Phaser.Scene {
     closeText
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
+        this.playButtonClickSound();
         this.closeUpgradeShopPanel();
       });
 
@@ -1084,6 +1106,7 @@ export class FarmScene extends Phaser.Scene {
       buyText
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => {
+          this.playButtonClickSound();
           this.buyUpgrade(upgrade.id);
         });
     }
@@ -1230,6 +1253,7 @@ export class FarmScene extends Phaser.Scene {
     this.currency.coins = this.sanitizeCoins(this.currency.coins - this.currentEggCost);
     emptySlot.monster = this.createMonsterInstance(BABY_SLIME);
     this.currentEggCost = this.getNextEggCost(this.currentEggCost);
+    audioSystem.playHatch();
     this.discoverMonster(BABY_SLIME);
     this.hideFarmMessage();
     this.renderMonsterInSlot(emptySlot);
@@ -1365,6 +1389,7 @@ export class FarmScene extends Phaser.Scene {
     closeText
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
+        this.playButtonClickSound();
         this.closeCompendiumPanel();
       });
 
@@ -1750,6 +1775,7 @@ export class FarmScene extends Phaser.Scene {
 
     this.clearMonsterVisual(sourceSlotId);
     this.renderMonsterInSlot(this.farmSlots[targetSlotId]);
+    audioSystem.playMerge();
     this.showMergeFeedback(targetSlotId);
     this.updateHud();
     this.selectSlot(targetSlotId);
@@ -2041,6 +2067,7 @@ export class FarmScene extends Phaser.Scene {
     this.incomeAccumulatorMs -= elapsedSeconds * MILLISECONDS_PER_SECOND;
     this.currency.coins += incomePerSecond * elapsedSeconds;
     this.currency.coins = this.sanitizeCoins(this.currency.coins);
+    audioSystem.playCoinTick();
     this.showCoinGainIndicators();
     this.hasUnsavedProgress = true;
     this.updateHud();
