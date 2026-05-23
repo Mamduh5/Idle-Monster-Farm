@@ -960,8 +960,46 @@ export class FarmScene extends Phaser.Scene {
     this.incomeAccumulatorMs -= elapsedSeconds * MILLISECONDS_PER_SECOND;
     this.currency.coins += incomePerSecond * elapsedSeconds;
     this.currency.coins = this.sanitizeCoins(this.currency.coins);
+    this.showCoinGainIndicators();
     this.hasUnsavedProgress = true;
     this.updateHud();
+  }
+
+  private showCoinGainIndicators(): void {
+    this.farmSlots.forEach((slot) => {
+      const income = slot.monster?.incomePerSecond ?? 0;
+
+      if (!slot.monster || !Number.isFinite(income) || income <= 0) {
+        return;
+      }
+
+      this.showCoinGainIndicator(slot.id, income);
+    });
+  }
+
+  private showCoinGainIndicator(slotId: number, amount: number): void {
+    const center = this.slotCenters[slotId];
+    const indicator = this.add.text(center.x, center.y - 34, `+${amount}`, {
+      color: '#fff4a8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '18px',
+      fontStyle: 'bold',
+      stroke: '#10291a',
+      strokeThickness: 4,
+    }).setOrigin(0.5);
+
+    indicator.setDepth(12);
+
+    this.tweens.add({
+      targets: indicator,
+      y: indicator.y - 24,
+      alpha: 0,
+      duration: 800,
+      ease: 'Sine.easeOut',
+      onComplete: () => {
+        indicator.destroy();
+      },
+    });
   }
 
   private getTotalIncomePerSecond(): number {
