@@ -30,6 +30,8 @@ const SAVE_THROTTLE_MS = 5000;
 const MAX_OFFLINE_SECONDS = 7200;
 const HATCH_COOLDOWN_MS = 3000;
 const HATCH_PROGRESS_WIDTH = 142;
+const HATCH_EGG_COST = 10;
+const STARTING_COINS = HATCH_EGG_COST;
 const EXPANSION_COLUMNS = 3;
 const EXPANSION_ROWS = 1;
 
@@ -38,12 +40,12 @@ type DiscoveryKey = `${MonsterFamily}:${number}`;
 
 export class FarmScene extends Phaser.Scene {
   private currency: CurrencyState = {
-    coins: 0,
+    coins: STARTING_COINS,
   };
 
   private coinText?: Phaser.GameObjects.Text;
   private incomeText?: Phaser.GameObjects.Text;
-  private fullFarmText?: Phaser.GameObjects.Text;
+  private farmMessageText?: Phaser.GameObjects.Text;
   private farmSlots: FarmSlotState[] = [];
   private slotCenters: Phaser.Math.Vector2[] = [];
   private monsterVisuals: Array<MonsterVisual | null> = [];
@@ -82,7 +84,7 @@ export class FarmScene extends Phaser.Scene {
 
   create(): void {
     this.currency = {
-      coins: 0,
+      coins: STARTING_COINS,
     };
     this.nextMonsterId = 1;
     this.incomeAccumulatorMs = 0;
@@ -103,7 +105,7 @@ export class FarmScene extends Phaser.Scene {
     this.hatchLabelText = undefined;
     this.hatchStatusText = undefined;
     this.hatchProgressFill = undefined;
-    this.fullFarmText = undefined;
+    this.farmMessageText = undefined;
     this.farmSlots = this.createInitialFarmSlots();
     this.monsterVisuals = Array.from({ length: GRID_COLUMNS * GRID_ROWS }, () => null);
     this.createFarmBackground();
@@ -616,9 +618,15 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
+    if (!this.canAffordHatch()) {
+      this.showNotEnoughCoinsMessage();
+      return;
+    }
+
+    this.currency.coins = this.sanitizeCoins(this.currency.coins - HATCH_EGG_COST);
     emptySlot.monster = this.createMonsterInstance(BABY_SLIME);
     this.discoverMonster(BABY_SLIME);
-    this.hideFullFarmMessage();
+    this.hideFarmMessage();
     this.renderMonsterInSlot(emptySlot);
     this.updateHud();
     this.hatchCooldownMs = 0;
@@ -641,6 +649,10 @@ export class FarmScene extends Phaser.Scene {
     return this.hatchCooldownMs >= HATCH_COOLDOWN_MS;
   }
 
+  private canAffordHatch(): boolean {
+    return this.currency.coins >= HATCH_EGG_COST;
+  }
+
   private updateHatchCooldown(deltaMs: number): void {
     if (!Number.isFinite(deltaMs) || deltaMs <= 0 || this.isHatchReady()) {
       this.updateHatchCooldownUi();
@@ -658,10 +670,27 @@ export class FarmScene extends Phaser.Scene {
   private updateHatchCooldownUi(): void {
     const progress = Phaser.Math.Clamp(this.hatchCooldownMs / HATCH_COOLDOWN_MS, 0, 1);
     const isReady = progress >= 1;
+    const isFull = this.isFarmFull();
+    const canAfford = this.canAffordHatch();
+    const statusColor = isFull || !canAfford ? '#fff4a8' : '#d9d6ec';
 
-    this.hatchLabelText?.setText(isReady ? 'Hatch Egg' : 'Hatching...');
-    this.hatchStatusText?.setText(isReady ? 'Ready' : `${Math.ceil((HATCH_COOLDOWN_MS - this.hatchCooldownMs) / 1000)}s`);
+    if (!isReady) {
+      this.hatchLabelText?.setText('Hatching...');
+      this.hatchStatusText?.setText(`${Math.ceil((HATCH_COOLDOWN_MS - this.hatchCooldownMs) / 1000)}s - Cost: ${HATCH_EGG_COST}`);
+    } else if (isFull) {
+      this.hatchLabelText?.setText('Farm Full');
+      this.hatchStatusText?.setText('Merge to free a slot');
+    } else if (!canAfford) {
+      this.hatchLabelText?.setText('Need Coins');
+      this.hatchStatusText?.setText(`Cost: ${HATCH_EGG_COST} coins`);
+    } else {
+      this.hatchLabelText?.setText('Hatch Egg');
+      this.hatchStatusText?.setText(`Cost: ${HATCH_EGG_COST} coins`);
+    }
+
+    this.hatchStatusText?.setColor(statusColor);
     this.hatchProgressFill?.setDisplaySize(HATCH_PROGRESS_WIDTH * progress, 8);
+    this.hatchProgressFill?.setFillStyle(isReady && canAfford && !isFull ? 0x8ecf62 : 0xf3d06b, 0.95);
   }
 
   private discoverMonster(monster: MonsterDefinition): void {
@@ -1011,9 +1040,21 @@ export class FarmScene extends Phaser.Scene {
     };
   }
 
+  private isFarmFull(): boolean {
+    return this.farmSlots.every((slot) => slot.monster !== null);
+  }
+
   private showFullFarmMessage(): void {
-    if (!this.fullFarmText) {
-      this.fullFarmText = this.add.text(this.scale.width / 2, 96, 'Farm is full!', {
+    this.showFarmMessage('Farm is full!');
+  }
+
+  private showNotEnoughCoinsMessage(): void {
+    this.showFarmMessage('Not enough coins!');
+  }
+
+  private showFarmMessage(message: string): void {
+    if (!this.farmMessageText) {
+      this.farmMessageText = this.add.text(this.scale.width / 2, 96, message, {
         color: '#fff4a8',
         fontFamily: 'Arial, sans-serif',
         fontSize: '24px',
@@ -1026,11 +1067,12 @@ export class FarmScene extends Phaser.Scene {
       }).setOrigin(0.5);
     }
 
-    this.fullFarmText.setVisible(true);
+    this.farmMessageText.setText(message);
+    this.farmMessageText.setVisible(true);
   }
 
-  private hideFullFarmMessage(): void {
-    this.fullFarmText?.setVisible(false);
+  private hideFarmMessage(): void {
+    this.farmMessageText?.setVisible(false);
   }
 
   private handleMonsterDrop(
@@ -1196,6 +1238,7 @@ export class FarmScene extends Phaser.Scene {
       this.showOfflineEarningsMessage(offlineCoins);
     }
 
+    this.ensureStarterCoinsForEmptyFarm();
     this.saveProgress();
   }
 
@@ -1247,7 +1290,7 @@ export class FarmScene extends Phaser.Scene {
   private resetProgress(): void {
     clearSaveData();
 
-    this.currency.coins = 0;
+    this.currency.coins = STARTING_COINS;
     this.nextMonsterId = 1;
     this.incomeAccumulatorMs = 0;
     this.saveThrottleAccumulatorMs = 0;
@@ -1262,7 +1305,7 @@ export class FarmScene extends Phaser.Scene {
     });
     this.monsterVisuals = Array.from({ length: GRID_COLUMNS * GRID_ROWS }, () => null);
 
-    this.hideFullFarmMessage();
+    this.hideFarmMessage();
     this.clearSelectedSlot();
     this.closeCompendiumPanel();
     this.closeHelpPanel();
@@ -1284,7 +1327,15 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private hasAnyProgress(): boolean {
-    return this.currency.coins > 0 || this.farmSlots.some((slot) => slot.monster !== null);
+    return this.currency.coins !== STARTING_COINS || this.farmSlots.some((slot) => slot.monster !== null);
+  }
+
+  private ensureStarterCoinsForEmptyFarm(): void {
+    if (this.farmSlots.some((slot) => slot.monster !== null) || this.currency.coins >= HATCH_EGG_COST) {
+      return;
+    }
+
+    this.currency.coins = STARTING_COINS;
   }
 
   private calculateOfflineCoins(lastActiveAt: number): number {
@@ -1422,5 +1473,6 @@ export class FarmScene extends Phaser.Scene {
     this.currency.coins = this.sanitizeCoins(this.currency.coins);
     this.coinText?.setText(`Coins: ${this.currency.coins}`);
     this.incomeText?.setText(`+${this.getTotalIncomePerSecond()}/sec`);
+    this.updateHatchCooldownUi();
   }
 }
