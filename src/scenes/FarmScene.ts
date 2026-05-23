@@ -1,5 +1,12 @@
 import Phaser from 'phaser';
-import { BABY_SLIME, getNextMonsterDefinition } from '../data/monsters';
+import { BABY_SLIME, getMonsterDefinition, getNextMonsterDefinition } from '../data/monsters';
+import {
+  clearSaveData,
+  loadSaveData,
+  sanitizeSavedCoins,
+  SAVE_VERSION,
+  writeSaveData,
+} from '../systems/saveSystem';
 import type {
   CurrencyState,
   FarmSlotState,
@@ -12,6 +19,7 @@ const GRID_ROWS = 3;
 const CELL_SIZE = 72;
 const GRID_GAP = 10;
 const MILLISECONDS_PER_SECOND = 1000;
+const SAVE_THROTTLE_MS = 5000;
 
 type MonsterVisual = Phaser.GameObjects.Container;
 
@@ -28,14 +36,33 @@ export class FarmScene extends Phaser.Scene {
   private monsterVisuals: Array<MonsterVisual | null> = [];
   private nextMonsterId = 1;
   private incomeAccumulatorMs = 0;
+  private saveThrottleAccumulatorMs = 0;
+  private hasUnsavedProgress = false;
+  private skipSavingUntilProgress = false;
+
+  private readonly handlePageHide = (): void => {
+    this.saveProgress();
+  };
+
+  private readonly handleVisibilityChange = (): void => {
+    if (document.visibilityState === 'hidden') {
+      this.saveProgress();
+    }
+  };
 
   constructor() {
     super('FarmScene');
   }
 
   create(): void {
+    this.currency = {
+      coins: 0,
+    };
     this.nextMonsterId = 1;
     this.incomeAccumulatorMs = 0;
+    this.saveThrottleAccumulatorMs = 0;
+    this.hasUnsavedProgress = false;
+    this.skipSavingUntilProgress = false;
     this.fullFarmText = undefined;
     this.farmSlots = this.createInitialFarmSlots();
     this.monsterVisuals = Array.from({ length: GRID_COLUMNS * GRID_ROWS }, () => null);
@@ -43,10 +70,15 @@ export class FarmScene extends Phaser.Scene {
     this.createFarmGrid();
     this.createHud();
     this.createHatchArea();
+    this.createResetSaveControl();
+    this.loadProgress();
+    this.registerPersistenceEvents();
+    this.updateHud();
   }
 
   update(_time: number, delta: number): void {
     this.addPassiveIncome(delta);
+    this.saveProgressWhenReady(delta);
   }
 
   private createFarmBackground(): void {
@@ -137,6 +169,30 @@ export class FarmScene extends Phaser.Scene {
     });
   }
 
+  private createResetSaveControl(): void {
+    const resetText = this.add.text(this.scale.width - 24, 22, 'Reset Save', {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+      backgroundColor: '#10291a',
+      padding: {
+        x: 10,
+        y: 6,
+      },
+    }).setOrigin(1, 0);
+
+    resetText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.resetProgress();
+      });
+
+    this.input.keyboard?.on('keydown-R', () => {
+      this.resetProgress();
+    });
+  }
+
   private createInitialFarmSlots(): FarmSlotState[] {
     return Array.from({ length: GRID_COLUMNS * GRID_ROWS }, (_, index) => ({
       id: index,
@@ -156,6 +212,8 @@ export class FarmScene extends Phaser.Scene {
     this.hideFullFarmMessage();
     this.renderMonsterInSlot(emptySlot);
     this.updateHud();
+    this.skipSavingUntilProgress = false;
+    this.saveProgress();
   }
 
   private createMonsterInstance(definition = BABY_SLIME): MonsterInstance {
@@ -340,6 +398,8 @@ export class FarmScene extends Phaser.Scene {
     this.renderMonsterInSlot(this.farmSlots[targetSlotId]);
     this.showMergeFeedback(targetSlotId);
     this.updateHud();
+    this.skipSavingUntilProgress = false;
+    this.saveProgress();
   }
 
   private getMergeResultDefinition(
@@ -400,6 +460,106 @@ export class FarmScene extends Phaser.Scene {
     });
   }
 
+  private loadProgress(): void {
+    const saveData = loadSaveData(this.farmSlots.length);
+
+    if (!saveData) {
+      return;
+    }
+
+    this.currency.coins = sanitizeSavedCoins(saveData.coins);
+
+    saveData.grid.forEach((savedSlot, slotId) => {
+      if (!savedSlot) {
+        return;
+      }
+
+      const monsterDefinition = getMonsterDefinition(savedSlot.family, savedSlot.level);
+
+      if (!monsterDefinition) {
+        return;
+      }
+
+      const slot = this.farmSlots[slotId];
+      slot.monster = this.createMonsterInstance(monsterDefinition);
+      this.renderMonsterInSlot(slot);
+    });
+  }
+
+  private saveProgress(): void {
+    if (this.skipSavingUntilProgress && !this.hasAnyProgress()) {
+      return;
+    }
+
+    writeSaveData({
+      version: SAVE_VERSION,
+      coins: this.sanitizeCoins(this.currency.coins),
+      grid: this.farmSlots.map((slot) => {
+        if (!slot.monster) {
+          return null;
+        }
+
+        return {
+          family: slot.monster.family,
+          level: slot.monster.level,
+        };
+      }),
+      lastActiveAt: Date.now(),
+    });
+
+    this.hasUnsavedProgress = false;
+    this.saveThrottleAccumulatorMs = 0;
+  }
+
+  private saveProgressWhenReady(deltaMs: number): void {
+    if (!this.hasUnsavedProgress || !Number.isFinite(deltaMs) || deltaMs <= 0) {
+      return;
+    }
+
+    this.saveThrottleAccumulatorMs += deltaMs;
+
+    if (this.saveThrottleAccumulatorMs >= SAVE_THROTTLE_MS) {
+      this.saveProgress();
+    }
+  }
+
+  private resetProgress(): void {
+    clearSaveData();
+
+    this.currency.coins = 0;
+    this.nextMonsterId = 1;
+    this.incomeAccumulatorMs = 0;
+    this.saveThrottleAccumulatorMs = 0;
+    this.hasUnsavedProgress = false;
+    this.skipSavingUntilProgress = true;
+    this.farmSlots = this.createInitialFarmSlots();
+
+    this.monsterVisuals.forEach((visual) => {
+      visual?.destroy();
+    });
+    this.monsterVisuals = Array.from({ length: GRID_COLUMNS * GRID_ROWS }, () => null);
+
+    this.hideFullFarmMessage();
+    this.updateHud();
+  }
+
+  private registerPersistenceEvents(): void {
+    window.addEventListener('pagehide', this.handlePageHide);
+    window.addEventListener('beforeunload', this.handlePageHide);
+    document.addEventListener('visibilitychange', this.handleVisibilityChange);
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.saveProgress();
+      window.removeEventListener('pagehide', this.handlePageHide);
+      window.removeEventListener('beforeunload', this.handlePageHide);
+      document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    });
+  }
+
+  private hasAnyProgress(): boolean {
+    return this.currency.coins > 0 || this.farmSlots.some((slot) => slot.monster !== null);
+  }
+
   private addPassiveIncome(deltaMs: number): void {
     const incomePerSecond = this.getTotalIncomePerSecond();
 
@@ -419,6 +579,7 @@ export class FarmScene extends Phaser.Scene {
     this.incomeAccumulatorMs -= elapsedSeconds * MILLISECONDS_PER_SECOND;
     this.currency.coins += incomePerSecond * elapsedSeconds;
     this.currency.coins = this.sanitizeCoins(this.currency.coins);
+    this.hasUnsavedProgress = true;
     this.updateHud();
   }
 

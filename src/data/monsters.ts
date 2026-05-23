@@ -36,3 +36,13 @@ export function getNextMonsterDefinition(
     && definition.level === currentLevel + 1
   ));
 }
+
+export function getMonsterDefinition(
+  family: MonsterFamily,
+  level: number,
+): MonsterDefinition | undefined {
+  return MONSTER_DEFINITIONS.find((definition) => (
+    definition.family === family
+    && definition.level === level
+  ));
+}
