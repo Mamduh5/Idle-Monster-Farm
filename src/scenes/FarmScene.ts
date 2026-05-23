@@ -20,6 +20,7 @@ const CELL_SIZE = 72;
 const GRID_GAP = 10;
 const MILLISECONDS_PER_SECOND = 1000;
 const SAVE_THROTTLE_MS = 5000;
+const MAX_OFFLINE_SECONDS = 7200;
 
 type MonsterVisual = Phaser.GameObjects.Container;
 
@@ -484,6 +485,15 @@ export class FarmScene extends Phaser.Scene {
       slot.monster = this.createMonsterInstance(monsterDefinition);
       this.renderMonsterInSlot(slot);
     });
+
+    const offlineCoins = this.calculateOfflineCoins(saveData.lastActiveAt);
+
+    if (offlineCoins > 0) {
+      this.currency.coins = this.sanitizeCoins(this.currency.coins + offlineCoins);
+      this.showOfflineEarningsMessage(offlineCoins);
+    }
+
+    this.saveProgress();
   }
 
   private saveProgress(): void {
@@ -558,6 +568,56 @@ export class FarmScene extends Phaser.Scene {
 
   private hasAnyProgress(): boolean {
     return this.currency.coins > 0 || this.farmSlots.some((slot) => slot.monster !== null);
+  }
+
+  private calculateOfflineCoins(lastActiveAt: number): number {
+    if (!Number.isFinite(lastActiveAt) || lastActiveAt < 0) {
+      return 0;
+    }
+
+    const elapsedMilliseconds = Date.now() - lastActiveAt;
+
+    if (!Number.isFinite(elapsedMilliseconds) || elapsedMilliseconds <= 0) {
+      return 0;
+    }
+
+    const elapsedSeconds = Math.floor(elapsedMilliseconds / MILLISECONDS_PER_SECOND);
+    const cappedElapsedSeconds = Math.min(elapsedSeconds, MAX_OFFLINE_SECONDS);
+    const incomePerSecond = this.getTotalIncomePerSecond();
+    const offlineCoins = cappedElapsedSeconds * incomePerSecond;
+
+    return this.sanitizeCoins(offlineCoins);
+  }
+
+  private showOfflineEarningsMessage(offlineCoins: number): void {
+    const popup = this.add.text(
+      this.scale.width / 2,
+      96,
+      `Welcome back! You earned ${offlineCoins} coins while away.`,
+      {
+        color: '#fff4a8',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '20px',
+        fontStyle: 'bold',
+        backgroundColor: '#10291a',
+        padding: {
+          x: 14,
+          y: 8,
+        },
+      },
+    ).setOrigin(0.5);
+
+    this.tweens.add({
+      targets: popup,
+      y: popup.y - 20,
+      alpha: 0,
+      delay: 2200,
+      duration: 700,
+      ease: 'Sine.easeOut',
+      onComplete: () => {
+        popup.destroy();
+      },
+    });
   }
 
   private addPassiveIncome(deltaMs: number): void {
