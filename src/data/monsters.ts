@@ -6,3 +6,10 @@ export const BABY_SLIME: MonsterDefinition = {
   name: 'Baby Slime',
   incomePerSecond: 1,
 };
+
+export const LEVEL_2_SLIME: MonsterDefinition = {
+  family: 'Slime',
+  level: 2,
+  name: 'Level 2 Slime',
+  incomePerSecond: 3,
+};

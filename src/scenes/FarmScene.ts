@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { BABY_SLIME } from '../data/monsters';
+import { BABY_SLIME, LEVEL_2_SLIME } from '../data/monsters';
 import type { CurrencyState, FarmSlotState, MonsterInstance } from '../types/game-state';
 
 const GRID_COLUMNS = 3;
@@ -7,6 +7,8 @@ const GRID_ROWS = 3;
 const CELL_SIZE = 72;
 const GRID_GAP = 10;
 const MILLISECONDS_PER_SECOND = 1000;
+
+type MonsterVisual = Phaser.GameObjects.Container;
 
 export class FarmScene extends Phaser.Scene {
   private currency: CurrencyState = {
@@ -18,6 +20,7 @@ export class FarmScene extends Phaser.Scene {
   private fullFarmText?: Phaser.GameObjects.Text;
   private farmSlots: FarmSlotState[] = [];
   private slotCenters: Phaser.Math.Vector2[] = [];
+  private monsterVisuals: Array<MonsterVisual | null> = [];
   private nextMonsterId = 1;
   private incomeAccumulatorMs = 0;
 
@@ -30,6 +33,7 @@ export class FarmScene extends Phaser.Scene {
     this.incomeAccumulatorMs = 0;
     this.fullFarmText = undefined;
     this.farmSlots = this.createInitialFarmSlots();
+    this.monsterVisuals = Array.from({ length: GRID_COLUMNS * GRID_ROWS }, () => null);
     this.createFarmBackground();
     this.createFarmGrid();
     this.createHud();
@@ -143,18 +147,18 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    emptySlot.monster = this.createMonsterInstance();
+    emptySlot.monster = this.createMonsterInstance(BABY_SLIME);
     this.hideFullFarmMessage();
     this.renderMonsterInSlot(emptySlot);
     this.updateHud();
   }
 
-  private createMonsterInstance(): MonsterInstance {
+  private createMonsterInstance(definition = BABY_SLIME): MonsterInstance {
     const monsterId = this.nextMonsterId;
     this.nextMonsterId += 1;
 
     return {
-      ...BABY_SLIME,
+      ...definition,
       id: `monster-${monsterId}`,
     };
   }
@@ -165,19 +169,58 @@ export class FarmScene extends Phaser.Scene {
     }
 
     const center = this.slotCenters[slot.id];
+    const monster = slot.monster;
+    const isLevelTwo = monster.level === 2;
 
-    this.add.ellipse(center.x, center.y + 6, 44, 34, 0x2f7d40, 0.35);
-    this.add.ellipse(center.x, center.y, 46, 38, 0x75d96d)
-      .setStrokeStyle(3, 0x22692d, 0.95);
-    this.add.circle(center.x - 11, center.y - 4, 4, 0x10291a);
-    this.add.circle(center.x + 11, center.y - 4, 4, 0x10291a);
+    this.clearMonsterVisual(slot.id);
 
-    this.add.text(center.x, center.y + 27, 'Lv 1', {
+    const visual = this.add.container(center.x, center.y);
+    const bodyColor = isLevelTwo ? 0x54c6d8 : 0x75d96d;
+    const strokeColor = isLevelTwo ? 0x1e6d83 : 0x22692d;
+    const bodyWidth = isLevelTwo ? 54 : 46;
+    const bodyHeight = isLevelTwo ? 46 : 38;
+
+    visual.add(this.add.ellipse(0, 6, bodyWidth, bodyHeight - 4, 0x2f7d40, 0.35));
+    visual.add(this.add.ellipse(0, 0, bodyWidth, bodyHeight, bodyColor)
+      .setStrokeStyle(3, strokeColor, 0.95));
+    visual.add(this.add.circle(-11, -4, 4, 0x10291a));
+    visual.add(this.add.circle(11, -4, 4, 0x10291a));
+
+    if (isLevelTwo) {
+      visual.add(this.add.circle(0, -18, 7, 0xd7f5ff, 0.95)
+        .setStrokeStyle(2, 0x1e6d83, 0.8));
+    }
+
+    visual.add(this.add.text(0, 27, `Lv ${monster.level}`, {
       color: '#f7ffe8',
       fontFamily: 'Arial, sans-serif',
       fontSize: '13px',
       fontStyle: 'bold',
-    }).setOrigin(0.5);
+    }).setOrigin(0.5));
+
+    visual.setSize(CELL_SIZE, CELL_SIZE);
+    visual.setInteractive(
+      new Phaser.Geom.Rectangle(-CELL_SIZE / 2, -CELL_SIZE / 2, CELL_SIZE, CELL_SIZE),
+      Phaser.Geom.Rectangle.Contains,
+    );
+
+    this.input.setDraggable(visual);
+
+    visual
+      .on('dragstart', () => {
+        visual.setScale(1.08);
+        visual.setDepth(10);
+      })
+      .on('drag', (_pointer: Phaser.Input.Pointer, dragX: number, dragY: number) => {
+        visual.setPosition(dragX, dragY);
+      })
+      .on('dragend', (pointer: Phaser.Input.Pointer) => {
+        visual.setScale(1);
+        visual.setDepth(0);
+        this.handleMonsterDrop(slot.id, pointer.worldX, pointer.worldY, visual);
+      });
+
+    this.monsterVisuals[slot.id] = visual;
   }
 
   private showFullFarmMessage(): void {
@@ -200,6 +243,106 @@ export class FarmScene extends Phaser.Scene {
 
   private hideFullFarmMessage(): void {
     this.fullFarmText?.setVisible(false);
+  }
+
+  private handleMonsterDrop(
+    sourceSlotId: number,
+    dropWorldX: number,
+    dropWorldY: number,
+    visual: MonsterVisual,
+  ): void {
+    const targetSlotId = this.findSlotIdAtPoint(dropWorldX, dropWorldY);
+
+    if (targetSlotId === null || !this.canMergeSlots(sourceSlotId, targetSlotId)) {
+      this.returnMonsterVisualToSlot(sourceSlotId, visual);
+      return;
+    }
+
+    this.mergeSlots(sourceSlotId, targetSlotId);
+  }
+
+  private findSlotIdAtPoint(worldX: number, worldY: number): number | null {
+    if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) {
+      return null;
+    }
+
+    const slotId = this.slotCenters.findIndex((center) => (
+      Math.abs(worldX - center.x) <= CELL_SIZE / 2
+      && Math.abs(worldY - center.y) <= CELL_SIZE / 2
+    ));
+
+    return slotId >= 0 ? slotId : null;
+  }
+
+  private canMergeSlots(sourceSlotId: number, targetSlotId: number): boolean {
+    if (sourceSlotId === targetSlotId || targetSlotId < 0) {
+      return false;
+    }
+
+    const sourceMonster = this.farmSlots[sourceSlotId]?.monster;
+    const targetMonster = this.farmSlots[targetSlotId]?.monster;
+
+    return Boolean(
+      sourceMonster
+      && targetMonster
+      && sourceMonster.family === 'Slime'
+      && targetMonster.family === 'Slime'
+      && sourceMonster.level === 1
+      && targetMonster.level === 1,
+    );
+  }
+
+  private mergeSlots(sourceSlotId: number, targetSlotId: number): void {
+    this.farmSlots[sourceSlotId].monster = null;
+    this.farmSlots[targetSlotId].monster = this.createMonsterInstance(LEVEL_2_SLIME);
+
+    this.clearMonsterVisual(sourceSlotId);
+    this.renderMonsterInSlot(this.farmSlots[targetSlotId]);
+    this.showMergeFeedback(targetSlotId);
+    this.updateHud();
+  }
+
+  private clearMonsterVisual(slotId: number): void {
+    this.monsterVisuals[slotId]?.destroy();
+    this.monsterVisuals[slotId] = null;
+  }
+
+  private returnMonsterVisualToSlot(slotId: number, visual: MonsterVisual): void {
+    const center = this.slotCenters[slotId];
+
+    this.tweens.add({
+      targets: visual,
+      x: center.x,
+      y: center.y,
+      duration: 130,
+      ease: 'Sine.easeOut',
+    });
+  }
+
+  private showMergeFeedback(slotId: number): void {
+    const center = this.slotCenters[slotId];
+    const popup = this.add.text(center.x, center.y - 42, 'Merge!', {
+      color: '#ffffff',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '18px',
+      fontStyle: 'bold',
+      backgroundColor: '#1e6d83',
+      padding: {
+        x: 8,
+        y: 4,
+      },
+    }).setOrigin(0.5);
+
+    this.tweens.add({
+      targets: popup,
+      y: popup.y - 18,
+      alpha: 0,
+      duration: 650,
+      ease: 'Sine.easeOut',
+      onComplete: () => {
+        popup.destroy();
+      },
+    });
   }
 
   private addPassiveIncome(deltaMs: number): void {
