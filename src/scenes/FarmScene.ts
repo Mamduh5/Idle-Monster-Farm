@@ -48,6 +48,33 @@ const EXPANSION_ROWS = 1;
 
 type MonsterVisual = Phaser.GameObjects.Container;
 type DiscoveryKey = `${MonsterFamily}:${number}`;
+type FarmSceneLayout = {
+  isNarrow: boolean;
+  margin: number;
+  cellSize: number;
+  gridGap: number;
+  gridStartX: number;
+  gridStartY: number;
+  hudX: number;
+  hudY: number;
+  hudWidth: number;
+  hudHeight: number;
+  statsX: number;
+  statsY: number;
+  statsWidth: number;
+  statsHeight: number;
+  menuX: number;
+  menuY: number;
+  menuGap: number;
+  menuFontSize: string;
+  expansionLabelY: number;
+  expansionStartX: number;
+  expansionStartY: number;
+  hatchX: number;
+  hatchY: number;
+  hatchWidth: number;
+  hatchHeight: number;
+};
 
 export class FarmScene extends Phaser.Scene {
   private currency: CurrencyState = {
@@ -68,6 +95,9 @@ export class FarmScene extends Phaser.Scene {
   private hatchLabelText?: Phaser.GameObjects.Text;
   private hatchStatusText?: Phaser.GameObjects.Text;
   private hatchProgressFill?: Phaser.GameObjects.Rectangle;
+  private hatchProgressWidth = HATCH_PROGRESS_WIDTH;
+  private cellSize = CELL_SIZE;
+  private gridGap = GRID_GAP;
   private currentEggCost = STARTING_EGG_COST;
   private nextMonsterId = 1;
   private incomeAccumulatorMs = 0;
@@ -162,20 +192,91 @@ export class FarmScene extends Phaser.Scene {
     this.add.rectangle(0, height - 96, width, 96, 0x6a4a2b).setOrigin(0).setAlpha(0.45);
   }
 
+  private getLayout(): FarmSceneLayout {
+    const width = this.scale.width;
+    const height = this.scale.height;
+    const isNarrow = width < 700;
+    const margin = isNarrow ? 12 : 24;
+    const gridGap = GRID_GAP;
+    const cellSize = Math.max(
+      56,
+      Math.min(CELL_SIZE, Math.floor((width - margin * 2 - (GRID_COLUMNS - 1) * gridGap) / GRID_COLUMNS)),
+    );
+    const gridWidth = GRID_COLUMNS * cellSize + (GRID_COLUMNS - 1) * gridGap;
+    const gridHeight = GRID_ROWS * cellSize + (GRID_ROWS - 1) * gridGap;
+    const hudWidth = isNarrow ? 158 : 220;
+    const hudHeight = isNarrow ? 56 : 64;
+    const hudX = margin;
+    const hudY = isNarrow ? 10 : 20;
+    const statsWidth = hudWidth;
+    const statsHeight = isNarrow ? 94 : 104;
+    const statsX = margin;
+    const statsY = isNarrow ? hudY + hudHeight + 8 : 94;
+    const menuX = width - margin;
+    const menuY = isNarrow ? 10 : 22;
+    const menuGap = isNarrow ? 34 : 40;
+    const menuButtonCount = SHOW_DEBUG_PANEL ? 5 : 4;
+    const menuBottom = menuY + (menuButtonCount - 1) * menuGap + 30;
+    const topContentBottom = isNarrow ? Math.max(statsY + statsHeight, menuBottom) : 126;
+    const hatchWidth = Math.min(260, width - margin * 2);
+    const hatchHeight = 76;
+    const hatchX = isNarrow ? (width - hatchWidth) / 2 : width - hatchWidth - margin;
+    const hatchY = height - hatchHeight - (isNarrow ? 12 : 18);
+    const expansionHeight = (isNarrow ? 12 : 20) + (isNarrow ? 24 : 34) + cellSize;
+    const maxGridStartY = hatchY - gridHeight - expansionHeight - 12;
+    const minGridStartY = topContentBottom + (isNarrow ? 12 : 0);
+    const gridStartY = isNarrow
+      ? Math.max(minGridStartY, Math.min(minGridStartY, maxGridStartY))
+      : 126;
+    const expansionLabelY = gridStartY + gridHeight + (isNarrow ? 12 : 20);
+    const expansionStartY = expansionLabelY + (isNarrow ? 24 : 34);
+
+    return {
+      isNarrow,
+      margin,
+      cellSize,
+      gridGap,
+      gridStartX: (width - gridWidth) / 2,
+      gridStartY,
+      hudX,
+      hudY,
+      hudWidth,
+      hudHeight,
+      statsX,
+      statsY,
+      statsWidth,
+      statsHeight,
+      menuX,
+      menuY,
+      menuGap,
+      menuFontSize: isNarrow ? '13px' : '15px',
+      expansionLabelY,
+      expansionStartX: (width - gridWidth) / 2,
+      expansionStartY,
+      hatchX,
+      hatchY,
+      hatchWidth,
+      hatchHeight,
+    };
+  }
+
   private createFarmGrid(): void {
-    const totalWidth = GRID_COLUMNS * CELL_SIZE + (GRID_COLUMNS - 1) * GRID_GAP;
-    const startX = (this.scale.width - totalWidth) / 2;
-    const startY = 126;
+    const layout = this.getLayout();
+    const startX = layout.gridStartX;
+    const startY = layout.gridStartY;
+
+    this.cellSize = layout.cellSize;
+    this.gridGap = layout.gridGap;
 
     this.slotCenters = [];
 
     for (let row = 0; row < GRID_ROWS; row += 1) {
       for (let column = 0; column < GRID_COLUMNS; column += 1) {
-        const x = startX + column * (CELL_SIZE + GRID_GAP);
-        const y = startY + row * (CELL_SIZE + GRID_GAP);
+        const x = startX + column * (this.cellSize + this.gridGap);
+        const y = startY + row * (this.cellSize + this.gridGap);
 
         const slotId = this.slotCenters.length;
-        const slotTile = this.add.rectangle(x, y, CELL_SIZE, CELL_SIZE, 0x8ecf62)
+        const slotTile = this.add.rectangle(x, y, this.cellSize, this.cellSize, 0x8ecf62)
           .setOrigin(0)
           .setStrokeStyle(3, 0x3c7a3f, 0.95);
 
@@ -185,42 +286,41 @@ export class FarmScene extends Phaser.Scene {
             this.selectSlot(slotId);
           });
 
-        this.slotCenters.push(new Phaser.Math.Vector2(x + CELL_SIZE / 2, y + CELL_SIZE / 2));
+        this.slotCenters.push(new Phaser.Math.Vector2(x + this.cellSize / 2, y + this.cellSize / 2));
       }
     }
   }
 
   private createExpansionPlaceholder(): void {
-    const totalWidth = EXPANSION_COLUMNS * CELL_SIZE + (EXPANSION_COLUMNS - 1) * GRID_GAP;
-    const startX = (this.scale.width - totalWidth) / 2;
-    const activeGridHeight = GRID_ROWS * CELL_SIZE + (GRID_ROWS - 1) * GRID_GAP;
-    const labelY = 126 + activeGridHeight + 20;
-    const startY = labelY + 34;
+    const layout = this.getLayout();
+    const startX = layout.expansionStartX;
+    const labelY = layout.expansionLabelY;
+    const startY = layout.expansionStartY;
 
-    this.add.text(this.scale.width / 2, labelY, 'Farm Expansion - Coming soon', {
+    this.add.text(this.scale.width / 2, labelY, layout.isNarrow ? 'Expansion - Coming soon' : 'Farm Expansion - Coming soon', {
       color: '#d9d6ec',
       fontFamily: 'Arial, sans-serif',
-      fontSize: '16px',
+      fontSize: layout.isNarrow ? '14px' : '16px',
       fontStyle: 'bold',
     }).setOrigin(0.5);
 
     for (let row = 0; row < EXPANSION_ROWS; row += 1) {
       for (let column = 0; column < EXPANSION_COLUMNS; column += 1) {
-        const x = startX + column * (CELL_SIZE + GRID_GAP);
-        const y = startY + row * (CELL_SIZE + GRID_GAP);
+        const x = startX + column * (this.cellSize + this.gridGap);
+        const y = startY + row * (this.cellSize + this.gridGap);
 
-        this.add.rectangle(x, y, CELL_SIZE, CELL_SIZE, 0x26352c, 0.62)
+        this.add.rectangle(x, y, this.cellSize, this.cellSize, 0x26352c, 0.62)
           .setOrigin(0)
           .setStrokeStyle(3, 0x6a756d, 0.7);
 
-        this.add.text(x + CELL_SIZE / 2, y + CELL_SIZE / 2 - 8, 'LOCK', {
+        this.add.text(x + this.cellSize / 2, y + this.cellSize / 2 - 8, 'LOCK', {
           color: '#aeb8b1',
           fontFamily: 'Arial, sans-serif',
-          fontSize: '14px',
+          fontSize: layout.isNarrow ? '12px' : '14px',
           fontStyle: 'bold',
         }).setOrigin(0.5);
 
-        this.add.text(x + CELL_SIZE / 2, y + CELL_SIZE / 2 + 13, 'Soon', {
+        this.add.text(x + this.cellSize / 2, y + this.cellSize / 2 + 13, 'Soon', {
           color: '#87928b',
           fontFamily: 'Arial, sans-serif',
           fontSize: '12px',
@@ -230,36 +330,39 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private createHud(): void {
-    this.add.rectangle(24, 20, 220, 64, 0x10291a, 0.82)
+    const layout = this.getLayout();
+    const coinFontSize = layout.isNarrow ? '20px' : '24px';
+
+    this.add.rectangle(layout.hudX, layout.hudY, layout.hudWidth, layout.hudHeight, 0x10291a, 0.82)
       .setOrigin(0)
       .setStrokeStyle(2, 0xd7f5a2, 0.6);
 
-    this.coinText = this.add.text(44, 31, `Coins: ${this.currency.coins}`, {
+    this.coinText = this.add.text(layout.hudX + 18, layout.hudY + 10, `Coins: ${this.currency.coins}`, {
       color: '#fff4a8',
       fontFamily: 'Arial, sans-serif',
-      fontSize: '24px',
+      fontSize: coinFontSize,
       fontStyle: 'bold',
     });
 
-    this.incomeText = this.add.text(44, 59, '+0/sec', {
+    this.incomeText = this.add.text(layout.hudX + 18, layout.hudY + (layout.isNarrow ? 36 : 39), '+0/sec', {
       color: '#cdebb3',
       fontFamily: 'Arial, sans-serif',
       fontSize: '15px',
       fontStyle: 'bold',
     });
 
-    this.add.rectangle(24, 94, 220, 104, 0x10291a, 0.78)
+    this.add.rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight, 0x10291a, 0.78)
       .setOrigin(0)
       .setStrokeStyle(2, 0x8ecf62, 0.52);
 
-    this.add.text(44, 105, 'Production', {
+    this.add.text(layout.statsX + 18, layout.statsY + 10, 'Production', {
       color: '#f7ffe8',
       fontFamily: 'Arial, sans-serif',
       fontSize: '16px',
       fontStyle: 'bold',
     });
 
-    this.productionStatsText = this.add.text(44, 131, '', {
+    this.productionStatsText = this.add.text(layout.statsX + 18, layout.statsY + 36, '', {
       color: '#d9d6ec',
       fontFamily: 'Arial, sans-serif',
       fontSize: '14px',
@@ -268,10 +371,13 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private createHatchArea(): void {
-    const panelWidth = 260;
-    const panelHeight = 76;
-    const x = this.scale.width - panelWidth - 24;
-    const y = this.scale.height - panelHeight - 18;
+    const layout = this.getLayout();
+    const panelWidth = layout.hatchWidth;
+    const panelHeight = layout.hatchHeight;
+    const x = layout.hatchX;
+    const y = layout.hatchY;
+    const eggX = x + Math.min(48, panelWidth * 0.19);
+    const textX = x + Math.min(88, panelWidth * 0.34);
 
     const hatchPanel = this.add.rectangle(x, y, panelWidth, panelHeight, 0x2f2a45, 0.9)
       .setOrigin(0)
@@ -289,110 +395,56 @@ export class FarmScene extends Phaser.Scene {
         hatchPanel.setFillStyle(0x2f2a45, 0.9);
       });
 
-    this.add.ellipse(x + 48, y + 38, 44, 56, 0xf7e2a1)
+    this.add.ellipse(eggX, y + 38, 44, 56, 0xf7e2a1)
       .setStrokeStyle(3, 0x9f6a2a, 0.95);
 
-    this.hatchLabelText = this.add.text(x + 88, y + 16, 'Hatch Egg', {
+    this.hatchLabelText = this.add.text(textX, y + 16, 'Hatch Egg', {
       color: '#ffffff',
       fontFamily: 'Arial, sans-serif',
       fontSize: '24px',
       fontStyle: 'bold',
     });
 
-    this.hatchStatusText = this.add.text(x + 88, y + 44, 'Ready', {
+    this.hatchStatusText = this.add.text(textX, y + 44, 'Ready', {
       color: '#d9d6ec',
       fontFamily: 'Arial, sans-serif',
       fontSize: '14px',
     });
 
-    this.add.rectangle(x + 88, y + 61, HATCH_PROGRESS_WIDTH, 8, 0x17152a, 0.9)
+    this.hatchProgressWidth = Math.min(HATCH_PROGRESS_WIDTH, panelWidth - (textX - x) - 18);
+
+    this.add.rectangle(textX, y + 61, this.hatchProgressWidth, 8, 0x17152a, 0.9)
       .setOrigin(0)
       .setStrokeStyle(1, 0xf3d06b, 0.55);
 
-    this.hatchProgressFill = this.add.rectangle(x + 88, y + 61, HATCH_PROGRESS_WIDTH, 8, 0x8ecf62, 0.95)
+    this.hatchProgressFill = this.add.rectangle(textX, y + 61, this.hatchProgressWidth, 8, 0x8ecf62, 0.95)
       .setOrigin(0);
 
     this.updateHatchCooldownUi();
   }
 
   private createSettingsControl(): void {
-    const settingsText = this.add.text(this.scale.width - 24, 22, 'Settings (S)', {
-      color: '#f7ffe8',
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '15px',
-      fontStyle: 'bold',
-      backgroundColor: '#10291a',
-      padding: {
-        x: 10,
-        y: 6,
-      },
-    }).setOrigin(1, 0);
-
-    settingsText
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        this.toggleSettingsPanel();
-      });
+    this.createMenuButton('Settings (S)', 0, () => {
+      this.toggleSettingsPanel();
+    });
   }
 
   private createCompendiumControl(): void {
-    const compendiumText = this.add.text(this.scale.width - 24, 62, 'Compendium (C)', {
-      color: '#f7ffe8',
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '15px',
-      fontStyle: 'bold',
-      backgroundColor: '#10291a',
-      padding: {
-        x: 10,
-        y: 6,
-      },
-    }).setOrigin(1, 0);
-
-    compendiumText
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        this.toggleCompendiumPanel();
-      });
+    this.createMenuButton('Compendium (C)', 1, () => {
+      this.toggleCompendiumPanel();
+    });
   }
 
   private createHelpControl(): void {
-    const helpText = this.add.text(this.scale.width - 24, 102, 'Help (H)', {
-      color: '#f7ffe8',
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '15px',
-      fontStyle: 'bold',
-      backgroundColor: '#10291a',
-      padding: {
-        x: 10,
-        y: 6,
-      },
-    }).setOrigin(1, 0);
-
-    helpText
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        this.toggleHelpPanel();
-      });
+    this.createMenuButton('Help (H)', 2, () => {
+      this.toggleHelpPanel();
+    });
   }
 
   private createUpgradeShopControl(): void {
-    const upgradeText = this.add.text(this.scale.width - 24, 142, 'Upgrade Shop', {
-      color: '#f7ffe8',
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '15px',
-      fontStyle: 'bold',
-      backgroundColor: '#10291a',
-      padding: {
-        x: 10,
-        y: 6,
-      },
-    }).setOrigin(1, 0);
-
-    upgradeText
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        this.toggleUpgradeShopPanel();
-      });
+    this.createMenuButton('Upgrade Shop', 3, () => {
+      this.toggleUpgradeShopPanel();
+    });
   }
 
   private createEconomyDebugControl(): void {
@@ -400,23 +452,42 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    const debugText = this.add.text(this.scale.width - 24, 182, 'Debug (D)', {
+    this.createMenuButton('Debug (D)', 4, () => {
+      this.toggleEconomyDebugPanel();
+    }, '#3b2b10');
+  }
+
+  private createMenuButton(
+    label: string,
+    index: number,
+    onClick: () => void,
+    backgroundColor = '#10291a',
+  ): void {
+    const layout = this.getLayout();
+    const button = this.add.text(layout.menuX, layout.menuY + index * layout.menuGap, label, {
       color: '#f7ffe8',
       fontFamily: 'Arial, sans-serif',
-      fontSize: '15px',
+      fontSize: layout.menuFontSize,
       fontStyle: 'bold',
-      backgroundColor: '#3b2b10',
+      backgroundColor,
       padding: {
         x: 10,
         y: 6,
       },
     }).setOrigin(1, 0);
 
-    debugText
+    button
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
-        this.toggleEconomyDebugPanel();
+        onClick();
       });
+  }
+
+  private getPanelSize(preferredWidth: number, preferredHeight: number): { width: number; height: number } {
+    return {
+      width: Math.min(preferredWidth, this.scale.width - 24),
+      height: Math.min(preferredHeight, this.scale.height - 24),
+    };
   }
 
   private registerKeyboardShortcuts(): void {
@@ -468,8 +539,7 @@ export class FarmScene extends Phaser.Scene {
     this.clearSelectedSlot();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const panelWidth = 360;
-    const panelHeight = 270;
+    const { width: panelWidth, height: panelHeight } = this.getPanelSize(360, 270);
 
     panel.setDepth(25);
 
@@ -614,8 +684,7 @@ export class FarmScene extends Phaser.Scene {
     this.clearSelectedSlot();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const panelWidth = 500;
-    const panelHeight = 320;
+    const { width: panelWidth, height: panelHeight } = this.getPanelSize(500, 320);
 
     panel.setDepth(26);
 
@@ -665,7 +734,7 @@ export class FarmScene extends Phaser.Scene {
     ];
 
     helpLines.forEach(([label, description], index) => {
-      this.addHelpLine(panel, label, description, -panelHeight / 2 + 82 + index * 42);
+      this.addHelpLine(panel, label, description, -panelHeight / 2 + 82 + index * 42, panelWidth);
     });
 
     this.helpPanel = panel;
@@ -676,20 +745,24 @@ export class FarmScene extends Phaser.Scene {
     label: string,
     description: string,
     y: number,
+    panelWidth: number,
   ): void {
-    panel.add(this.add.text(-214, y, label, {
+    const labelX = -panelWidth / 2 + 24;
+    const descriptionX = -panelWidth / 2 + 142;
+
+    panel.add(this.add.text(labelX, y, label, {
       color: '#fff4a8',
       fontFamily: 'Arial, sans-serif',
       fontSize: '16px',
       fontStyle: 'bold',
     }).setOrigin(0, 0.5));
 
-    panel.add(this.add.text(-76, y, description, {
+    panel.add(this.add.text(descriptionX, y, description, {
       color: '#f7ffe8',
       fontFamily: 'Arial, sans-serif',
       fontSize: '15px',
       wordWrap: {
-        width: 300,
+        width: Math.max(150, panelWidth - 166),
       },
     }).setOrigin(0, 0.5));
   }
@@ -717,8 +790,7 @@ export class FarmScene extends Phaser.Scene {
     this.clearSelectedSlot();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const panelWidth = 390;
-    const panelHeight = 310;
+    const { width: panelWidth, height: panelHeight } = this.getPanelSize(390, 310);
 
     panel.setDepth(28);
 
@@ -831,8 +903,7 @@ export class FarmScene extends Phaser.Scene {
     this.clearSelectedSlot();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const panelWidth = 580;
-    const panelHeight = 390;
+    const { width: panelWidth, height: panelHeight } = this.getPanelSize(580, 390);
 
     panel.setDepth(24);
 
@@ -874,7 +945,7 @@ export class FarmScene extends Phaser.Scene {
     panel.add(closeText);
 
     UPGRADE_DEFINITIONS.forEach((upgrade, index) => {
-      this.addUpgradeRow(panel, upgrade, -panelHeight / 2 + 92 + index * 92);
+      this.addUpgradeRow(panel, upgrade, -panelHeight / 2 + 92 + index * 92, panelWidth);
     });
 
     this.upgradeShopPanel = panel;
@@ -884,8 +955,8 @@ export class FarmScene extends Phaser.Scene {
     panel: Phaser.GameObjects.Container,
     upgrade: UpgradeDefinition,
     rowY: number,
+    panelWidth: number,
   ): void {
-    const panelWidth = 580;
     const level = this.getUpgradeLevel(upgrade.id);
     const isMaxLevel = level >= upgrade.maxLevel;
     const cost = this.getUpgradeCostForLevel(upgrade, level);
@@ -913,7 +984,7 @@ export class FarmScene extends Phaser.Scene {
       fontFamily: 'Arial, sans-serif',
       fontSize: '13px',
       wordWrap: {
-        width: 340,
+        width: Math.max(170, panelWidth - 240),
       },
     }));
 
@@ -1159,7 +1230,7 @@ export class FarmScene extends Phaser.Scene {
     }
 
     this.hatchStatusText?.setColor(statusColor);
-    this.hatchProgressFill?.setDisplaySize(HATCH_PROGRESS_WIDTH * progress, 8);
+    this.hatchProgressFill?.setDisplaySize(this.hatchProgressWidth * progress, 8);
     this.hatchProgressFill?.setFillStyle(isReady && canAfford && !isFull ? 0x8ecf62 : 0xf3d06b, 0.95);
   }
 
@@ -1194,8 +1265,7 @@ export class FarmScene extends Phaser.Scene {
     this.clearSelectedSlot();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const panelWidth = 430;
-    const panelHeight = 310;
+    const { width: panelWidth, height: panelHeight } = this.getPanelSize(430, 310);
 
     panel.setDepth(20);
     const panelBackground = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x14291d, 0.96)
@@ -1239,7 +1309,7 @@ export class FarmScene extends Phaser.Scene {
       .filter((definition) => definition.family === 'Slime')
       .sort((first, second) => first.level - second.level)
       .forEach((definition, index) => {
-        this.addCompendiumRow(panel, definition, -panelHeight / 2 + 78 + index * 68);
+        this.addCompendiumRow(panel, definition, -panelHeight / 2 + 78 + index * 68, panelWidth);
       });
 
     this.compendiumPanel = panel;
@@ -1260,8 +1330,8 @@ export class FarmScene extends Phaser.Scene {
     panel: Phaser.GameObjects.Container,
     monster: MonsterDefinition,
     rowY: number,
+    panelWidth: number,
   ): void {
-    const panelWidth = 430;
     const isDiscovered = this.isMonsterDiscovered(monster);
     const rowColor = isDiscovered ? 0x234936 : 0x202726;
     const textColor = isDiscovered ? '#f7ffe8' : '#9ca79f';
@@ -1354,7 +1424,7 @@ export class FarmScene extends Phaser.Scene {
     const center = this.slotCenters[slotId];
 
     this.selectionHighlight?.destroy();
-    this.selectionHighlight = this.add.rectangle(center.x, center.y, CELL_SIZE + 8, CELL_SIZE + 8, 0xfff4a8, 0)
+    this.selectionHighlight = this.add.rectangle(center.x, center.y, this.cellSize + 8, this.cellSize + 8, 0xfff4a8, 0)
       .setStrokeStyle(4, 0xfff4a8, 0.95)
       .setDepth(4);
   }
@@ -1362,12 +1432,17 @@ export class FarmScene extends Phaser.Scene {
   private showMonsterTooltip(slotId: number, monster: MonsterInstance): void {
     const definition = getMonsterDefinition(monster.family, monster.level) ?? monster;
     const center = this.slotCenters[slotId];
-    const tooltipWidth = 220;
+    const tooltipWidth = Math.min(220, this.scale.width - 24);
     const tooltipHeight = 88;
-    const tooltipX = center.x + tooltipWidth + 30 > this.scale.width
-      ? center.x - tooltipWidth / 2 - CELL_SIZE / 2 - 18
-      : center.x + tooltipWidth / 2 + CELL_SIZE / 2 + 18;
-    const tooltipY = Phaser.Math.Clamp(center.y, 72, this.scale.height - tooltipHeight / 2 - 18);
+    const preferredTooltipX = center.x < this.scale.width / 2
+      ? center.x + tooltipWidth / 2 + this.cellSize / 2 + 14
+      : center.x - tooltipWidth / 2 - this.cellSize / 2 - 14;
+    const tooltipX = Phaser.Math.Clamp(
+      preferredTooltipX,
+      tooltipWidth / 2 + 12,
+      this.scale.width - tooltipWidth / 2 - 12,
+    );
+    const tooltipY = Phaser.Math.Clamp(center.y, tooltipHeight / 2 + 12, this.scale.height - tooltipHeight / 2 - 12);
 
     this.monsterTooltip?.destroy();
 
@@ -1432,9 +1507,9 @@ export class FarmScene extends Phaser.Scene {
       fontStyle: 'bold',
     }).setOrigin(0.5));
 
-    visual.setSize(CELL_SIZE, CELL_SIZE);
+    visual.setSize(this.cellSize, this.cellSize);
     visual.setInteractive(
-      new Phaser.Geom.Rectangle(-CELL_SIZE / 2, -CELL_SIZE / 2, CELL_SIZE, CELL_SIZE),
+      new Phaser.Geom.Rectangle(-this.cellSize / 2, -this.cellSize / 2, this.cellSize, this.cellSize),
       Phaser.Geom.Rectangle.Contains,
     );
 
@@ -1569,8 +1644,8 @@ export class FarmScene extends Phaser.Scene {
     }
 
     const slotId = this.slotCenters.findIndex((center) => (
-      Math.abs(worldX - center.x) <= CELL_SIZE / 2
-      && Math.abs(worldY - center.y) <= CELL_SIZE / 2
+      Math.abs(worldX - center.x) <= this.cellSize / 2
+      && Math.abs(worldY - center.y) <= this.cellSize / 2
     ));
 
     return slotId >= 0 ? slotId : null;
