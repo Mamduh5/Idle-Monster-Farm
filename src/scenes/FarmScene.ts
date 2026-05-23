@@ -56,6 +56,7 @@ export class FarmScene extends Phaser.Scene {
 
   private coinText?: Phaser.GameObjects.Text;
   private incomeText?: Phaser.GameObjects.Text;
+  private productionStatsText?: Phaser.GameObjects.Text;
   private farmMessageText?: Phaser.GameObjects.Text;
   private farmSlots: FarmSlotState[] = [];
   private slotCenters: Phaser.Math.Vector2[] = [];
@@ -125,6 +126,7 @@ export class FarmScene extends Phaser.Scene {
     this.hatchLabelText = undefined;
     this.hatchStatusText = undefined;
     this.hatchProgressFill = undefined;
+    this.productionStatsText = undefined;
     this.currentEggCost = STARTING_EGG_COST;
     this.farmMessageText = undefined;
     this.farmSlots = this.createInitialFarmSlots();
@@ -244,6 +246,24 @@ export class FarmScene extends Phaser.Scene {
       fontFamily: 'Arial, sans-serif',
       fontSize: '15px',
       fontStyle: 'bold',
+    });
+
+    this.add.rectangle(24, 94, 220, 104, 0x10291a, 0.78)
+      .setOrigin(0)
+      .setStrokeStyle(2, 0x8ecf62, 0.52);
+
+    this.add.text(44, 105, 'Production', {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '16px',
+      fontStyle: 'bold',
+    });
+
+    this.productionStatsText = this.add.text(44, 131, '', {
+      color: '#d9d6ec',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '14px',
+      lineSpacing: 5,
     });
   }
 
@@ -1965,6 +1985,15 @@ export class FarmScene extends Phaser.Scene {
     this.currency.coins = this.sanitizeCoins(this.currency.coins);
     this.coinText?.setText(`Coins: ${this.formatCoinAmount(this.currency.coins)}`);
     this.incomeText?.setText(`+${this.formatCoinAmount(this.getTotalIncomePerSecond())}/sec`);
+    this.updateProductionStatsUi();
     this.updateHatchCooldownUi();
+  }
+
+  private updateProductionStatsUi(): void {
+    this.productionStatsText?.setText([
+      `Income/sec: ${this.formatCoinAmount(this.getTotalIncomePerSecond())}`,
+      `Next Egg: ${this.currentEggCost} coins`,
+      `Offline Cap: ${this.formatDuration(this.getOfflineCapSeconds())}`,
+    ].join('\n'));
   }
 }
