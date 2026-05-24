@@ -24,7 +24,8 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Reload after hatching, merging, and buying an upgrade.
 - Confirm coins, egg cost, monsters, discoveries, upgrades, expansion unlock state, and onboarding hint state persist.
 - Reload after unlocking expansion and confirm expanded-slot monsters persist.
-- After owning a Level 8 Slime, open Prestige, confirm reset grants Monster Essence, buy Essence Power, and reload to confirm both persist.
+- After owning a Level 6+ Slime or Level 5 Mushroom, open Prestige, confirm reset grants Monster Essence, buy Essence Power, and reload to confirm both persist.
+- After egg costs grow large, confirm Hatch Egg and Production next-egg costs use compact formatting.
 - Confirm Settings persist separately from gameplay save.
 
 ## Offline Return

@@ -49,7 +49,7 @@ const MUSHROOM_HATCH_CHANCE_PER_LEVEL = 0.03;
 const HATCH_PROGRESS_WIDTH = 142;
 const STARTING_COINS = STARTING_EGG_COST;
 const MIN_HATCH_COOLDOWN_MS = 1200;
-const SLIME_INCOME_BOOST_PER_LEVEL = 10000;
+const SLIME_INCOME_BOOST_PER_LEVEL = 0.1;
 const MUSHROOM_INCOME_BOOST_PER_LEVEL = 0.12;
 const ESSENCE_POWER_INCOME_BOOST_PER_LEVEL = 0.1;
 const ESSENCE_POWER_COST = 1;
@@ -1538,8 +1538,8 @@ export class FarmScene extends Phaser.Scene {
     const contentX = -panelWidth / 2 + 26;
     const contentWidth = panelWidth - 52;
     const statusText = canPrestige
-      ? 'Available: Level 8 Slime owned'
-      : 'Locked: own a Level 8 Slime';
+      ? 'Prestige ready: reset farm for +1 Monster Essence.'
+      : 'Reach Lv 6 Slime or Lv 5 Mushroom to Prestige.';
 
     panel.add(this.add.text(contentX, -panelHeight / 2 + 78, `Monster Essence: ${this.monsterEssence}`, {
       color: '#fff4a8',
@@ -1804,7 +1804,7 @@ export class FarmScene extends Phaser.Scene {
     const reward = this.getPrestigeEssenceReward();
 
     if (reward <= 0) {
-      this.showToast('Own a Level 8 Slime first', 'warning');
+      this.showToast('Reach Lv 6 Slime or Lv 5 Mushroom', 'warning');
       return;
     }
 
@@ -1825,7 +1825,8 @@ export class FarmScene extends Phaser.Scene {
 
   private hasPrestigeMilestone(): boolean {
     return this.farmSlots.some((slot) => (
-      slot.monster?.family === 'Slime' && slot.monster.level >= 8
+      (slot.monster?.family === 'Slime' && slot.monster.level >= 6)
+      || (slot.monster?.family === 'Mushroom' && slot.monster.level >= 5)
     ));
   }
 
@@ -2082,19 +2083,20 @@ export class FarmScene extends Phaser.Scene {
     const isFull = this.isFarmFull();
     const canAfford = this.canAffordHatch();
     const statusColor = isFull || !canAfford ? '#fff4a8' : '#d9d6ec';
+    const formattedEggCost = this.formatCoinAmount(this.currentEggCost);
 
     if (!isReady) {
       this.hatchLabelText?.setText('Hatching...');
-      this.hatchStatusText?.setText(`${Math.ceil((cooldownMs - this.hatchCooldownMs) / 1000)}s - Cost: ${this.currentEggCost}`);
+      this.hatchStatusText?.setText(`${Math.ceil((cooldownMs - this.hatchCooldownMs) / 1000)}s - Cost: ${formattedEggCost} coins`);
     } else if (isFull) {
       this.hatchLabelText?.setText('Farm Full');
       this.hatchStatusText?.setText(this.expansionUnlocked ? 'Merge to free a slot' : 'Unlock +3 slots');
     } else if (!canAfford) {
       this.hatchLabelText?.setText('Need Coins');
-      this.hatchStatusText?.setText(`Cost: ${this.currentEggCost} coins`);
+      this.hatchStatusText?.setText(`Cost: ${formattedEggCost} coins`);
     } else {
       this.hatchLabelText?.setText('Hatch Egg');
-      this.hatchStatusText?.setText(`Cost: ${this.currentEggCost} coins`);
+      this.hatchStatusText?.setText(`Cost: ${formattedEggCost} coins`);
     }
 
     this.hatchStatusText?.setColor(statusColor);
@@ -3444,7 +3446,7 @@ export class FarmScene extends Phaser.Scene {
   private updateProductionStatsUi(): void {
     this.productionStatsText?.setText([
       `Income/sec: ${this.formatCoinAmount(this.getTotalIncomePerSecond())}`,
-      `Next Egg: ${this.currentEggCost} coins`,
+      `Next Egg: ${this.formatCoinAmount(this.currentEggCost)} coins`,
       `Offline Cap: ${this.formatDuration(this.getOfflineCapSeconds())}`,
     ].join('\n'));
   }
