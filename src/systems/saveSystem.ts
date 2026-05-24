@@ -27,6 +27,8 @@ export type LocalSaveData = {
   lastActiveAt: number;
   discoveredMonsters: SavedMonsterDiscovery[];
   upgrades: Record<UpgradeId, number>;
+  monsterEssence: number;
+  essencePowerLevel: number;
   currentEggCost: number;
   onboardingHintsSeen: OnboardingHintId[];
   expansionUnlocked: boolean;
@@ -98,6 +100,8 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
       return discovery ? [discovery] : [];
     }),
     upgrades: normalizeUpgradeLevels(rawData.upgrades),
+    monsterEssence: normalizePrestigeInteger(rawData.monsterEssence),
+    essencePowerLevel: normalizePrestigeInteger(rawData.essencePowerLevel),
     currentEggCost: normalizeEggCost(rawData.currentEggCost),
     onboardingHintsSeen: normalizeOnboardingHints(rawData.onboardingHintsSeen),
     expansionUnlocked: rawData.expansionUnlocked === true,
@@ -147,6 +151,16 @@ function normalizeUpgradeLevels(rawUpgrades: unknown): Record<UpgradeId, number>
   });
 
   return upgrades;
+}
+
+function normalizePrestigeInteger(rawValue: unknown): number {
+  const value = Number(rawValue);
+
+  if (!Number.isFinite(value) || value < 0) {
+    return 0;
+  }
+
+  return Math.floor(value);
 }
 
 function normalizeSavedSlot(rawSlot: unknown): SavedMonsterSlot {

@@ -49,8 +49,10 @@ const MUSHROOM_HATCH_CHANCE_PER_LEVEL = 0.03;
 const HATCH_PROGRESS_WIDTH = 142;
 const STARTING_COINS = STARTING_EGG_COST;
 const MIN_HATCH_COOLDOWN_MS = 1200;
-const SLIME_INCOME_BOOST_PER_LEVEL = 0.1;
+const SLIME_INCOME_BOOST_PER_LEVEL = 10000;
 const MUSHROOM_INCOME_BOOST_PER_LEVEL = 0.12;
+const ESSENCE_POWER_INCOME_BOOST_PER_LEVEL = 0.1;
+const ESSENCE_POWER_COST = 1;
 const HATCH_SPEED_REDUCTION_PER_LEVEL = 0.05;
 const OFFLINE_STORAGE_SECONDS_PER_LEVEL = 1800;
 const SHOW_DEBUG_PANEL = false;
@@ -151,6 +153,8 @@ export class FarmScene extends Phaser.Scene {
   private cellSize = CELL_SIZE;
   private gridGap = GRID_GAP;
   private currentEggCost = STARTING_EGG_COST;
+  private monsterEssence = 0;
+  private essencePowerLevel = 0;
   private expansionUnlocked = false;
   private nextMonsterId = 1;
   private incomeAccumulatorMs = 0;
@@ -163,6 +167,7 @@ export class FarmScene extends Phaser.Scene {
   private settingsPanel?: Phaser.GameObjects.Container;
   private helpPanel?: Phaser.GameObjects.Container;
   private upgradeShopPanel?: Phaser.GameObjects.Container;
+  private prestigePanel?: Phaser.GameObjects.Container;
   private modalOverlay?: Phaser.GameObjects.Rectangle;
   private economyDebugPanel?: Phaser.GameObjects.Container;
   private economyDebugText?: Phaser.GameObjects.Text;
@@ -172,6 +177,7 @@ export class FarmScene extends Phaser.Scene {
   private upgradeLevels: Record<UpgradeId, number> = this.createInitialUpgradeLevels();
   private settings: GameSettings = loadSettings();
   private resetConfirmationArmed = false;
+  private prestigeConfirmationArmed = false;
   private lastBlockedOutsideTapToastAt = 0;
 
   private readonly handlePageHide = (): void => {
@@ -212,6 +218,7 @@ export class FarmScene extends Phaser.Scene {
     this.settingsPanel = undefined;
     this.helpPanel = undefined;
     this.upgradeShopPanel = undefined;
+    this.prestigePanel = undefined;
     this.modalOverlay = undefined;
     this.economyDebugPanel = undefined;
     this.economyDebugText = undefined;
@@ -222,6 +229,7 @@ export class FarmScene extends Phaser.Scene {
     this.settings = loadSettings();
     this.syncAudioSettings();
     this.resetConfirmationArmed = false;
+    this.prestigeConfirmationArmed = false;
     this.lastBlockedOutsideTapToastAt = 0;
     this.hatchCooldownMs = HATCH_COOLDOWN_MS;
     this.hatchLabelText = undefined;
@@ -232,6 +240,8 @@ export class FarmScene extends Phaser.Scene {
     this.menuButtons = [];
     this.productionStatsText = undefined;
     this.currentEggCost = STARTING_EGG_COST;
+    this.monsterEssence = 0;
+    this.essencePowerLevel = 0;
     this.expansionUnlocked = false;
     this.clearToast();
     this.farmSlots = this.createInitialFarmSlots();
@@ -246,6 +256,7 @@ export class FarmScene extends Phaser.Scene {
     this.createCompendiumControl();
     this.createHelpControl();
     this.createUpgradeShopControl();
+    this.createPrestigeControl();
     this.createEconomyDebugControl();
     this.registerKeyboardShortcuts();
     this.registerManualDragInput();
@@ -310,7 +321,7 @@ export class FarmScene extends Phaser.Scene {
     const menuX = width - margin;
     const menuY = isNarrow ? 10 : 22;
     const menuGap = isNarrow ? 34 : 40;
-    const menuButtonCount = SHOW_DEBUG_PANEL ? 5 : 4;
+    const menuButtonCount = SHOW_DEBUG_PANEL ? 6 : 5;
     const menuBottom = menuY + (menuButtonCount - 1) * menuGap + 30;
     const topContentBottom = isNarrow ? Math.max(statsY + statsHeight, menuBottom) : 126;
     const hatchWidth = Math.min(260, width - margin * 2);
@@ -658,12 +669,18 @@ export class FarmScene extends Phaser.Scene {
     });
   }
 
+  private createPrestigeControl(): void {
+    this.createMenuButton('Prestige', 4, () => {
+      this.togglePrestigePanel();
+    });
+  }
+
   private createEconomyDebugControl(): void {
     if (!SHOW_DEBUG_PANEL) {
       return;
     }
 
-    this.createMenuButton('Debug (D)', 4, () => {
+    this.createMenuButton('Debug (D)', 5, () => {
       this.toggleEconomyDebugPanel();
     }, `#${THEME.buttonWarm.toString(16).padStart(6, '0')}`);
   }
@@ -787,11 +804,18 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private isModalOpen(): boolean {
-    return Boolean(this.compendiumPanel || this.settingsPanel || this.helpPanel || this.upgradeShopPanel || this.modalOverlay);
+    return Boolean(
+      this.compendiumPanel
+      || this.settingsPanel
+      || this.helpPanel
+      || this.upgradeShopPanel
+      || this.prestigePanel
+      || this.modalOverlay
+    );
   }
 
   private handleModalOverlayTap(): void {
-    if (this.resetConfirmationArmed) {
+    if (this.resetConfirmationArmed || this.prestigeConfirmationArmed) {
       this.showBlockedOutsideTapToast();
       return;
     }
@@ -814,6 +838,11 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
+    if (this.prestigePanel) {
+      this.closePrestigePanel();
+      return;
+    }
+
     if (this.helpPanel) {
       this.closeHelpPanel();
       return;
@@ -830,7 +859,7 @@ export class FarmScene extends Phaser.Scene {
     }
 
     this.lastBlockedOutsideTapToastAt = this.time.now;
-    this.showToast('Use Close or Reset', 'warning');
+    this.showToast('Use Close or confirm', 'warning');
   }
 
   private setModalOpenVisualState(isOpen: boolean): void {
@@ -904,6 +933,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeHelpPanel();
     this.closeUpgradeShopPanel();
+    this.closePrestigePanel();
     this.closeEconomyDebugPanel();
     this.cancelActiveDrag();
     this.clearSelectedSlot();
@@ -1070,6 +1100,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeUpgradeShopPanel();
+    this.closePrestigePanel();
     this.closeEconomyDebugPanel();
     this.cancelActiveDrag();
     this.clearSelectedSlot();
@@ -1197,6 +1228,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeSettingsPanel();
     this.closeHelpPanel();
     this.closeUpgradeShopPanel();
+    this.closePrestigePanel();
     this.clearSelectedSlot();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
@@ -1302,6 +1334,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closePrestigePanel();
     this.closeEconomyDebugPanel();
     this.cancelActiveDrag();
     this.clearSelectedSlot();
@@ -1444,6 +1477,214 @@ export class FarmScene extends Phaser.Scene {
     }
   }
 
+  private togglePrestigePanel(): void {
+    if (this.prestigePanel) {
+      this.closePrestigePanel();
+      return;
+    }
+
+    this.prestigeConfirmationArmed = false;
+    this.openPrestigePanel();
+  }
+
+  private openPrestigePanel(): void {
+    this.closePrestigePanel(false);
+    this.closeCompendiumPanel();
+    this.closeSettingsPanel();
+    this.closeHelpPanel();
+    this.closeUpgradeShopPanel();
+    this.closeEconomyDebugPanel();
+    this.cancelActiveDrag();
+    this.clearSelectedSlot();
+    this.showModalOverlay();
+
+    const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
+    const { width: panelWidth, height: panelHeight } = this.getPanelSize(430, 390);
+    const reward = this.getPrestigeEssenceReward();
+    const canPrestige = reward > 0;
+    const canBuyEssencePower = this.monsterEssence >= ESSENCE_POWER_COST;
+
+    panel.setDepth(24);
+    this.addPanelBackground(panel, panelWidth, panelHeight);
+
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Prestige', {
+      color: THEME.text,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '24px',
+      fontStyle: 'bold',
+    }));
+
+    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, 'Close', {
+      color: THEME.text,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+      backgroundColor: '#49395d',
+      padding: {
+        x: 9,
+        y: 5,
+      },
+    }).setOrigin(1, 0);
+
+    closeText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.playButtonClickSound();
+        this.closePrestigePanel();
+      });
+
+    panel.add(closeText);
+
+    const contentX = -panelWidth / 2 + 26;
+    const contentWidth = panelWidth - 52;
+    const statusText = canPrestige
+      ? 'Available: Level 8 Slime owned'
+      : 'Locked: own a Level 8 Slime';
+
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 78, `Monster Essence: ${this.monsterEssence}`, {
+      color: '#fff4a8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '18px',
+      fontStyle: 'bold',
+    }));
+
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 108, statusText, {
+      color: canPrestige ? '#cdebb3' : THEME.mutedText,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '14px',
+    }));
+
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 134, `Reward: ${reward} Monster Essence`, {
+      color: canPrestige ? '#fff4a8' : '#9ca79f',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '14px',
+      fontStyle: 'bold',
+    }));
+
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 160, 'Reset farm progress for permanent power.', {
+      color: THEME.mutedText,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '13px',
+      wordWrap: {
+        width: contentWidth,
+      },
+    }));
+
+    this.addEssencePowerSection(panel, panelWidth, panelHeight, canBuyEssencePower);
+    this.addPrestigeAction(panel, panelHeight, canPrestige);
+
+    this.prestigePanel = panel;
+  }
+
+  private addEssencePowerSection(
+    panel: Phaser.GameObjects.Container,
+    panelWidth: number,
+    panelHeight: number,
+    canBuyEssencePower: boolean,
+  ): void {
+    const y = panelHeight / 2 - 126;
+    const rowWidth = panelWidth - 52;
+
+    panel.add(this.add.rectangle(0, y, rowWidth, 74, THEME.panelAlt, 0.92)
+      .setStrokeStyle(2, canBuyEssencePower ? THEME.slot : THEME.lockedBorder, 0.78));
+
+    panel.add(this.add.text(-panelWidth / 2 + 42, y - 27, 'Essence Power', {
+      color: '#f7ffe8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: panelWidth < 390 ? '15px' : '17px',
+      fontStyle: 'bold',
+    }));
+
+    panel.add(this.add.text(-panelWidth / 2 + 42, y - 4, `Level ${this.essencePowerLevel}`, {
+      color: '#cdebb3',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '13px',
+      fontStyle: 'bold',
+    }));
+
+    panel.add(this.add.text(-panelWidth / 2 + 42, y + 18, `Global income x${this.getPrestigeIncomeMultiplier().toFixed(2)}`, {
+      color: THEME.mutedText,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '12px',
+    }));
+
+    panel.add(this.add.text(panelWidth / 2 - 42, y - 30, `Cost: ${ESSENCE_POWER_COST}`, {
+      color: '#fff4a8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '13px',
+      fontStyle: 'bold',
+    }).setOrigin(1, 0));
+
+    const buyText = this.add.text(panelWidth / 2 - 42, y - 6, 'Buy', {
+      color: '#ffffff',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+      backgroundColor: `#${(canBuyEssencePower ? THEME.buttonHover : THEME.danger).toString(16).padStart(6, '0')}`,
+      padding: {
+        x: 13,
+        y: 6,
+      },
+    }).setOrigin(1, 0);
+
+    buyText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.playButtonClickSound();
+        this.buyEssencePower();
+      });
+
+    panel.add(buyText);
+  }
+
+  private addPrestigeAction(
+    panel: Phaser.GameObjects.Container,
+    panelHeight: number,
+    canPrestige: boolean,
+  ): void {
+    const label = this.prestigeConfirmationArmed
+      ? 'Click again to confirm prestige'
+      : 'Prestige Reset';
+    const backgroundColor = !canPrestige
+      ? THEME.lockedInner
+      : this.prestigeConfirmationArmed
+        ? THEME.warning
+        : THEME.danger;
+
+    const prestigeText = this.add.text(0, panelHeight / 2 - 38, label, {
+      color: canPrestige ? '#ffffff' : '#9ca79f',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: this.scale.width < 390 ? '14px' : '16px',
+      fontStyle: 'bold',
+      backgroundColor: `#${backgroundColor.toString(16).padStart(6, '0')}`,
+      padding: {
+        x: 13,
+        y: 8,
+      },
+    }).setOrigin(0.5);
+
+    prestigeText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.playButtonClickSound();
+        this.tryPrestige();
+      });
+
+    panel.add(prestigeText);
+  }
+
+  private closePrestigePanel(resetConfirmation = true): void {
+    if (this.prestigePanel) {
+      this.prestigePanel.destroy();
+      this.prestigePanel = undefined;
+      this.hideModalOverlay();
+    }
+
+    if (resetConfirmation) {
+      this.prestigeConfirmationArmed = false;
+    }
+  }
+
   private createInitialFarmSlots(): FarmSlotState[] {
     return Array.from({ length: TOTAL_SLOT_COUNT }, (_, index) => ({
       id: index,
@@ -1544,6 +1785,82 @@ export class FarmScene extends Phaser.Scene {
     this.showToast('Upgrade purchased', 'success');
   }
 
+  private buyEssencePower(): void {
+    if (this.monsterEssence < ESSENCE_POWER_COST) {
+      this.showToast('Not enough Essence', 'warning');
+      return;
+    }
+
+    this.monsterEssence -= ESSENCE_POWER_COST;
+    this.essencePowerLevel += 1;
+    this.prestigeConfirmationArmed = false;
+    this.updateHud();
+    this.saveProgress();
+    this.openPrestigePanel();
+    this.showToast('Essence Power upgraded', 'success');
+  }
+
+  private tryPrestige(): void {
+    const reward = this.getPrestigeEssenceReward();
+
+    if (reward <= 0) {
+      this.showToast('Own a Level 8 Slime first', 'warning');
+      return;
+    }
+
+    if (!this.prestigeConfirmationArmed) {
+      this.prestigeConfirmationArmed = true;
+      this.openPrestigePanel();
+      return;
+    }
+
+    this.performPrestigeReset(reward);
+    this.openPrestigePanel();
+    this.showToast(`Prestige complete: +${reward} Essence`, 'success');
+  }
+
+  private getPrestigeEssenceReward(): number {
+    return this.hasPrestigeMilestone() ? 1 : 0;
+  }
+
+  private hasPrestigeMilestone(): boolean {
+    return this.farmSlots.some((slot) => (
+      slot.monster?.family === 'Slime' && slot.monster.level >= 8
+    ));
+  }
+
+  private performPrestigeReset(essenceReward: number): void {
+    this.monsterEssence += essenceReward;
+    this.currency.coins = STARTING_COINS;
+    this.nextMonsterId = 1;
+    this.incomeAccumulatorMs = 0;
+    this.saveThrottleAccumulatorMs = 0;
+    this.hasUnsavedProgress = false;
+    this.skipSavingUntilProgress = false;
+    this.prestigeConfirmationArmed = false;
+    this.upgradeLevels = this.createInitialUpgradeLevels();
+    this.currentEggCost = STARTING_EGG_COST;
+    this.hatchCooldownMs = HATCH_COOLDOWN_MS;
+    this.expansionUnlocked = false;
+    this.farmSlots = this.createInitialFarmSlots();
+
+    this.monsterVisuals.forEach((visual) => {
+      visual?.destroy();
+    });
+    this.monsterDragZones.forEach((zone) => {
+      zone?.destroy();
+    });
+    this.monsterVisuals = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
+    this.monsterDragZones = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
+    this.createExpansionPlaceholder();
+
+    this.hideFarmMessage();
+    this.clearSelectedSlot();
+    this.updateHatchCooldownUi();
+    this.updateHud();
+    this.saveProgress();
+  }
+
   private scheduleInitialOnboardingHints(): void {
     this.time.delayedCall(450, () => {
       if (this.getUnlockedFarmSlots().some((slot) => slot.monster)) {
@@ -1638,6 +1955,10 @@ export class FarmScene extends Phaser.Scene {
     }
 
     return 1 + this.getUpgradeLevel('slime-income-boost') * SLIME_INCOME_BOOST_PER_LEVEL;
+  }
+
+  private getPrestigeIncomeMultiplier(): number {
+    return 1 + this.essencePowerLevel * ESSENCE_POWER_INCOME_BOOST_PER_LEVEL;
   }
 
   private getHatchCooldownMs(): number {
@@ -1808,6 +2129,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeSettingsPanel();
     this.closeHelpPanel();
     this.closeUpgradeShopPanel();
+    this.closePrestigePanel();
     this.closeEconomyDebugPanel();
     this.cancelActiveDrag();
     this.clearSelectedSlot();
@@ -2773,6 +3095,8 @@ export class FarmScene extends Phaser.Scene {
       ...this.createInitialUpgradeLevels(),
       ...saveData.upgrades,
     };
+    this.monsterEssence = saveData.monsterEssence;
+    this.essencePowerLevel = saveData.essencePowerLevel;
     this.currentEggCost = this.sanitizeEggCost(saveData.currentEggCost);
     this.onboardingHintsSeen = new Set(saveData.onboardingHintsSeen);
 
@@ -2818,6 +3142,8 @@ export class FarmScene extends Phaser.Scene {
         };
       }),
       upgrades: this.getSanitizedUpgradeLevels(),
+      monsterEssence: this.sanitizePrestigeInteger(this.monsterEssence),
+      essencePowerLevel: this.sanitizePrestigeInteger(this.essencePowerLevel),
       currentEggCost: this.sanitizeEggCost(this.currentEggCost),
       onboardingHintsSeen: Array.from(this.onboardingHintsSeen),
       expansionUnlocked: this.expansionUnlocked,
@@ -2849,9 +3175,12 @@ export class FarmScene extends Phaser.Scene {
     this.hasUnsavedProgress = false;
     this.skipSavingUntilProgress = true;
     this.resetConfirmationArmed = false;
+    this.prestigeConfirmationArmed = false;
     this.discoveredMonsters = new Set<DiscoveryKey>();
     this.onboardingHintsSeen = new Set<OnboardingHintId>();
     this.upgradeLevels = this.createInitialUpgradeLevels();
+    this.monsterEssence = 0;
+    this.essencePowerLevel = 0;
     this.currentEggCost = STARTING_EGG_COST;
     this.expansionUnlocked = false;
     this.farmSlots = this.createInitialFarmSlots();
@@ -2871,6 +3200,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeHelpPanel();
     this.closeUpgradeShopPanel();
+    this.closePrestigePanel();
     this.closeEconomyDebugPanel();
     this.updateHatchCooldownUi();
     this.updateHud();
@@ -2898,6 +3228,8 @@ export class FarmScene extends Phaser.Scene {
     return (
       this.currency.coins !== STARTING_COINS
       || this.currentEggCost !== STARTING_EGG_COST
+      || this.monsterEssence > 0
+      || this.essencePowerLevel > 0
       || this.expansionUnlocked
       || this.farmSlots.some((slot) => slot.monster !== null)
     );
@@ -3040,7 +3372,11 @@ export class FarmScene extends Phaser.Scene {
       return 0;
     }
 
-    return this.roundCurrency(monster.incomePerSecond * this.getFamilyIncomeMultiplier(monster.family));
+    return this.roundCurrency(
+      monster.incomePerSecond
+      * this.getFamilyIncomeMultiplier(monster.family)
+      * this.getPrestigeIncomeMultiplier(),
+    );
   }
 
   private sanitizeCoins(coins: number): number {
@@ -3049,6 +3385,14 @@ export class FarmScene extends Phaser.Scene {
     }
 
     return this.roundCurrency(coins);
+  }
+
+  private sanitizePrestigeInteger(value: number): number {
+    if (!Number.isFinite(value) || value < 0) {
+      return 0;
+    }
+
+    return Math.floor(value);
   }
 
   private roundCurrency(coins: number): number {

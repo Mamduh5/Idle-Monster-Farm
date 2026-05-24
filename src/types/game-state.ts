@@ -2,6 +2,11 @@ export type CurrencyState = {
   coins: number;
 };
 
+export type PrestigeState = {
+  monsterEssence: number;
+  essencePowerLevel: number;
+};
+
 export const MONSTER_FAMILIES = ['Slime', 'Mushroom'] as const;
 
 export type MonsterFamily = typeof MONSTER_FAMILIES[number];
