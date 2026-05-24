@@ -54,6 +54,7 @@ const MUSHROOM_INCOME_BOOST_PER_LEVEL = 0.12;
 const HATCH_SPEED_REDUCTION_PER_LEVEL = 0.05;
 const OFFLINE_STORAGE_SECONDS_PER_LEVEL = 1800;
 const SHOW_DEBUG_PANEL = false;
+const SHOW_MONSTER_HITBOX_DEBUG = false;
 const MODAL_OVERLAY_DEPTH = 18;
 const THEME = {
   sky: 0x9bd7f2,
@@ -1998,13 +1999,21 @@ export class FarmScene extends Phaser.Scene {
       fontStyle: 'bold',
     }).setOrigin(0.5));
 
-    visual.setSize(this.cellSize, this.cellSize);
-    visual.setInteractive(
-      new Phaser.Geom.Rectangle(-this.cellSize / 2, -this.cellSize / 2, this.cellSize, this.cellSize),
-      Phaser.Geom.Rectangle.Contains,
-    );
+    const hitAreaSize = this.cellSize;
+    const hitArea = new Phaser.Geom.Rectangle(-hitAreaSize / 2, -hitAreaSize / 2, hitAreaSize, hitAreaSize);
 
-    this.input.setDraggable(visual);
+    visual.setSize(hitAreaSize, hitAreaSize);
+    visual.setInteractive({
+      hitArea,
+      hitAreaCallback: Phaser.Geom.Rectangle.Contains,
+      draggable: true,
+      useHandCursor: true,
+    });
+    this.addMonsterHitboxDebugVisual(visual, hitAreaSize);
+
+    this.input.setDraggable(visual, true);
+    this.input.dragDistanceThreshold = Math.min(this.input.dragDistanceThreshold, 4);
+    this.input.dragTimeThreshold = 0;
 
     visual
       .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
@@ -2061,6 +2070,15 @@ export class FarmScene extends Phaser.Scene {
       });
 
     this.monsterVisuals[slot.id] = visual;
+  }
+
+  private addMonsterHitboxDebugVisual(visual: MonsterVisual, hitAreaSize: number): void {
+    if (!SHOW_MONSTER_HITBOX_DEBUG) {
+      return;
+    }
+
+    visual.add(this.add.rectangle(0, 0, hitAreaSize, hitAreaSize, 0xff00ff, 0)
+      .setStrokeStyle(2, 0xff00ff, 0.7));
   }
 
   private addSlimeVisual(
