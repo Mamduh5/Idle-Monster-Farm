@@ -44,11 +44,13 @@ const MILLISECONDS_PER_SECOND = 1000;
 const SAVE_THROTTLE_MS = 5000;
 const MAX_OFFLINE_SECONDS = 7200;
 const HATCH_COOLDOWN_MS = 3000;
-const MUSHROOM_HATCH_CHANCE = 0.2;
+const BASE_MUSHROOM_HATCH_CHANCE = 0.2;
+const MUSHROOM_HATCH_CHANCE_PER_LEVEL = 0.03;
 const HATCH_PROGRESS_WIDTH = 142;
 const STARTING_COINS = STARTING_EGG_COST;
 const MIN_HATCH_COOLDOWN_MS = 1200;
-const INCOME_BOOST_PER_LEVEL = 0.1;
+const SLIME_INCOME_BOOST_PER_LEVEL = 0.1;
+const MUSHROOM_INCOME_BOOST_PER_LEVEL = 0.12;
 const HATCH_SPEED_REDUCTION_PER_LEVEL = 0.05;
 const OFFLINE_STORAGE_SECONDS_PER_LEVEL = 1800;
 const SHOW_DEBUG_PANEL = false;
@@ -1286,7 +1288,10 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = this.getPanelSize(580, 390);
+    const { width: panelWidth, height: panelHeight } = this.getPanelSize(580, 520);
+    const rowGap = Math.min(82, Math.max(58, (panelHeight - 118) / UPGRADE_DEFINITIONS.length));
+    const rowHeight = Math.min(72, rowGap - 8);
+    const firstRowY = -panelHeight / 2 + 92;
 
     panel.setDepth(24);
 
@@ -1321,7 +1326,7 @@ export class FarmScene extends Phaser.Scene {
     panel.add(closeText);
 
     UPGRADE_DEFINITIONS.forEach((upgrade, index) => {
-      this.addUpgradeRow(panel, upgrade, -panelHeight / 2 + 92 + index * 92, panelWidth);
+      this.addUpgradeRow(panel, upgrade, firstRowY + index * rowGap, panelWidth, rowHeight);
     });
 
     this.upgradeShopPanel = panel;
@@ -1333,17 +1338,19 @@ export class FarmScene extends Phaser.Scene {
     upgrade: UpgradeDefinition,
     rowY: number,
     panelWidth: number,
+    rowHeight: number,
   ): void {
-    const isCompactPanel = panelWidth < 500;
+    const isCompactPanel = panelWidth < 500 || rowHeight < 70;
     const level = this.getUpgradeLevel(upgrade.id);
     const isMaxLevel = level >= upgrade.maxLevel;
     const cost = this.getUpgradeCostForLevel(upgrade, level);
     const canAfford = this.currency.coins >= cost && !isMaxLevel;
+    const rowTop = rowY - rowHeight / 2;
 
-    panel.add(this.add.rectangle(0, rowY, panelWidth - 48, isCompactPanel ? 84 : 74, THEME.panelAlt, 0.92)
+    panel.add(this.add.rectangle(0, rowY, panelWidth - 48, rowHeight, THEME.panelAlt, 0.92)
       .setStrokeStyle(2, canAfford ? THEME.slot : THEME.lockedBorder, 0.78));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, rowY - 28, upgrade.name, {
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 8, upgrade.name, {
       color: '#f7ffe8',
       fontFamily: 'Arial, sans-serif',
       fontSize: isCompactPanel ? '15px' : '17px',
@@ -1353,38 +1360,38 @@ export class FarmScene extends Phaser.Scene {
       },
     }));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, rowY - 4, `Level ${level}/${upgrade.maxLevel}`, {
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + (isCompactPanel ? 29 : 31), `Level ${level}/${upgrade.maxLevel}`, {
       color: '#cdebb3',
       fontFamily: 'Arial, sans-serif',
-      fontSize: '14px',
+      fontSize: isCompactPanel ? '13px' : '14px',
       fontStyle: 'bold',
     }));
 
     panel.add(this.add.text(
       -panelWidth / 2 + 42,
-      rowY + 19,
+      rowTop + (isCompactPanel ? 49 : 52),
       isCompactPanel ? this.getUpgradeCurrentEffectText(upgrade.id) : `${upgrade.effect} - ${this.getUpgradeCurrentEffectText(upgrade.id)}`,
       {
       color: '#d9d6ec',
       fontFamily: 'Arial, sans-serif',
-      fontSize: '13px',
+      fontSize: isCompactPanel ? '12px' : '13px',
       wordWrap: {
         width: isCompactPanel ? panelWidth - 160 : Math.max(170, panelWidth - 240),
       },
       },
     ));
 
-    panel.add(this.add.text(panelWidth / 2 - 42, rowY - 34, isMaxLevel ? 'Maxed' : `Cost: ${cost}`, {
+    panel.add(this.add.text(panelWidth / 2 - 42, rowTop + 6, isMaxLevel ? 'Maxed' : `Cost: ${cost}`, {
       color: isMaxLevel ? '#cdebb3' : '#fff4a8',
       fontFamily: 'Arial, sans-serif',
       fontSize: isCompactPanel ? '13px' : '15px',
       fontStyle: 'bold',
     }).setOrigin(1, 0));
 
-    const buyText = this.add.text(panelWidth / 2 - 42, rowY - 10, isMaxLevel ? 'MAX' : 'Buy', {
+    const buyText = this.add.text(panelWidth / 2 - 42, rowTop + (isCompactPanel ? 30 : 32), isMaxLevel ? 'MAX' : 'Buy', {
       color: '#ffffff',
       fontFamily: 'Arial, sans-serif',
-      fontSize: '16px',
+      fontSize: isCompactPanel ? '15px' : '16px',
       fontStyle: 'bold',
       backgroundColor: isMaxLevel
         ? `#${THEME.lockedInner.toString(16).padStart(6, '0')}`
@@ -1392,8 +1399,8 @@ export class FarmScene extends Phaser.Scene {
           ? `#${THEME.buttonHover.toString(16).padStart(6, '0')}`
           : `#${THEME.danger.toString(16).padStart(6, '0')}`,
       padding: {
-        x: 15,
-        y: 8,
+        x: isCompactPanel ? 13 : 15,
+        y: isCompactPanel ? 6 : 8,
       },
     }).setOrigin(1, 0);
 
@@ -1587,18 +1594,30 @@ export class FarmScene extends Phaser.Scene {
 
   private getUpgradeCurrentEffectText(upgradeId: UpgradeId): string {
     if (upgradeId === 'slime-income-boost') {
-      return `current income x${this.getIncomeMultiplier().toFixed(1)}`;
+      return `Slime income x${this.getFamilyIncomeMultiplier('Slime').toFixed(2)}`;
+    }
+
+    if (upgradeId === 'mushroom-income-boost') {
+      return `Mushroom income x${this.getFamilyIncomeMultiplier('Mushroom').toFixed(2)}`;
     }
 
     if (upgradeId === 'hatch-speed') {
       return `cooldown ${(this.getHatchCooldownMs() / MILLISECONDS_PER_SECOND).toFixed(1)}s`;
     }
 
+    if (upgradeId === 'mushroom-chance') {
+      return `Mushroom hatch ${Math.round(this.getMushroomHatchChance() * 100)}%`;
+    }
+
     return `offline cap ${this.formatDuration(this.getOfflineCapSeconds())}`;
   }
 
-  private getIncomeMultiplier(): number {
-    return 1 + this.getUpgradeLevel('slime-income-boost') * INCOME_BOOST_PER_LEVEL;
+  private getFamilyIncomeMultiplier(family: MonsterFamily): number {
+    if (family === 'Mushroom') {
+      return 1 + this.getUpgradeLevel('mushroom-income-boost') * MUSHROOM_INCOME_BOOST_PER_LEVEL;
+    }
+
+    return 1 + this.getUpgradeLevel('slime-income-boost') * SLIME_INCOME_BOOST_PER_LEVEL;
   }
 
   private getHatchCooldownMs(): number {
@@ -1610,6 +1629,13 @@ export class FarmScene extends Phaser.Scene {
 
   private getOfflineCapSeconds(): number {
     return MAX_OFFLINE_SECONDS + this.getUpgradeLevel('offline-storage') * OFFLINE_STORAGE_SECONDS_PER_LEVEL;
+  }
+
+  private getMushroomHatchChance(): number {
+    const chance = BASE_MUSHROOM_HATCH_CHANCE
+      + this.getUpgradeLevel('mushroom-chance') * MUSHROOM_HATCH_CHANCE_PER_LEVEL;
+
+    return Phaser.Math.Clamp(chance, 0, 1);
   }
 
   private formatDuration(seconds: number): string {
@@ -1665,7 +1691,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private rollHatchMonsterDefinition(): MonsterDefinition {
-    return Math.random() < MUSHROOM_HATCH_CHANCE ? BUTTON_MUSHROOM : BABY_SLIME;
+    return Math.random() < this.getMushroomHatchChance() ? BUTTON_MUSHROOM : BABY_SLIME;
   }
 
   private createMonsterInstance(definition = BABY_SLIME): MonsterInstance {
@@ -2999,17 +3025,15 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getTotalIncomePerSecond(): number {
-    const baseIncome = this.farmSlots.reduce((totalIncome, slot) => {
-      const income = slot.monster?.incomePerSecond ?? 0;
+    return this.roundCurrency(this.farmSlots.reduce((totalIncome, slot) => {
+      const income = this.getEffectiveMonsterIncome(slot.monster);
 
       if (!Number.isFinite(income) || income <= 0) {
         return totalIncome;
       }
 
       return totalIncome + income;
-    }, 0);
-
-    return this.roundCurrency(baseIncome * this.getIncomeMultiplier());
+    }, 0));
   }
 
   private getEffectiveMonsterIncome(monster: MonsterInstance | null | undefined): number {
@@ -3017,7 +3041,7 @@ export class FarmScene extends Phaser.Scene {
       return 0;
     }
 
-    return this.roundCurrency(monster.incomePerSecond * this.getIncomeMultiplier());
+    return this.roundCurrency(monster.incomePerSecond * this.getFamilyIncomeMultiplier(monster.family));
   }
 
   private sanitizeCoins(coins: number): number {

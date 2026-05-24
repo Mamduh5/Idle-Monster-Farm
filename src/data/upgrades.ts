@@ -1,4 +1,9 @@
-export type UpgradeId = 'slime-income-boost' | 'hatch-speed' | 'offline-storage';
+export type UpgradeId =
+  | 'slime-income-boost'
+  | 'mushroom-income-boost'
+  | 'hatch-speed'
+  | 'mushroom-chance'
+  | 'offline-storage';
 
 export type UpgradeDefinition = {
   id: UpgradeId;
@@ -13,9 +18,17 @@ export const UPGRADE_DEFINITIONS: UpgradeDefinition[] = [
   {
     id: 'slime-income-boost',
     name: 'Slime Income Boost',
-    effect: '+10% total monster income per level',
+    effect: '+10% Slime income per level',
     baseCost: 25,
     costMultiplier: 1.6,
+    maxLevel: 10,
+  },
+  {
+    id: 'mushroom-income-boost',
+    name: 'Mushroom Income Boost',
+    effect: '+12% Mushroom income per level',
+    baseCost: 45,
+    costMultiplier: 1.65,
     maxLevel: 10,
   },
   {
@@ -25,6 +38,14 @@ export const UPGRADE_DEFINITIONS: UpgradeDefinition[] = [
     baseCost: 40,
     costMultiplier: 1.7,
     maxLevel: 10,
+  },
+  {
+    id: 'mushroom-chance',
+    name: 'Mushroom Chance',
+    effect: '+3% Mushroom hatch chance per level',
+    baseCost: 80,
+    costMultiplier: 1.75,
+    maxLevel: 5,
   },
   {
     id: 'offline-storage',

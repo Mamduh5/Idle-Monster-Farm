@@ -9,6 +9,7 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Hatch multiple Slimes, merge two matching Slimes, and confirm the merged monster remains selected.
 - Merge two matching Mushrooms, confirm Slime + Mushroom drops return safely, and confirm Level 5 Mushroom + Level 5 Mushroom does not merge.
 - Buy at least one upgrade and confirm coins, income/cooldown text, and upgrade level update.
+- Buy Mushroom Income Boost and Mushroom Chance, then confirm Mushroom income and hatch odds text update.
 - Fill the grid, confirm the hatch panel says the farm is full, then merge a valid pair to free space.
 - Confirm the 3 expansion slots start locked and reject monster drops safely.
 - Unlock the expansion row, confirm 500 coins are deducted, then hatch into an expanded slot.
