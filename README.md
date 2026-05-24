@@ -51,6 +51,28 @@ Preview the production build locally:
 npm run preview
 ```
 
+## Browser Alpha Deployment
+
+Build the browser alpha for a generic static host:
+
+```bash
+npm run build
+```
+
+The deployable files are written to `dist/`. Upload the contents of `dist/` to any static host that serves the game at the site root.
+
+For GitHub Pages on the repository path `https://<user>.github.io/Idle-Monster-Farm/`, build with the project base path:
+
+```bash
+npm run build:pages
+```
+
+This uses Vite's `--base=/Idle-Monster-Farm/` option only for the Pages build. Local development, normal production builds, and `npm run preview` still use the default root path unless you run the Pages-specific build.
+
+An optional GitHub Actions workflow is included at `.github/workflows/deploy.yml`. In GitHub, set Pages to deploy from GitHub Actions, then push to `main` to build and publish `dist/`.
+
+Save data remains local to each browser and device because progress is stored in `localStorage`.
+
 ## Save Data
 
 Gameplay progress is stored in the browser with `localStorage`. Clearing site data, using a fresh browser profile, or deleting the game's localStorage entries will reset local progress.
