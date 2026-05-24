@@ -17,8 +17,9 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Buy Mushroom Income Boost and Mushroom Chance, then confirm Mushroom income and hatch odds text update.
 - Fill the grid, confirm the hatch panel says the farm is full, then merge a valid pair to free space.
 - Confirm the 3 expansion slots start locked and reject monster drops safely.
-- Unlock the expansion row, confirm 500 coins are deducted, then hatch into an expanded slot.
+- Unlock the expansion row, confirm 350 coins are deducted, then hatch into an expanded slot.
 - Drag or merge monsters using expanded slots.
+- During early/mid play, confirm visible progress happens roughly every 30-90 seconds and first prestige looks reachable in about 20-40 minutes.
 
 ## Mobile Viewports
 - Check `360x640` and `390x844`.
@@ -46,6 +47,9 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 ## Offline Return
 - Leave and return after a few minutes, or set `lastActiveAt` backward in localStorage for a manual check.
 - Confirm offline coins are added and the welcome-back message appears without console errors.
+- In mobile Chrome, switch apps or background the browser without closing it, then return and confirm offline coins are added without a reload.
+- Background the app while Hatch is cooling down, return, and confirm Hatch cooldown advanced or became ready.
+- Trigger visible/focus repeatedly after returning and confirm the same offline reward is not granted again.
 
 ## Reset
 - Open Settings and click Reset Save once.
@@ -54,6 +58,6 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Confirm expansion returns to locked after reset.
 
 ## Max Level And Console
-- Confirm Level 8 + Level 8 fails safely and both Slimes remain.
+- Confirm Level 12 + Level 12 Slime and Level 8 + Level 8 Mushroom fail safely and both monsters remain.
 - Try an invalid drag and confirm no monster is duplicated or deleted.
 - Confirm browser console errors are `0`.

@@ -54,15 +54,15 @@ const MAX_OFFLINE_SECONDS = 7200;
 const HATCH_COOLDOWN_MS = 3000;
 const BASE_MUSHROOM_HATCH_CHANCE = 0.2;
 const MUSHROOM_FOREST_HATCH_CHANCE_BONUS = 0.05;
-const MUSHROOM_HATCH_CHANCE_PER_LEVEL = 0.03;
+const MUSHROOM_HATCH_CHANCE_PER_LEVEL = 0.04;
 const HATCH_PROGRESS_WIDTH = 142;
 const STARTING_COINS = STARTING_EGG_COST;
 const MIN_HATCH_COOLDOWN_MS = 1200;
-const SLIME_INCOME_BOOST_PER_LEVEL = 0.1;
-const MUSHROOM_INCOME_BOOST_PER_LEVEL = 0.12;
-const ESSENCE_POWER_INCOME_BOOST_PER_LEVEL = 0.1;
+const SLIME_INCOME_BOOST_PER_LEVEL = 0.2;
+const MUSHROOM_INCOME_BOOST_PER_LEVEL = 0.22;
+const ESSENCE_POWER_INCOME_BOOST_PER_LEVEL = 0.15;
 const ESSENCE_POWER_COST = 1;
-const HATCH_SPEED_REDUCTION_PER_LEVEL = 0.05;
+const HATCH_SPEED_REDUCTION_PER_LEVEL = 0.07;
 const OFFLINE_STORAGE_SECONDS_PER_LEVEL = 1800;
 const SHOW_DEBUG_PANEL = false;
 const SHOW_MONSTER_HITBOX_DEBUG = false;
@@ -207,6 +207,7 @@ export class FarmScene extends Phaser.Scene {
   private resetConfirmationArmed = false;
   private prestigeConfirmationArmed = false;
   private lastBlockedOutsideTapToastAt = 0;
+  private lastHiddenAt: number | null = null;
 
   private readonly handlePageHide = (): void => {
     this.saveProgress();
@@ -214,7 +215,13 @@ export class FarmScene extends Phaser.Scene {
 
   private readonly handleVisibilityChange = (): void => {
     if (document.visibilityState === 'hidden') {
+      this.lastHiddenAt = Date.now();
       this.saveProgress();
+      return;
+    }
+
+    if (document.visibilityState === 'visible') {
+      this.applyResumeProgress();
     }
   };
 
@@ -272,6 +279,7 @@ export class FarmScene extends Phaser.Scene {
     this.resetConfirmationArmed = false;
     this.prestigeConfirmationArmed = false;
     this.lastBlockedOutsideTapToastAt = 0;
+    this.lastHiddenAt = null;
     this.hatchCooldownMs = HATCH_COOLDOWN_MS;
     this.hatchLabelText = undefined;
     this.hatchStatusText = undefined;
@@ -641,7 +649,7 @@ export class FarmScene extends Phaser.Scene {
       fontStyle: 'bold',
     }).setOrigin(0.5));
 
-    container.add(this.add.text(x + this.cellSize / 2, y + this.cellSize / 2 + 13, '500', {
+    container.add(this.add.text(x + this.cellSize / 2, y + this.cellSize / 2 + 13, `${EXPANSION_UNLOCK_COST}`, {
       color: '#fff4a8',
       fontFamily: 'Arial, sans-serif',
       fontSize: '12px',
@@ -3911,18 +3919,54 @@ export class FarmScene extends Phaser.Scene {
     this.syncZoneUnlockFromPrestigeProgress();
     this.createFarmBackground();
 
-    const offlineCoins = this.calculateOfflineCoins(saveData.lastActiveAt);
-
-    if (offlineCoins > 0) {
-      this.currency.coins = this.sanitizeCoins(this.currency.coins + offlineCoins);
-      this.showOfflineEarningsMessage(offlineCoins);
-      this.time.delayedCall(1800, () => {
-        this.showOnboardingHint('offline', 'Your monsters can earn while you are away.');
-      });
-    }
+    this.applyAwayProgress(saveData.lastActiveAt, Date.now(), true);
 
     this.ensureStarterCoinsForEmptyFarm();
     this.saveProgress();
+  }
+
+  private applyResumeProgress(): void {
+    const now = Date.now();
+    const saveData = loadSaveData(this.farmSlots.length);
+    const lastActiveAt = this.lastHiddenAt ?? saveData?.lastActiveAt ?? now;
+
+    this.lastHiddenAt = null;
+    this.applyAwayProgress(lastActiveAt, now, true);
+    this.saveProgress();
+  }
+
+  private applyAwayProgress(lastActiveAt: number, now: number, showMessage: boolean): void {
+    const elapsedMilliseconds = this.getElapsedAwayMilliseconds(lastActiveAt, now);
+
+    if (elapsedMilliseconds <= 0) {
+      this.updateHatchCooldownUi();
+      return;
+    }
+
+    const offlineCoins = this.calculateOfflineCoinsForElapsed(elapsedMilliseconds);
+
+    if (offlineCoins > 0) {
+      this.currency.coins = this.sanitizeCoins(this.currency.coins + offlineCoins);
+      this.hasUnsavedProgress = true;
+
+      if (showMessage && offlineCoins >= 1) {
+        this.showOfflineEarningsMessage(offlineCoins);
+        this.time.delayedCall(1800, () => {
+          this.showOnboardingHint('offline', 'Your monsters can earn while you are away.');
+        });
+      }
+    }
+
+    if (!this.isHatchReady()) {
+      this.hatchCooldownMs = Phaser.Math.Clamp(
+        this.hatchCooldownMs + elapsedMilliseconds,
+        0,
+        this.getHatchCooldownMs(),
+      );
+      this.hasUnsavedProgress = true;
+    }
+
+    this.updateHud();
   }
 
   private saveProgress(): void {
@@ -4078,12 +4122,18 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private calculateOfflineCoins(lastActiveAt: number): number {
-    if (!Number.isFinite(lastActiveAt) || lastActiveAt < 0) {
+    return this.calculateOfflineCoinsForElapsed(this.getElapsedAwayMilliseconds(lastActiveAt, Date.now()));
+  }
+
+  private getElapsedAwayMilliseconds(lastActiveAt: number, now: number): number {
+    if (!Number.isFinite(lastActiveAt) || lastActiveAt < 0 || !Number.isFinite(now)) {
       return 0;
     }
 
-    const elapsedMilliseconds = Date.now() - lastActiveAt;
+    return Math.max(0, now - lastActiveAt);
+  }
 
+  private calculateOfflineCoinsForElapsed(elapsedMilliseconds: number): number {
     if (!Number.isFinite(elapsedMilliseconds) || elapsedMilliseconds <= 0) {
       return 0;
     }
