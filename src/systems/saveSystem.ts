@@ -1,4 +1,5 @@
 import { STARTING_EGG_COST } from '../data/economy';
+import { MISSION_DEFINITIONS, MISSION_IDS, type MissionId } from '../data/missions';
 import { UPGRADE_DEFINITIONS, type UpgradeId } from '../data/upgrades';
 import {
   isMonsterFamily,
@@ -32,6 +33,9 @@ export type LocalSaveData = {
   currentEggCost: number;
   onboardingHintsSeen: OnboardingHintId[];
   expansionUnlocked: boolean;
+  missionProgress: Record<MissionId, number>;
+  completedMissionIds: MissionId[];
+  claimedMissionIds: MissionId[];
 };
 
 export function loadSaveData(slotCount: number): LocalSaveData | null {
@@ -105,7 +109,42 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
     currentEggCost: normalizeEggCost(rawData.currentEggCost),
     onboardingHintsSeen: normalizeOnboardingHints(rawData.onboardingHintsSeen),
     expansionUnlocked: rawData.expansionUnlocked === true,
+    missionProgress: normalizeMissionProgress(rawData.missionProgress),
+    completedMissionIds: normalizeMissionIds(rawData.completedMissionIds),
+    claimedMissionIds: normalizeMissionIds(rawData.claimedMissionIds),
   };
+}
+
+function normalizeMissionProgress(rawProgress: unknown): Record<MissionId, number> {
+  const missionProgress = Object.fromEntries(
+    MISSION_DEFINITIONS.map((mission) => [mission.id, 0]),
+  ) as Record<MissionId, number>;
+
+  if (!isRecord(rawProgress)) {
+    return missionProgress;
+  }
+
+  MISSION_DEFINITIONS.forEach((mission) => {
+    const progress = Number(rawProgress[mission.id]);
+
+    if (!Number.isFinite(progress)) {
+      return;
+    }
+
+    missionProgress[mission.id] = Math.min(Math.max(Math.floor(progress), 0), mission.goal);
+  });
+
+  return missionProgress;
+}
+
+function normalizeMissionIds(rawMissionIds: unknown): MissionId[] {
+  if (!Array.isArray(rawMissionIds)) {
+    return [];
+  }
+
+  return Array.from(new Set(rawMissionIds.filter((missionId): missionId is MissionId => (
+    typeof missionId === 'string' && MISSION_IDS.includes(missionId as MissionId)
+  ))));
 }
 
 function normalizeOnboardingHints(rawHints: unknown): OnboardingHintId[] {

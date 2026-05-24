@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { EGG_COST_MULTIPLIER, EXPANSION_UNLOCK_COST, STARTING_EGG_COST } from '../data/economy';
+import { MISSION_DEFINITIONS, type MissionDefinition, type MissionId, type MissionReward } from '../data/missions';
 import {
   BABY_SLIME,
   BUTTON_MUSHROOM,
@@ -166,6 +167,7 @@ export class FarmScene extends Phaser.Scene {
   private compendiumPanel?: Phaser.GameObjects.Container;
   private settingsPanel?: Phaser.GameObjects.Container;
   private helpPanel?: Phaser.GameObjects.Container;
+  private missionsPanel?: Phaser.GameObjects.Container;
   private upgradeShopPanel?: Phaser.GameObjects.Container;
   private prestigePanel?: Phaser.GameObjects.Container;
   private modalOverlay?: Phaser.GameObjects.Rectangle;
@@ -175,6 +177,9 @@ export class FarmScene extends Phaser.Scene {
   private activeDragVisual?: MonsterVisual;
   private activeDragPointerId: number | null = null;
   private upgradeLevels: Record<UpgradeId, number> = this.createInitialUpgradeLevels();
+  private missionProgress: Record<MissionId, number> = this.createInitialMissionProgress();
+  private completedMissionIds = new Set<MissionId>();
+  private claimedMissionIds = new Set<MissionId>();
   private settings: GameSettings = loadSettings();
   private resetConfirmationArmed = false;
   private prestigeConfirmationArmed = false;
@@ -217,6 +222,7 @@ export class FarmScene extends Phaser.Scene {
     this.compendiumPanel = undefined;
     this.settingsPanel = undefined;
     this.helpPanel = undefined;
+    this.missionsPanel = undefined;
     this.upgradeShopPanel = undefined;
     this.prestigePanel = undefined;
     this.modalOverlay = undefined;
@@ -226,6 +232,9 @@ export class FarmScene extends Phaser.Scene {
     this.activeDragVisual = undefined;
     this.activeDragPointerId = null;
     this.upgradeLevels = this.createInitialUpgradeLevels();
+    this.missionProgress = this.createInitialMissionProgress();
+    this.completedMissionIds = new Set<MissionId>();
+    this.claimedMissionIds = new Set<MissionId>();
     this.settings = loadSettings();
     this.syncAudioSettings();
     this.resetConfirmationArmed = false;
@@ -255,6 +264,7 @@ export class FarmScene extends Phaser.Scene {
     this.createSettingsControl();
     this.createCompendiumControl();
     this.createHelpControl();
+    this.createMissionsControl();
     this.createUpgradeShopControl();
     this.createPrestigeControl();
     this.createEconomyDebugControl();
@@ -320,8 +330,8 @@ export class FarmScene extends Phaser.Scene {
     const statsY = isNarrow ? hudY + hudHeight + 8 : 94;
     const menuX = width - margin;
     const menuY = isNarrow ? 10 : 22;
-    const menuGap = isNarrow ? 34 : 40;
-    const menuButtonCount = SHOW_DEBUG_PANEL ? 6 : 5;
+    const menuGap = isNarrow ? 29 : 40;
+    const menuButtonCount = SHOW_DEBUG_PANEL ? 7 : 6;
     const menuBottom = menuY + (menuButtonCount - 1) * menuGap + 30;
     const topContentBottom = isNarrow ? Math.max(statsY + statsHeight, menuBottom) : 126;
     const hatchWidth = Math.min(260, width - margin * 2);
@@ -663,14 +673,20 @@ export class FarmScene extends Phaser.Scene {
     });
   }
 
+  private createMissionsControl(): void {
+    this.createMenuButton('Goals', 3, () => {
+      this.toggleMissionsPanel();
+    });
+  }
+
   private createUpgradeShopControl(): void {
-    this.createMenuButton('Upgrade Shop', 3, () => {
+    this.createMenuButton('Upgrades', 4, () => {
       this.toggleUpgradeShopPanel();
     });
   }
 
   private createPrestigeControl(): void {
-    this.createMenuButton('Prestige', 4, () => {
+    this.createMenuButton('Prestige', 5, () => {
       this.togglePrestigePanel();
     });
   }
@@ -680,7 +696,7 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    this.createMenuButton('Debug (D)', 5, () => {
+    this.createMenuButton('Debug (D)', 6, () => {
       this.toggleEconomyDebugPanel();
     }, `#${THEME.buttonWarm.toString(16).padStart(6, '0')}`);
   }
@@ -808,6 +824,7 @@ export class FarmScene extends Phaser.Scene {
       this.compendiumPanel
       || this.settingsPanel
       || this.helpPanel
+      || this.missionsPanel
       || this.upgradeShopPanel
       || this.prestigePanel
       || this.modalOverlay
@@ -840,6 +857,11 @@ export class FarmScene extends Phaser.Scene {
 
     if (this.prestigePanel) {
       this.closePrestigePanel();
+      return;
+    }
+
+    if (this.missionsPanel) {
+      this.closeMissionsPanel();
       return;
     }
 
@@ -932,6 +954,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeSettingsPanel(false);
     this.closeCompendiumPanel();
     this.closeHelpPanel();
+    this.closeMissionsPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -1099,6 +1122,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
+    this.closeMissionsPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -1213,6 +1237,148 @@ export class FarmScene extends Phaser.Scene {
     }
   }
 
+  private toggleMissionsPanel(): void {
+    if (this.missionsPanel) {
+      this.closeMissionsPanel();
+      return;
+    }
+
+    this.openMissionsPanel();
+  }
+
+  private openMissionsPanel(): void {
+    this.closeMissionsPanel();
+    this.closeCompendiumPanel();
+    this.closeSettingsPanel();
+    this.closeHelpPanel();
+    this.closeUpgradeShopPanel();
+    this.closePrestigePanel();
+    this.closeEconomyDebugPanel();
+    this.cancelActiveDrag();
+    this.clearSelectedSlot();
+    this.showModalOverlay();
+
+    const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
+    const { width: panelWidth, height: panelHeight } = this.getPanelSize(500, 500);
+    const rowGap = Math.min(56, Math.max(42, (panelHeight - 108) / MISSION_DEFINITIONS.length));
+    const rowHeight = Math.min(50, rowGap - 6);
+    const firstRowY = -panelHeight / 2 + 86;
+
+    panel.setDepth(24);
+    this.addPanelBackground(panel, panelWidth, panelHeight);
+
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Goals', {
+      color: THEME.text,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '24px',
+      fontStyle: 'bold',
+    }));
+
+    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, 'Close', {
+      color: THEME.text,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+      backgroundColor: '#49395d',
+      padding: {
+        x: 9,
+        y: 5,
+      },
+    }).setOrigin(1, 0);
+
+    closeText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.playButtonClickSound();
+        this.closeMissionsPanel();
+      });
+
+    panel.add(closeText);
+
+    MISSION_DEFINITIONS.forEach((mission, index) => {
+      this.addMissionRow(panel, mission, firstRowY + index * rowGap, panelWidth, rowHeight);
+    });
+
+    this.missionsPanel = panel;
+  }
+
+  private addMissionRow(
+    panel: Phaser.GameObjects.Container,
+    mission: MissionDefinition,
+    rowY: number,
+    panelWidth: number,
+    rowHeight: number,
+  ): void {
+    const isCompactPanel = panelWidth < 420 || rowHeight < 48;
+    const isCompleted = this.completedMissionIds.has(mission.id);
+    const isClaimed = this.claimedMissionIds.has(mission.id);
+    const canClaim = isCompleted && !isClaimed;
+    const progress = this.getMissionProgress(mission);
+    const rowTop = rowY - rowHeight / 2;
+    const rowWidth = panelWidth - 48;
+    const statusText = isClaimed ? 'Claimed' : isCompleted ? 'Complete' : `${progress}/${mission.goal}`;
+    const detailText = `${statusText} - Reward: ${this.getMissionRewardText(mission.reward)}`;
+
+    panel.add(this.add.rectangle(0, rowY, rowWidth, rowHeight, isClaimed ? 0x29362f : THEME.panelAlt, 0.92)
+      .setStrokeStyle(2, canClaim ? THEME.slot : THEME.lockedBorder, 0.72));
+
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 7, mission.name, {
+      color: isClaimed ? '#cdebb3' : THEME.text,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: isCompactPanel ? '14px' : '16px',
+      fontStyle: 'bold',
+      wordWrap: {
+        width: panelWidth - (isCompactPanel ? 150 : 176),
+      },
+    }));
+
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + (isCompactPanel ? 28 : 30), detailText, {
+      color: canClaim ? '#fff4a8' : THEME.mutedText,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: isCompactPanel ? '12px' : '13px',
+      wordWrap: {
+        width: panelWidth - (isCompactPanel ? 150 : 176),
+      },
+    }));
+
+    const actionText = this.add.text(panelWidth / 2 - 42, rowY, isClaimed ? 'Done' : canClaim ? 'Claim' : `${progress}/${mission.goal}`, {
+      color: isClaimed ? '#cdebb3' : '#ffffff',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: isCompactPanel ? '13px' : '14px',
+      fontStyle: 'bold',
+      backgroundColor: `#${(canClaim ? THEME.buttonHover : THEME.lockedInner).toString(16).padStart(6, '0')}`,
+      padding: {
+        x: isCompactPanel ? 9 : 11,
+        y: 5,
+      },
+    }).setOrigin(1, 0.5);
+
+    if (canClaim) {
+      actionText
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          this.playButtonClickSound();
+          this.claimMissionReward(mission.id);
+        });
+    }
+
+    panel.add(actionText);
+  }
+
+  private closeMissionsPanel(): void {
+    if (this.missionsPanel) {
+      this.missionsPanel.destroy();
+      this.missionsPanel = undefined;
+      this.hideModalOverlay();
+    }
+  }
+
+  private refreshMissionsPanel(): void {
+    if (this.missionsPanel) {
+      this.openMissionsPanel();
+    }
+  }
+
   private toggleEconomyDebugPanel(): void {
     if (this.economyDebugPanel) {
       this.closeEconomyDebugPanel();
@@ -1227,6 +1393,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closeMissionsPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.clearSelectedSlot();
@@ -1334,6 +1501,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closeMissionsPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
     this.cancelActiveDrag();
@@ -1492,6 +1660,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closeMissionsPanel();
     this.closeUpgradeShopPanel();
     this.closeEconomyDebugPanel();
     this.cancelActiveDrag();
@@ -1692,6 +1861,142 @@ export class FarmScene extends Phaser.Scene {
     }));
   }
 
+  private createInitialMissionProgress(): Record<MissionId, number> {
+    return Object.fromEntries(
+      MISSION_DEFINITIONS.map((mission) => [mission.id, 0]),
+    ) as Record<MissionId, number>;
+  }
+
+  private getMissionDefinition(missionId: MissionId): MissionDefinition | undefined {
+    return MISSION_DEFINITIONS.find((mission) => mission.id === missionId);
+  }
+
+  private getMissionProgress(mission: MissionDefinition): number {
+    if (this.completedMissionIds.has(mission.id)) {
+      return mission.goal;
+    }
+
+    const progress = this.missionProgress[mission.id] ?? 0;
+
+    if (!Number.isFinite(progress) || progress < 0) {
+      return 0;
+    }
+
+    return Math.min(Math.floor(progress), mission.goal);
+  }
+
+  private getSanitizedMissionProgress(): Record<MissionId, number> {
+    return Object.fromEntries(
+      MISSION_DEFINITIONS.map((mission) => [mission.id, this.getMissionProgress(mission)]),
+    ) as Record<MissionId, number>;
+  }
+
+  private incrementMissionProgress(missionId: MissionId, amount = 1): void {
+    const mission = this.getMissionDefinition(missionId);
+
+    if (!mission || this.completedMissionIds.has(missionId) || this.claimedMissionIds.has(missionId)) {
+      return;
+    }
+
+    const nextProgress = Math.min(this.getMissionProgress(mission) + amount, mission.goal);
+    this.missionProgress[missionId] = nextProgress;
+
+    if (nextProgress >= mission.goal) {
+      this.completeMission(missionId);
+      return;
+    }
+
+    this.hasUnsavedProgress = true;
+    this.refreshMissionsPanel();
+  }
+
+  private completeMission(missionId: MissionId, showCompletionToast = true): void {
+    const mission = this.getMissionDefinition(missionId);
+
+    if (!mission || this.completedMissionIds.has(missionId)) {
+      return;
+    }
+
+    this.missionProgress[missionId] = mission.goal;
+    this.completedMissionIds.add(missionId);
+    this.hasUnsavedProgress = true;
+    this.refreshMissionsPanel();
+
+    if (showCompletionToast) {
+      this.showToast('Mission complete', 'success');
+    }
+  }
+
+  private evaluateMonsterMissions(monster: MonsterDefinition, showCompletionToast = true): void {
+    if (monster.family === 'Mushroom') {
+      this.completeMission('discover-mushroom', showCompletionToast);
+    }
+
+    this.evaluateOwnedMonsterMissions(showCompletionToast);
+  }
+
+  private evaluateOwnedMonsterMissions(showCompletionToast = true): void {
+    if (this.farmSlots.some((slot) => slot.monster?.family === 'Slime' && slot.monster.level >= 3)) {
+      this.completeMission('own-level-3-slime', showCompletionToast);
+    }
+  }
+
+  private syncMissionStateFromCurrentProgress(showCompletionToast = false): void {
+    if (Array.from(this.discoveredMonsters).some((discoveryKey) => discoveryKey.startsWith('Mushroom:'))
+      || this.farmSlots.some((slot) => slot.monster?.family === 'Mushroom')) {
+      this.completeMission('discover-mushroom', showCompletionToast);
+    }
+
+    this.evaluateOwnedMonsterMissions(showCompletionToast);
+
+    if (Object.values(this.upgradeLevels).some((level) => level > 0)) {
+      this.completeMission('buy-upgrade-1', showCompletionToast);
+    }
+
+    if (this.expansionUnlocked) {
+      this.completeMission('unlock-expansion', showCompletionToast);
+    }
+
+    if (this.monsterEssence > 0 || this.essencePowerLevel > 0) {
+      this.completeMission('prestige-once', showCompletionToast);
+    }
+
+    MISSION_DEFINITIONS.forEach((mission) => {
+      if (this.completedMissionIds.has(mission.id)) {
+        this.missionProgress[mission.id] = mission.goal;
+      }
+    });
+  }
+
+  private claimMissionReward(missionId: MissionId): void {
+    const mission = this.getMissionDefinition(missionId);
+
+    if (!mission || !this.completedMissionIds.has(missionId) || this.claimedMissionIds.has(missionId)) {
+      return;
+    }
+
+    if (mission.reward.type === 'coins') {
+      this.currency.coins = this.sanitizeCoins(this.currency.coins + mission.reward.amount);
+    } else {
+      this.monsterEssence = this.sanitizePrestigeInteger(this.monsterEssence + mission.reward.amount);
+    }
+
+    this.claimedMissionIds.add(missionId);
+    this.skipSavingUntilProgress = false;
+    this.updateHud();
+    this.saveProgress();
+    this.refreshMissionsPanel();
+    this.showToast(`Claimed ${this.getMissionRewardText(mission.reward)}`, 'success');
+  }
+
+  private getMissionRewardText(reward: MissionReward): string {
+    if (reward.type === 'coins') {
+      return `${this.formatCoinAmount(reward.amount)} coins`;
+    }
+
+    return `${reward.amount} Essence`;
+  }
+
   private isSlotUnlocked(slotId: number): boolean {
     return slotId >= 0 && (slotId < MAIN_SLOT_COUNT || this.expansionUnlocked);
   }
@@ -1713,6 +2018,7 @@ export class FarmScene extends Phaser.Scene {
     this.currency.coins = this.sanitizeCoins(this.currency.coins - EXPANSION_UNLOCK_COST);
     this.expansionUnlocked = true;
     this.skipSavingUntilProgress = false;
+    this.completeMission('unlock-expansion');
     this.createExpansionPlaceholder();
     this.hideFarmMessage();
     this.updateHud();
@@ -1778,6 +2084,7 @@ export class FarmScene extends Phaser.Scene {
     this.currency.coins = this.sanitizeCoins(this.currency.coins - cost);
     this.upgradeLevels[upgradeId] = currentLevel + 1;
     this.hatchCooldownMs = Math.min(this.hatchCooldownMs, this.getHatchCooldownMs());
+    this.completeMission('buy-upgrade-1');
     this.hideFarmMessage();
     this.updateHud();
     this.saveProgress();
@@ -1859,6 +2166,7 @@ export class FarmScene extends Phaser.Scene {
     this.clearSelectedSlot();
     this.updateHatchCooldownUi();
     this.updateHud();
+    this.completeMission('prestige-once');
     this.saveProgress();
   }
 
@@ -2021,6 +2329,8 @@ export class FarmScene extends Phaser.Scene {
     this.currentEggCost = this.getNextEggCost(this.currentEggCost);
     audioSystem.playHatch();
     this.discoverMonster(hatchDefinition);
+    this.incrementMissionProgress('hatch-3');
+    this.evaluateMonsterMissions(hatchDefinition);
     this.hideFarmMessage();
     this.renderMonsterInSlot(emptySlot);
     this.updateHud();
@@ -2130,6 +2440,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closeMissionsPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -2988,6 +3299,8 @@ export class FarmScene extends Phaser.Scene {
     this.renderMonsterInSlot(this.farmSlots[targetSlotId]);
     audioSystem.playMerge();
     this.showMergeFeedback(targetSlotId);
+    this.incrementMissionProgress('merge-1');
+    this.evaluateMonsterMissions(nextMonsterDefinition);
     this.updateHud();
     this.showOnboardingHint('upgrades', 'Upgrade Shop boosts your farm production.');
     this.skipSavingUntilProgress = false;
@@ -3101,6 +3414,16 @@ export class FarmScene extends Phaser.Scene {
     this.essencePowerLevel = saveData.essencePowerLevel;
     this.currentEggCost = this.sanitizeEggCost(saveData.currentEggCost);
     this.onboardingHintsSeen = new Set(saveData.onboardingHintsSeen);
+    this.missionProgress = {
+      ...this.createInitialMissionProgress(),
+      ...saveData.missionProgress,
+    };
+    this.completedMissionIds = new Set(saveData.completedMissionIds);
+    this.claimedMissionIds = new Set(saveData.claimedMissionIds);
+    this.claimedMissionIds.forEach((missionId) => {
+      this.completedMissionIds.add(missionId);
+    });
+    this.syncMissionStateFromCurrentProgress(false);
 
     const offlineCoins = this.calculateOfflineCoins(saveData.lastActiveAt);
 
@@ -3149,6 +3472,9 @@ export class FarmScene extends Phaser.Scene {
       currentEggCost: this.sanitizeEggCost(this.currentEggCost),
       onboardingHintsSeen: Array.from(this.onboardingHintsSeen),
       expansionUnlocked: this.expansionUnlocked,
+      missionProgress: this.getSanitizedMissionProgress(),
+      completedMissionIds: Array.from(this.completedMissionIds),
+      claimedMissionIds: Array.from(this.claimedMissionIds),
     });
 
     this.hasUnsavedProgress = false;
@@ -3181,6 +3507,9 @@ export class FarmScene extends Phaser.Scene {
     this.discoveredMonsters = new Set<DiscoveryKey>();
     this.onboardingHintsSeen = new Set<OnboardingHintId>();
     this.upgradeLevels = this.createInitialUpgradeLevels();
+    this.missionProgress = this.createInitialMissionProgress();
+    this.completedMissionIds = new Set<MissionId>();
+    this.claimedMissionIds = new Set<MissionId>();
     this.monsterEssence = 0;
     this.essencePowerLevel = 0;
     this.currentEggCost = STARTING_EGG_COST;
@@ -3201,6 +3530,7 @@ export class FarmScene extends Phaser.Scene {
     this.clearSelectedSlot();
     this.closeCompendiumPanel();
     this.closeHelpPanel();
+    this.closeMissionsPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -3233,6 +3563,9 @@ export class FarmScene extends Phaser.Scene {
       || this.monsterEssence > 0
       || this.essencePowerLevel > 0
       || this.expansionUnlocked
+      || this.completedMissionIds.size > 0
+      || this.claimedMissionIds.size > 0
+      || Object.values(this.missionProgress).some((progress) => progress > 0)
       || this.farmSlots.some((slot) => slot.monster !== null)
     );
   }

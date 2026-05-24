@@ -4,11 +4,15 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 
 ## Fresh Save
 - Start with 10 coins and an empty 3x3 grid.
+- Open Goals and confirm starter missions are listed with progress, rewards, and disabled claim states.
 - Hatch the first Baby Slime and confirm passive coin ticks begin.
+- Hatch three monsters and confirm the hatch mission completes.
 - Hatch until a Button Mushroom appears, then confirm it earns coins and appears in the Compendium.
 - Hatch multiple Slimes, merge two matching Slimes, and confirm the merged monster remains selected.
+- Merge one valid pair and confirm the merge mission completes.
 - Merge two matching Mushrooms, confirm Slime + Mushroom drops return safely, and confirm Level 5 Mushroom + Level 5 Mushroom does not merge.
 - Buy at least one upgrade and confirm coins, income/cooldown text, and upgrade level update.
+- Claim a completed coin mission, confirm coins increase, and confirm the mission cannot be claimed again.
 - Buy Mushroom Income Boost and Mushroom Chance, then confirm Mushroom income and hatch odds text update.
 - Fill the grid, confirm the hatch panel says the farm is full, then merge a valid pair to free space.
 - Confirm the 3 expansion slots start locked and reject monster drops safely.
@@ -23,6 +27,8 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 ## Persistence
 - Reload after hatching, merging, and buying an upgrade.
 - Confirm coins, egg cost, monsters, discoveries, upgrades, expansion unlock state, and onboarding hint state persist.
+- Confirm completed and claimed Goals persist after reload.
+- Confirm claimed mission rewards cannot be claimed again after reload.
 - Reload after unlocking expansion and confirm expanded-slot monsters persist.
 - After owning a Level 6+ Slime or Level 5 Mushroom, open Prestige, confirm reset grants Monster Essence, buy Essence Power, and reload to confirm both persist.
 - After egg costs grow large, confirm Hatch Egg and Production next-egg costs use compact formatting.
