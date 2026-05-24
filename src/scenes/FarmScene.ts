@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { EGG_COST_MULTIPLIER, STARTING_EGG_COST } from '../data/economy';
+import { EGG_COST_MULTIPLIER, EXPANSION_UNLOCK_COST, STARTING_EGG_COST } from '../data/economy';
 import {
   BABY_SLIME,
   getMonsterDefinition,
@@ -34,6 +34,11 @@ const GRID_COLUMNS = 3;
 const GRID_ROWS = 3;
 const CELL_SIZE = 72;
 const GRID_GAP = 10;
+const EXPANSION_COLUMNS = 3;
+const EXPANSION_ROWS = 1;
+const MAIN_SLOT_COUNT = GRID_COLUMNS * GRID_ROWS;
+const EXPANSION_SLOT_COUNT = EXPANSION_COLUMNS * EXPANSION_ROWS;
+const TOTAL_SLOT_COUNT = MAIN_SLOT_COUNT + EXPANSION_SLOT_COUNT;
 const MILLISECONDS_PER_SECOND = 1000;
 const SAVE_THROTTLE_MS = 5000;
 const MAX_OFFLINE_SECONDS = 7200;
@@ -45,8 +50,6 @@ const INCOME_BOOST_PER_LEVEL = 0.1;
 const HATCH_SPEED_REDUCTION_PER_LEVEL = 0.05;
 const OFFLINE_STORAGE_SECONDS_PER_LEVEL = 1800;
 const SHOW_DEBUG_PANEL = false;
-const EXPANSION_COLUMNS = 3;
-const EXPANSION_ROWS = 1;
 const MODAL_OVERLAY_DEPTH = 18;
 const THEME = {
   sky: 0x9bd7f2,
@@ -125,6 +128,7 @@ export class FarmScene extends Phaser.Scene {
   private coinText?: Phaser.GameObjects.Text;
   private incomeText?: Phaser.GameObjects.Text;
   private productionStatsText?: Phaser.GameObjects.Text;
+  private expansionContainer?: Phaser.GameObjects.Container;
   private toastContainer?: Phaser.GameObjects.Container;
   private toastTween?: Phaser.Tweens.Tween;
   private farmSlots: FarmSlotState[] = [];
@@ -143,6 +147,7 @@ export class FarmScene extends Phaser.Scene {
   private cellSize = CELL_SIZE;
   private gridGap = GRID_GAP;
   private currentEggCost = STARTING_EGG_COST;
+  private expansionUnlocked = false;
   private nextMonsterId = 1;
   private incomeAccumulatorMs = 0;
   private saveThrottleAccumulatorMs = 0;
@@ -212,12 +217,14 @@ export class FarmScene extends Phaser.Scene {
     this.hatchStatusText = undefined;
     this.hatchProgressFill = undefined;
     this.hatchPanel = undefined;
+    this.expansionContainer = undefined;
     this.menuButtons = [];
     this.productionStatsText = undefined;
     this.currentEggCost = STARTING_EGG_COST;
+    this.expansionUnlocked = false;
     this.clearToast();
     this.farmSlots = this.createInitialFarmSlots();
-    this.monsterVisuals = Array.from({ length: GRID_COLUMNS * GRID_ROWS }, () => null);
+    this.monsterVisuals = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
     this.createFarmBackground();
     this.createFarmGrid();
     this.createExpansionPlaceholder();
@@ -343,81 +350,157 @@ export class FarmScene extends Phaser.Scene {
     this.cellSize = layout.cellSize;
     this.gridGap = layout.gridGap;
 
-    this.slotCenters = [];
+    this.slotCenters = Array.from({ length: TOTAL_SLOT_COUNT }, () => new Phaser.Math.Vector2(-9999, -9999));
 
     for (let row = 0; row < GRID_ROWS; row += 1) {
       for (let column = 0; column < GRID_COLUMNS; column += 1) {
         const x = startX + column * (this.cellSize + this.gridGap);
         const y = startY + row * (this.cellSize + this.gridGap);
 
-        const slotId = this.slotCenters.length;
-        this.add.rectangle(x + 4, y + 5, this.cellSize, this.cellSize, THEME.shadow, 0.24)
-          .setOrigin(0);
-
-        const slotTile = this.add.rectangle(x, y, this.cellSize, this.cellSize, THEME.slot)
-          .setOrigin(0)
-          .setStrokeStyle(3, THEME.slotBorder, 0.9);
-
-        this.add.rectangle(x + 8, y + 8, this.cellSize - 16, this.cellSize - 16, THEME.slotInner, 0.22)
-          .setOrigin(0);
-
-        slotTile
-          .setInteractive({ useHandCursor: true })
-          .on('pointerdown', () => {
-            if (this.isModalOpen()) {
-              return;
-            }
-
-            this.selectSlot(slotId);
-          });
-
-        this.slotCenters.push(new Phaser.Math.Vector2(x + this.cellSize / 2, y + this.cellSize / 2));
+        const slotId = row * GRID_COLUMNS + column;
+        this.addUnlockedSlotTile(undefined, x, y, slotId);
+        this.slotCenters[slotId] = new Phaser.Math.Vector2(x + this.cellSize / 2, y + this.cellSize / 2);
       }
     }
   }
 
   private createExpansionPlaceholder(): void {
+    this.expansionContainer?.destroy();
+
     const layout = this.getLayout();
     const startX = layout.expansionStartX;
     const labelY = layout.expansionLabelY;
     const startY = layout.expansionStartY;
+    const expansionContainer = this.add.container(0, 0);
 
-    this.add.text(this.scale.width / 2, labelY, layout.isNarrow ? 'Expansion - Coming soon' : 'Farm Expansion - Coming soon', {
-      color: '#d9d6ec',
-      fontFamily: 'Arial, sans-serif',
-      fontSize: layout.isNarrow ? '14px' : '16px',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
+    if (this.expansionUnlocked) {
+      expansionContainer.add(this.add.text(this.scale.width / 2, labelY, 'Expansion Slots', {
+        color: '#d9d6ec',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: layout.isNarrow ? '14px' : '16px',
+        fontStyle: 'bold',
+      }).setOrigin(0.5));
+    } else {
+      const unlockText = this.add.text(this.scale.width / 2, labelY, `Unlock +3 slots - ${EXPANSION_UNLOCK_COST}`, {
+        color: THEME.text,
+        fontFamily: 'Arial, sans-serif',
+        fontSize: layout.isNarrow ? '13px' : '15px',
+        fontStyle: 'bold',
+        backgroundColor: `#${THEME.buttonWarm.toString(16).padStart(6, '0')}`,
+        padding: {
+          x: 10,
+          y: 5,
+        },
+      }).setOrigin(0.5);
+
+      unlockText
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          if (this.isModalOpen()) {
+            return;
+          }
+
+          this.playButtonClickSound();
+          this.tryUnlockExpansion();
+        });
+
+      expansionContainer.add(unlockText);
+    }
 
     for (let row = 0; row < EXPANSION_ROWS; row += 1) {
       for (let column = 0; column < EXPANSION_COLUMNS; column += 1) {
         const x = startX + column * (this.cellSize + this.gridGap);
         const y = startY + row * (this.cellSize + this.gridGap);
+        const slotId = MAIN_SLOT_COUNT + row * EXPANSION_COLUMNS + column;
 
-        this.add.rectangle(x + 3, y + 4, this.cellSize, this.cellSize, THEME.shadow, 0.22)
-          .setOrigin(0);
+        this.slotCenters[slotId] = new Phaser.Math.Vector2(x + this.cellSize / 2, y + this.cellSize / 2);
 
-        this.add.rectangle(x, y, this.cellSize, this.cellSize, THEME.locked, 0.72)
-          .setOrigin(0)
-          .setStrokeStyle(3, THEME.lockedBorder, 0.72);
+        if (this.expansionUnlocked) {
+          this.addUnlockedSlotTile(expansionContainer, x, y, slotId, false);
+          continue;
+        }
 
-        this.add.rectangle(x + 8, y + 8, this.cellSize - 16, this.cellSize - 16, THEME.lockedInner, 0.22)
-          .setOrigin(0);
-
-        this.add.text(x + this.cellSize / 2, y + this.cellSize / 2 - 8, 'LOCK', {
-          color: '#d1d9d2',
-          fontFamily: 'Arial, sans-serif',
-          fontSize: layout.isNarrow ? '12px' : '14px',
-          fontStyle: 'bold',
-        }).setOrigin(0.5);
-
-        this.add.text(x + this.cellSize / 2, y + this.cellSize / 2 + 13, 'Soon', {
-          color: '#b4c1b8',
-          fontFamily: 'Arial, sans-serif',
-          fontSize: '12px',
-        }).setOrigin(0.5);
+        this.addLockedExpansionSlotTile(expansionContainer, x, y, layout.isNarrow);
       }
     }
+
+    this.expansionContainer = expansionContainer;
+  }
+
+  private addUnlockedSlotTile(
+    container: Phaser.GameObjects.Container | undefined,
+    x: number,
+    y: number,
+    slotId: number,
+    enableSlotClick = true,
+  ): void {
+    const shadow = this.add.rectangle(x + 4, y + 5, this.cellSize, this.cellSize, THEME.shadow, 0.24)
+      .setOrigin(0);
+
+    const slotTile = this.add.rectangle(x, y, this.cellSize, this.cellSize, THEME.slot)
+      .setOrigin(0)
+      .setStrokeStyle(3, THEME.slotBorder, 0.9);
+
+    const inner = this.add.rectangle(x + 8, y + 8, this.cellSize - 16, this.cellSize - 16, THEME.slotInner, 0.22)
+      .setOrigin(0);
+
+    container?.add([shadow, slotTile, inner]);
+
+    if (enableSlotClick) {
+      slotTile
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          if (this.isModalOpen()) {
+            return;
+          }
+
+          this.selectSlot(slotId);
+        });
+    }
+  }
+
+  private addLockedExpansionSlotTile(
+    container: Phaser.GameObjects.Container,
+    x: number,
+    y: number,
+    isNarrow: boolean,
+  ): void {
+    container.add(this.add.rectangle(x + 3, y + 4, this.cellSize, this.cellSize, THEME.shadow, 0.22)
+      .setOrigin(0));
+
+    const lockedTile = this.add.rectangle(x, y, this.cellSize, this.cellSize, THEME.locked, 0.72)
+      .setOrigin(0)
+      .setStrokeStyle(3, THEME.lockedBorder, 0.72);
+
+    lockedTile
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        if (this.isModalOpen()) {
+          return;
+        }
+
+        this.playButtonClickSound();
+        this.tryUnlockExpansion();
+      });
+
+    container.add(lockedTile);
+
+    container.add(this.add.rectangle(x + 8, y + 8, this.cellSize - 16, this.cellSize - 16, THEME.lockedInner, 0.22)
+      .setOrigin(0));
+
+    container.add(this.add.text(x + this.cellSize / 2, y + this.cellSize / 2 - 8, 'LOCK', {
+      color: '#d1d9d2',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: isNarrow ? '12px' : '14px',
+      fontStyle: 'bold',
+    }).setOrigin(0.5));
+
+    container.add(this.add.text(x + this.cellSize / 2, y + this.cellSize / 2 + 13, '500', {
+      color: '#fff4a8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '12px',
+      fontStyle: 'bold',
+    }).setOrigin(0.5));
   }
 
   private createHud(): void {
@@ -1333,10 +1416,38 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private createInitialFarmSlots(): FarmSlotState[] {
-    return Array.from({ length: GRID_COLUMNS * GRID_ROWS }, (_, index) => ({
+    return Array.from({ length: TOTAL_SLOT_COUNT }, (_, index) => ({
       id: index,
       monster: null,
     }));
+  }
+
+  private isSlotUnlocked(slotId: number): boolean {
+    return slotId >= 0 && (slotId < MAIN_SLOT_COUNT || this.expansionUnlocked);
+  }
+
+  private getUnlockedFarmSlots(): FarmSlotState[] {
+    return this.farmSlots.filter((slot) => this.isSlotUnlocked(slot.id));
+  }
+
+  private tryUnlockExpansion(): void {
+    if (this.expansionUnlocked) {
+      return;
+    }
+
+    if (this.currency.coins < EXPANSION_UNLOCK_COST) {
+      this.showNotEnoughCoinsMessage();
+      return;
+    }
+
+    this.currency.coins = this.sanitizeCoins(this.currency.coins - EXPANSION_UNLOCK_COST);
+    this.expansionUnlocked = true;
+    this.skipSavingUntilProgress = false;
+    this.createExpansionPlaceholder();
+    this.hideFarmMessage();
+    this.updateHud();
+    this.saveProgress();
+    this.showToast('Expansion unlocked', 'success');
   }
 
   private createInitialUpgradeLevels(): Record<UpgradeId, number> {
@@ -1406,7 +1517,7 @@ export class FarmScene extends Phaser.Scene {
 
   private scheduleInitialOnboardingHints(): void {
     this.time.delayedCall(450, () => {
-      if (this.farmSlots.some((slot) => slot.monster)) {
+      if (this.getUnlockedFarmSlots().some((slot) => slot.monster)) {
         this.showOnboardingHint('income', 'Monsters earn coins every second.');
         this.checkMergeOnboardingHint();
         return;
@@ -1415,7 +1526,7 @@ export class FarmScene extends Phaser.Scene {
       this.showOnboardingHint('welcome', 'Welcome! Build a monster farm.');
 
       this.time.delayedCall(1500, () => {
-        if (this.farmSlots.every((slot) => slot.monster === null)) {
+        if (this.getUnlockedFarmSlots().every((slot) => slot.monster === null)) {
           this.showOnboardingHint('hatch', 'Tap Hatch Egg to create monsters.');
         }
       });
@@ -1443,7 +1554,7 @@ export class FarmScene extends Phaser.Scene {
   private hasMergeableMonsterPair(): boolean {
     const monsterCounts = new Map<string, number>();
 
-    this.farmSlots.forEach((slot) => {
+    this.getUnlockedFarmSlots().forEach((slot) => {
       if (!slot.monster || !getNextMonsterDefinition(slot.monster.family, slot.monster.level)) {
         return;
       }
@@ -1516,7 +1627,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private hatchBabySlime(): void {
-    const emptySlot = this.farmSlots.find((slot) => slot.monster === null);
+    const emptySlot = this.getUnlockedFarmSlots().find((slot) => slot.monster === null);
 
     if (!emptySlot) {
       this.showFullFarmMessage();
@@ -1602,7 +1713,7 @@ export class FarmScene extends Phaser.Scene {
       this.hatchStatusText?.setText(`${Math.ceil((cooldownMs - this.hatchCooldownMs) / 1000)}s - Cost: ${this.currentEggCost}`);
     } else if (isFull) {
       this.hatchLabelText?.setText('Farm Full');
-      this.hatchStatusText?.setText('Merge to free a slot');
+      this.hatchStatusText?.setText(this.expansionUnlocked ? 'Merge to free a slot' : 'Unlock +3 slots');
     } else if (!canAfford) {
       this.hatchLabelText?.setText('Need Coins');
       this.hatchStatusText?.setText(`Cost: ${this.currentEggCost} coins`);
@@ -2123,11 +2234,11 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private isFarmFull(): boolean {
-    return this.farmSlots.every((slot) => slot.monster !== null);
+    return this.getUnlockedFarmSlots().every((slot) => slot.monster !== null);
   }
 
   private showFullFarmMessage(): void {
-    this.showFarmMessage('Farm is full', 'warning');
+    this.showFarmMessage(this.expansionUnlocked ? 'Farm is full' : 'Farm full - unlock slots', 'warning');
   }
 
   private showNotEnoughCoinsMessage(): void {
@@ -2231,12 +2342,22 @@ export class FarmScene extends Phaser.Scene {
 
     const targetSlotId = this.findSlotIdAtPoint(dropWorldX, dropWorldY);
 
-    if (targetSlotId === null || !this.canMergeSlots(sourceSlotId, targetSlotId)) {
+    if (targetSlotId === null || !this.isSlotUnlocked(targetSlotId)) {
       this.returnMonsterVisualToSlot(sourceSlotId, visual);
       return;
     }
 
-    this.mergeSlots(sourceSlotId, targetSlotId);
+    if (this.canMoveSlots(sourceSlotId, targetSlotId)) {
+      this.moveSlotMonster(sourceSlotId, targetSlotId);
+      return;
+    }
+
+    if (this.canMergeSlots(sourceSlotId, targetSlotId)) {
+      this.mergeSlots(sourceSlotId, targetSlotId);
+      return;
+    }
+
+    this.returnMonsterVisualToSlot(sourceSlotId, visual);
   }
 
   private findSlotIdAtPoint(worldX: number, worldY: number): number | null {
@@ -2253,7 +2374,12 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private canMergeSlots(sourceSlotId: number, targetSlotId: number): boolean {
-    if (sourceSlotId === targetSlotId || targetSlotId < 0) {
+    if (
+      sourceSlotId === targetSlotId
+      || targetSlotId < 0
+      || !this.isSlotUnlocked(sourceSlotId)
+      || !this.isSlotUnlocked(targetSlotId)
+    ) {
       return false;
     }
 
@@ -2261,6 +2387,38 @@ export class FarmScene extends Phaser.Scene {
     const targetMonster = this.farmSlots[targetSlotId]?.monster;
 
     return Boolean(this.getMergeResultDefinition(sourceMonster, targetMonster));
+  }
+
+  private canMoveSlots(sourceSlotId: number, targetSlotId: number): boolean {
+    if (
+      sourceSlotId === targetSlotId
+      || targetSlotId < 0
+      || !this.isSlotUnlocked(sourceSlotId)
+      || !this.isSlotUnlocked(targetSlotId)
+    ) {
+      return false;
+    }
+
+    return Boolean(this.farmSlots[sourceSlotId]?.monster && this.farmSlots[targetSlotId]?.monster === null);
+  }
+
+  private moveSlotMonster(sourceSlotId: number, targetSlotId: number): void {
+    const sourceMonster = this.farmSlots[sourceSlotId]?.monster;
+
+    if (!sourceMonster || !this.isSlotUnlocked(targetSlotId) || this.farmSlots[targetSlotId]?.monster) {
+      return;
+    }
+
+    this.clearSelectedSlot();
+    this.farmSlots[sourceSlotId].monster = null;
+    this.farmSlots[targetSlotId].monster = sourceMonster;
+
+    this.clearMonsterVisual(sourceSlotId);
+    this.renderMonsterInSlot(this.farmSlots[targetSlotId]);
+    this.updateHud();
+    this.selectSlot(targetSlotId);
+    this.skipSavingUntilProgress = false;
+    this.saveProgress();
   }
 
   private mergeSlots(sourceSlotId: number, targetSlotId: number): void {
@@ -2355,6 +2513,8 @@ export class FarmScene extends Phaser.Scene {
     }
 
     this.currency.coins = sanitizeSavedCoins(saveData.coins);
+    this.expansionUnlocked = saveData.expansionUnlocked;
+    this.createExpansionPlaceholder();
 
     saveData.discoveredMonsters.forEach((savedDiscovery) => {
       const monsterDefinition = getMonsterDefinition(savedDiscovery.family, savedDiscovery.level);
@@ -2366,6 +2526,10 @@ export class FarmScene extends Phaser.Scene {
 
     saveData.grid.forEach((savedSlot, slotId) => {
       if (!savedSlot) {
+        return;
+      }
+
+      if (!this.isSlotUnlocked(slotId)) {
         return;
       }
 
@@ -2432,6 +2596,7 @@ export class FarmScene extends Phaser.Scene {
       upgrades: this.getSanitizedUpgradeLevels(),
       currentEggCost: this.sanitizeEggCost(this.currentEggCost),
       onboardingHintsSeen: Array.from(this.onboardingHintsSeen),
+      expansionUnlocked: this.expansionUnlocked,
     });
 
     this.hasUnsavedProgress = false;
@@ -2464,12 +2629,14 @@ export class FarmScene extends Phaser.Scene {
     this.onboardingHintsSeen = new Set<OnboardingHintId>();
     this.upgradeLevels = this.createInitialUpgradeLevels();
     this.currentEggCost = STARTING_EGG_COST;
+    this.expansionUnlocked = false;
     this.farmSlots = this.createInitialFarmSlots();
 
     this.monsterVisuals.forEach((visual) => {
       visual?.destroy();
     });
-    this.monsterVisuals = Array.from({ length: GRID_COLUMNS * GRID_ROWS }, () => null);
+    this.monsterVisuals = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
+    this.createExpansionPlaceholder();
 
     this.hideFarmMessage();
     this.clearSelectedSlot();
@@ -2499,12 +2666,13 @@ export class FarmScene extends Phaser.Scene {
     return (
       this.currency.coins !== STARTING_COINS
       || this.currentEggCost !== STARTING_EGG_COST
+      || this.expansionUnlocked
       || this.farmSlots.some((slot) => slot.monster !== null)
     );
   }
 
   private ensureStarterCoinsForEmptyFarm(): void {
-    if (this.farmSlots.some((slot) => slot.monster !== null) || this.currency.coins >= STARTING_EGG_COST) {
+    if (this.getUnlockedFarmSlots().some((slot) => slot.monster !== null) || this.currency.coins >= STARTING_EGG_COST) {
       return;
     }
 

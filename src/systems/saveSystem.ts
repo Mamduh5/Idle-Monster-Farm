@@ -24,6 +24,7 @@ export type LocalSaveData = {
   upgrades: Record<UpgradeId, number>;
   currentEggCost: number;
   onboardingHintsSeen: OnboardingHintId[];
+  expansionUnlocked: boolean;
 };
 
 export function loadSaveData(slotCount: number): LocalSaveData | null {
@@ -94,6 +95,7 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
     upgrades: normalizeUpgradeLevels(rawData.upgrades),
     currentEggCost: normalizeEggCost(rawData.currentEggCost),
     onboardingHintsSeen: normalizeOnboardingHints(rawData.onboardingHintsSeen),
+    expansionUnlocked: rawData.expansionUnlocked === true,
   };
 }
 
