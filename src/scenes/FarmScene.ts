@@ -15,6 +15,13 @@ import {
   type UpgradeId,
 } from '../data/upgrades';
 import {
+  GRASS_FARM_ZONE_ID,
+  MUSHROOM_FOREST_ZONE_ID,
+  ZONE_DEFINITIONS,
+  type ZoneDefinition,
+  type ZoneId,
+} from '../data/zones';
+import {
   clearSaveData,
   loadSaveData,
   sanitizeSavedCoins,
@@ -46,6 +53,7 @@ const SAVE_THROTTLE_MS = 5000;
 const MAX_OFFLINE_SECONDS = 7200;
 const HATCH_COOLDOWN_MS = 3000;
 const BASE_MUSHROOM_HATCH_CHANCE = 0.2;
+const MUSHROOM_FOREST_HATCH_CHANCE_BONUS = 0.05;
 const MUSHROOM_HATCH_CHANCE_PER_LEVEL = 0.03;
 const HATCH_PROGRESS_WIDTH = 142;
 const STARTING_COINS = STARTING_EGG_COST;
@@ -137,6 +145,7 @@ export class FarmScene extends Phaser.Scene {
   private coinText?: Phaser.GameObjects.Text;
   private incomeText?: Phaser.GameObjects.Text;
   private productionStatsText?: Phaser.GameObjects.Text;
+  private backgroundContainer?: Phaser.GameObjects.Container;
   private expansionContainer?: Phaser.GameObjects.Container;
   private toastContainer?: Phaser.GameObjects.Container;
   private toastTween?: Phaser.Tweens.Tween;
@@ -167,6 +176,7 @@ export class FarmScene extends Phaser.Scene {
   private compendiumPanel?: Phaser.GameObjects.Container;
   private settingsPanel?: Phaser.GameObjects.Container;
   private helpPanel?: Phaser.GameObjects.Container;
+  private zonePanel?: Phaser.GameObjects.Container;
   private missionsPanel?: Phaser.GameObjects.Container;
   private upgradeShopPanel?: Phaser.GameObjects.Container;
   private prestigePanel?: Phaser.GameObjects.Container;
@@ -180,6 +190,9 @@ export class FarmScene extends Phaser.Scene {
   private missionProgress: Record<MissionId, number> = this.createInitialMissionProgress();
   private completedMissionIds = new Set<MissionId>();
   private claimedMissionIds = new Set<MissionId>();
+  private unlockedZones = new Set<ZoneId>([GRASS_FARM_ZONE_ID]);
+  private currentZone: ZoneId = GRASS_FARM_ZONE_ID;
+  private hasPrestigedOnce = false;
   private settings: GameSettings = loadSettings();
   private resetConfirmationArmed = false;
   private prestigeConfirmationArmed = false;
@@ -222,6 +235,7 @@ export class FarmScene extends Phaser.Scene {
     this.compendiumPanel = undefined;
     this.settingsPanel = undefined;
     this.helpPanel = undefined;
+    this.zonePanel = undefined;
     this.missionsPanel = undefined;
     this.upgradeShopPanel = undefined;
     this.prestigePanel = undefined;
@@ -235,6 +249,9 @@ export class FarmScene extends Phaser.Scene {
     this.missionProgress = this.createInitialMissionProgress();
     this.completedMissionIds = new Set<MissionId>();
     this.claimedMissionIds = new Set<MissionId>();
+    this.unlockedZones = new Set<ZoneId>([GRASS_FARM_ZONE_ID]);
+    this.currentZone = GRASS_FARM_ZONE_ID;
+    this.hasPrestigedOnce = false;
     this.settings = loadSettings();
     this.syncAudioSettings();
     this.resetConfirmationArmed = false;
@@ -245,6 +262,7 @@ export class FarmScene extends Phaser.Scene {
     this.hatchStatusText = undefined;
     this.hatchProgressFill = undefined;
     this.hatchPanel = undefined;
+    this.backgroundContainer = undefined;
     this.expansionContainer = undefined;
     this.menuButtons = [];
     this.productionStatsText = undefined;
@@ -264,6 +282,7 @@ export class FarmScene extends Phaser.Scene {
     this.createSettingsControl();
     this.createCompendiumControl();
     this.createHelpControl();
+    this.createZoneControl();
     this.createMissionsControl();
     this.createUpgradeShopControl();
     this.createPrestigeControl();
@@ -286,26 +305,52 @@ export class FarmScene extends Phaser.Scene {
 
   private createFarmBackground(): void {
     const { width, height } = this.scale;
+    const isMushroomForest = this.currentZone === MUSHROOM_FOREST_ZONE_ID;
+    const skyColor = isMushroomForest ? 0x637d68 : THEME.sky;
+    const groundColor = isMushroomForest ? 0x355f3f : THEME.grass;
+    const groundPatchColor = isMushroomForest ? 0x4e7a4a : THEME.grassPatch;
+    const lowerGroundColor = isMushroomForest ? 0x3b2f28 : THEME.dirt;
+    const lowerGroundDarkColor = isMushroomForest ? 0x231f1b : THEME.dirtDark;
 
-    this.add.rectangle(0, 0, width, height, THEME.grass).setOrigin(0);
-    this.add.rectangle(0, 0, width, 92, THEME.sky).setOrigin(0).setAlpha(0.9);
-    this.add.rectangle(0, 92, width, 18, THEME.grassPatch).setOrigin(0).setAlpha(0.7);
-    this.add.rectangle(0, height - 96, width, 96, THEME.dirt).setOrigin(0).setAlpha(0.56);
-    this.add.rectangle(0, height - 96, width, 8, THEME.dirtDark).setOrigin(0).setAlpha(0.3);
+    this.backgroundContainer?.destroy();
+    const backgroundContainer = this.add.container(0, 0).setDepth(-30);
+
+    backgroundContainer.add(this.add.rectangle(0, 0, width, height, groundColor).setOrigin(0));
+    backgroundContainer.add(this.add.rectangle(0, 0, width, 92, skyColor).setOrigin(0).setAlpha(0.9));
+    backgroundContainer.add(this.add.rectangle(0, 92, width, 18, groundPatchColor).setOrigin(0).setAlpha(0.7));
+    backgroundContainer.add(this.add.rectangle(0, height - 96, width, 96, lowerGroundColor).setOrigin(0).setAlpha(0.56));
+    backgroundContainer.add(this.add.rectangle(0, height - 96, width, 8, lowerGroundDarkColor).setOrigin(0).setAlpha(0.3));
 
     const graphics = this.add.graphics();
-    graphics.setDepth(-1);
 
     for (let x = 24; x < width; x += 72) {
       const y = 116 + ((x / 24) % 5) * 34;
-      graphics.fillStyle(THEME.grassPatch, 0.24);
+      graphics.fillStyle(groundPatchColor, isMushroomForest ? 0.32 : 0.24);
       graphics.fillEllipse(x, y, 34, 10);
     }
 
     for (let x = 36; x < width; x += 92) {
-      graphics.fillStyle(THEME.dirtDark, 0.18);
+      graphics.fillStyle(lowerGroundDarkColor, 0.18);
       graphics.fillEllipse(x, height - 52 + (x % 3) * 5, 26, 8);
     }
+
+    if (isMushroomForest) {
+      for (let x = 30; x < width; x += 86) {
+        const y = 118 + ((x / 43) % 4) * 42;
+        graphics.fillStyle(0x5b3f74, 0.24);
+        graphics.fillCircle(x, y, 18);
+        graphics.fillStyle(0xe7dbc0, 0.68);
+        graphics.fillRoundedRect(x - 5, y + 8, 10, 16, 4);
+      }
+
+      for (let x = 64; x < width; x += 120) {
+        graphics.fillStyle(0x253f2f, 0.32);
+        graphics.fillTriangle(x, 100, x - 34, 184, x + 34, 184);
+      }
+    }
+
+    backgroundContainer.add(graphics);
+    this.backgroundContainer = backgroundContainer;
   }
 
   private getLayout(): FarmSceneLayout {
@@ -330,8 +375,8 @@ export class FarmScene extends Phaser.Scene {
     const statsY = isNarrow ? hudY + hudHeight + 8 : 94;
     const menuX = width - margin;
     const menuY = isNarrow ? 10 : 22;
-    const menuGap = isNarrow ? 29 : 40;
-    const menuButtonCount = SHOW_DEBUG_PANEL ? 7 : 6;
+    const menuGap = isNarrow ? 25 : 40;
+    const menuButtonCount = SHOW_DEBUG_PANEL ? 8 : 7;
     const menuBottom = menuY + (menuButtonCount - 1) * menuGap + 30;
     const topContentBottom = isNarrow ? Math.max(statsY + statsHeight, menuBottom) : 126;
     const hatchWidth = Math.min(260, width - margin * 2);
@@ -674,19 +719,25 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private createMissionsControl(): void {
-    this.createMenuButton('Goals', 3, () => {
+    this.createMenuButton('Goals', 4, () => {
       this.toggleMissionsPanel();
     });
   }
 
+  private createZoneControl(): void {
+    this.createMenuButton('Zone', 3, () => {
+      this.toggleZonePanel();
+    });
+  }
+
   private createUpgradeShopControl(): void {
-    this.createMenuButton('Upgrades', 4, () => {
+    this.createMenuButton('Upgrades', 5, () => {
       this.toggleUpgradeShopPanel();
     });
   }
 
   private createPrestigeControl(): void {
-    this.createMenuButton('Prestige', 5, () => {
+    this.createMenuButton('Prestige', 6, () => {
       this.togglePrestigePanel();
     });
   }
@@ -696,7 +747,7 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    this.createMenuButton('Debug (D)', 6, () => {
+    this.createMenuButton('Debug (D)', 7, () => {
       this.toggleEconomyDebugPanel();
     }, `#${THEME.buttonWarm.toString(16).padStart(6, '0')}`);
   }
@@ -824,6 +875,7 @@ export class FarmScene extends Phaser.Scene {
       this.compendiumPanel
       || this.settingsPanel
       || this.helpPanel
+      || this.zonePanel
       || this.missionsPanel
       || this.upgradeShopPanel
       || this.prestigePanel
@@ -857,6 +909,11 @@ export class FarmScene extends Phaser.Scene {
 
     if (this.prestigePanel) {
       this.closePrestigePanel();
+      return;
+    }
+
+    if (this.zonePanel) {
+      this.closeZonePanel();
       return;
     }
 
@@ -954,6 +1011,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeSettingsPanel(false);
     this.closeCompendiumPanel();
     this.closeHelpPanel();
+    this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
@@ -1122,6 +1180,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
+    this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
@@ -1237,6 +1296,188 @@ export class FarmScene extends Phaser.Scene {
     }
   }
 
+  private toggleZonePanel(): void {
+    if (this.zonePanel) {
+      this.closeZonePanel();
+      return;
+    }
+
+    this.openZonePanel();
+  }
+
+  private openZonePanel(): void {
+    this.closeZonePanel();
+    this.closeCompendiumPanel();
+    this.closeSettingsPanel();
+    this.closeHelpPanel();
+    this.closeMissionsPanel();
+    this.closeUpgradeShopPanel();
+    this.closePrestigePanel();
+    this.closeEconomyDebugPanel();
+    this.cancelActiveDrag();
+    this.clearSelectedSlot();
+    this.showModalOverlay();
+
+    const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
+    const { width: panelWidth, height: panelHeight } = this.getPanelSize(460, 360);
+    const firstRowY = -panelHeight / 2 + 104;
+    const rowGap = Math.min(96, Math.max(78, (panelHeight - 128) / ZONE_DEFINITIONS.length));
+    const rowHeight = Math.min(84, rowGap - 8);
+
+    panel.setDepth(24);
+    this.addPanelBackground(panel, panelWidth, panelHeight);
+
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Zone', {
+      color: THEME.text,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '24px',
+      fontStyle: 'bold',
+    }));
+
+    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, 'Close', {
+      color: THEME.text,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+      backgroundColor: '#49395d',
+      padding: {
+        x: 9,
+        y: 5,
+      },
+    }).setOrigin(1, 0);
+
+    closeText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.playButtonClickSound();
+        this.closeZonePanel();
+      });
+
+    panel.add(closeText);
+
+    ZONE_DEFINITIONS.forEach((zone, index) => {
+      this.addZoneRow(panel, zone, firstRowY + index * rowGap, panelWidth, rowHeight);
+    });
+
+    this.zonePanel = panel;
+  }
+
+  private addZoneRow(
+    panel: Phaser.GameObjects.Container,
+    zone: ZoneDefinition,
+    rowY: number,
+    panelWidth: number,
+    rowHeight: number,
+  ): void {
+    const isCompactPanel = panelWidth < 400;
+    const isUnlocked = this.unlockedZones.has(zone.id);
+    const isCurrent = this.currentZone === zone.id;
+    const canSelect = isUnlocked && !isCurrent;
+    const rowTop = rowY - rowHeight / 2;
+    const statusText = isCurrent
+      ? 'Selected'
+      : isUnlocked
+        ? 'Unlocked'
+        : 'Locked - Prestige once';
+    const bonusText = zone.id === MUSHROOM_FOREST_ZONE_ID
+      ? `Mushroom hatch +${Math.round(MUSHROOM_FOREST_HATCH_CHANCE_BONUS * 100)}%`
+      : 'Default farm';
+
+    panel.add(this.add.rectangle(0, rowY, panelWidth - 48, rowHeight, isUnlocked ? THEME.panelAlt : 0x29362f, 0.92)
+      .setStrokeStyle(2, isCurrent ? THEME.panelBorder : canSelect ? THEME.slot : THEME.lockedBorder, 0.78));
+
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 9, zone.name, {
+      color: isUnlocked ? THEME.text : '#9ca79f',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: isCompactPanel ? '15px' : '17px',
+      fontStyle: 'bold',
+    }));
+
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 33, statusText, {
+      color: isUnlocked ? '#cdebb3' : THEME.mutedText,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: isCompactPanel ? '12px' : '13px',
+      wordWrap: {
+        width: panelWidth - 170,
+      },
+    }));
+
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 51, bonusText, {
+      color: zone.id === MUSHROOM_FOREST_ZONE_ID ? '#fff4a8' : THEME.mutedText,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: isCompactPanel ? '11px' : '12px',
+      wordWrap: {
+        width: panelWidth - 170,
+      },
+    }));
+
+    const actionText = this.add.text(panelWidth / 2 - 42, rowY, isCurrent ? 'Current' : isUnlocked ? 'Switch' : 'Locked', {
+      color: isUnlocked ? '#ffffff' : '#9ca79f',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: isCompactPanel ? '13px' : '14px',
+      fontStyle: 'bold',
+      backgroundColor: `#${(canSelect ? THEME.buttonHover : THEME.lockedInner).toString(16).padStart(6, '0')}`,
+      padding: {
+        x: isCompactPanel ? 9 : 11,
+        y: 5,
+      },
+    }).setOrigin(1, 0.5);
+
+    if (canSelect) {
+      actionText
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          this.playButtonClickSound();
+          this.switchZone(zone.id);
+        });
+    }
+
+    panel.add(actionText);
+  }
+
+  private closeZonePanel(): void {
+    if (this.zonePanel) {
+      this.zonePanel.destroy();
+      this.zonePanel = undefined;
+      this.hideModalOverlay();
+    }
+  }
+
+  private getCurrentZoneDefinition(): ZoneDefinition {
+    return ZONE_DEFINITIONS.find((zone) => zone.id === this.currentZone) ?? ZONE_DEFINITIONS[0];
+  }
+
+  private switchZone(zoneId: ZoneId): void {
+    if (!this.unlockedZones.has(zoneId) || this.currentZone === zoneId) {
+      return;
+    }
+
+    this.currentZone = zoneId;
+    this.createFarmBackground();
+    this.updateHud();
+    this.skipSavingUntilProgress = false;
+    this.saveProgress();
+    this.openZonePanel();
+    this.showToast(`${this.getCurrentZoneDefinition().name} selected`, 'success');
+  }
+
+  private syncZoneUnlockFromPrestigeProgress(): void {
+    if (this.hasPrestigedOnce || this.monsterEssence > 0 || this.essencePowerLevel > 0) {
+      this.hasPrestigedOnce = true;
+      this.unlockedZones.add(MUSHROOM_FOREST_ZONE_ID);
+    }
+
+    this.unlockedZones.add(GRASS_FARM_ZONE_ID);
+
+    if (!this.unlockedZones.has(this.currentZone)) {
+      this.currentZone = GRASS_FARM_ZONE_ID;
+    }
+  }
+
+  private getCurrentZoneMushroomHatchBonus(): number {
+    return this.currentZone === MUSHROOM_FOREST_ZONE_ID ? MUSHROOM_FOREST_HATCH_CHANCE_BONUS : 0;
+  }
+
   private toggleMissionsPanel(): void {
     if (this.missionsPanel) {
       this.closeMissionsPanel();
@@ -1251,6 +1492,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closeZonePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -1393,6 +1635,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
@@ -1501,6 +1744,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closeZonePanel();
     this.closeMissionsPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -1660,6 +1904,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeUpgradeShopPanel();
     this.closeEconomyDebugPanel();
@@ -2100,6 +2345,8 @@ export class FarmScene extends Phaser.Scene {
 
     this.monsterEssence -= ESSENCE_POWER_COST;
     this.essencePowerLevel += 1;
+    this.hasPrestigedOnce = true;
+    this.syncZoneUnlockFromPrestigeProgress();
     this.prestigeConfirmationArmed = false;
     this.updateHud();
     this.saveProgress();
@@ -2139,6 +2386,8 @@ export class FarmScene extends Phaser.Scene {
 
   private performPrestigeReset(essenceReward: number): void {
     this.monsterEssence += essenceReward;
+    this.hasPrestigedOnce = true;
+    this.syncZoneUnlockFromPrestigeProgress();
     this.currency.coins = STARTING_COINS;
     this.nextMonsterId = 1;
     this.incomeAccumulatorMs = 0;
@@ -2283,6 +2532,7 @@ export class FarmScene extends Phaser.Scene {
 
   private getMushroomHatchChance(): number {
     const chance = BASE_MUSHROOM_HATCH_CHANCE
+      + this.getCurrentZoneMushroomHatchBonus()
       + this.getUpgradeLevel('mushroom-chance') * MUSHROOM_HATCH_CHANCE_PER_LEVEL;
 
     return Phaser.Math.Clamp(chance, 0, 1);
@@ -2440,6 +2690,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
@@ -3424,6 +3675,11 @@ export class FarmScene extends Phaser.Scene {
       this.completedMissionIds.add(missionId);
     });
     this.syncMissionStateFromCurrentProgress(false);
+    this.unlockedZones = new Set(saveData.unlockedZones);
+    this.currentZone = saveData.currentZone;
+    this.hasPrestigedOnce = saveData.hasPrestigedOnce;
+    this.syncZoneUnlockFromPrestigeProgress();
+    this.createFarmBackground();
 
     const offlineCoins = this.calculateOfflineCoins(saveData.lastActiveAt);
 
@@ -3475,6 +3731,9 @@ export class FarmScene extends Phaser.Scene {
       missionProgress: this.getSanitizedMissionProgress(),
       completedMissionIds: Array.from(this.completedMissionIds),
       claimedMissionIds: Array.from(this.claimedMissionIds),
+      unlockedZones: Array.from(this.unlockedZones),
+      currentZone: this.currentZone,
+      hasPrestigedOnce: this.hasPrestigedOnce,
     });
 
     this.hasUnsavedProgress = false;
@@ -3510,6 +3769,9 @@ export class FarmScene extends Phaser.Scene {
     this.missionProgress = this.createInitialMissionProgress();
     this.completedMissionIds = new Set<MissionId>();
     this.claimedMissionIds = new Set<MissionId>();
+    this.unlockedZones = new Set<ZoneId>([GRASS_FARM_ZONE_ID]);
+    this.currentZone = GRASS_FARM_ZONE_ID;
+    this.hasPrestigedOnce = false;
     this.monsterEssence = 0;
     this.essencePowerLevel = 0;
     this.currentEggCost = STARTING_EGG_COST;
@@ -3525,11 +3787,13 @@ export class FarmScene extends Phaser.Scene {
     this.monsterVisuals = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
     this.monsterDragZones = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
     this.createExpansionPlaceholder();
+    this.createFarmBackground();
 
     this.hideFarmMessage();
     this.clearSelectedSlot();
     this.closeCompendiumPanel();
     this.closeHelpPanel();
+    this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
@@ -3563,6 +3827,9 @@ export class FarmScene extends Phaser.Scene {
       || this.monsterEssence > 0
       || this.essencePowerLevel > 0
       || this.expansionUnlocked
+      || this.hasPrestigedOnce
+      || this.currentZone !== GRASS_FARM_ZONE_ID
+      || this.unlockedZones.size > 1
       || this.completedMissionIds.size > 0
       || this.claimedMissionIds.size > 0
       || Object.values(this.missionProgress).some((progress) => progress > 0)

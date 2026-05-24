@@ -1,6 +1,7 @@
 import { STARTING_EGG_COST } from '../data/economy';
 import { MISSION_DEFINITIONS, MISSION_IDS, type MissionId } from '../data/missions';
 import { UPGRADE_DEFINITIONS, type UpgradeId } from '../data/upgrades';
+import { GRASS_FARM_ZONE_ID, ZONE_IDS, type ZoneId } from '../data/zones';
 import {
   isMonsterFamily,
   ONBOARDING_HINT_IDS,
@@ -36,6 +37,9 @@ export type LocalSaveData = {
   missionProgress: Record<MissionId, number>;
   completedMissionIds: MissionId[];
   claimedMissionIds: MissionId[];
+  unlockedZones: ZoneId[];
+  currentZone: ZoneId;
+  hasPrestigedOnce: boolean;
 };
 
 export function loadSaveData(slotCount: number): LocalSaveData | null {
@@ -112,7 +116,38 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
     missionProgress: normalizeMissionProgress(rawData.missionProgress),
     completedMissionIds: normalizeMissionIds(rawData.completedMissionIds),
     claimedMissionIds: normalizeMissionIds(rawData.claimedMissionIds),
+    unlockedZones: normalizeUnlockedZones(rawData.unlockedZones),
+    currentZone: normalizeCurrentZone(rawData.currentZone, rawData.unlockedZones),
+    hasPrestigedOnce: rawData.hasPrestigedOnce === true,
   };
+}
+
+function normalizeUnlockedZones(rawZones: unknown): ZoneId[] {
+  const zones = new Set<ZoneId>([GRASS_FARM_ZONE_ID]);
+
+  if (Array.isArray(rawZones)) {
+    rawZones.forEach((zoneId) => {
+      if (typeof zoneId === 'string' && ZONE_IDS.includes(zoneId as ZoneId)) {
+        zones.add(zoneId as ZoneId);
+      }
+    });
+  }
+
+  return Array.from(zones);
+}
+
+function normalizeCurrentZone(rawCurrentZone: unknown, rawUnlockedZones: unknown): ZoneId {
+  const unlockedZones = normalizeUnlockedZones(rawUnlockedZones);
+
+  if (
+    typeof rawCurrentZone === 'string'
+    && ZONE_IDS.includes(rawCurrentZone as ZoneId)
+    && unlockedZones.includes(rawCurrentZone as ZoneId)
+  ) {
+    return rawCurrentZone as ZoneId;
+  }
+
+  return GRASS_FARM_ZONE_ID;
 }
 
 function normalizeMissionProgress(rawProgress: unknown): Record<MissionId, number> {

@@ -4,6 +4,7 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 
 ## Fresh Save
 - Start with 10 coins and an empty 3x3 grid.
+- Open Zone and confirm Grass Farm is selected and Mushroom Forest is locked with a prestige requirement.
 - Open Goals and confirm starter missions are listed with progress, rewards, and disabled claim states.
 - Hatch the first Baby Slime and confirm passive coin ticks begin.
 - Hatch three monsters and confirm the hatch mission completes.
@@ -31,6 +32,8 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Confirm claimed mission rewards cannot be claimed again after reload.
 - Reload after unlocking expansion and confirm expanded-slot monsters persist.
 - After owning a Level 6+ Slime or Level 5 Mushroom, open Prestige, confirm reset grants Monster Essence, buy Essence Power, and reload to confirm both persist.
+- After prestiging once, confirm Mushroom Forest unlocks in Zone, can be selected, changes the background, and shows the Mushroom hatch +5% bonus.
+- Reload after switching zones and confirm the selected zone and Mushroom Forest unlock persist.
 - After egg costs grow large, confirm Hatch Egg and Production next-egg costs use compact formatting.
 - Confirm Settings persist separately from gameplay save.
 
