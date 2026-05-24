@@ -138,9 +138,6 @@ export class FarmScene extends Phaser.Scene {
   private farmSlots: FarmSlotState[] = [];
   private slotCenters: Phaser.Math.Vector2[] = [];
   private monsterVisuals: Array<MonsterVisual | null> = [];
-  private selectedSlotId: number | null = null;
-  private selectionHighlight?: Phaser.GameObjects.Rectangle;
-  private monsterTooltip?: Phaser.GameObjects.Container;
   private hatchCooldownMs = HATCH_COOLDOWN_MS;
   private hatchLabelText?: Phaser.GameObjects.Text;
   private hatchStatusText?: Phaser.GameObjects.Text;
@@ -213,9 +210,6 @@ export class FarmScene extends Phaser.Scene {
     this.syncAudioSettings();
     this.resetConfirmationArmed = false;
     this.lastBlockedOutsideTapToastAt = 0;
-    this.selectedSlotId = null;
-    this.selectionHighlight = undefined;
-    this.monsterTooltip = undefined;
     this.hatchCooldownMs = HATCH_COOLDOWN_MS;
     this.hatchLabelText = undefined;
     this.hatchStatusText = undefined;
@@ -453,12 +447,14 @@ export class FarmScene extends Phaser.Scene {
     if (enableSlotClick) {
       slotTile
         .setInteractive({ useHandCursor: true })
-        .on('pointerdown', () => {
+        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+          pointer.event?.stopPropagation();
+
           if (this.isModalOpen()) {
             return;
           }
 
-          this.selectSlot(slotId);
+          this.clearSelectedSlot();
         });
     }
   }
@@ -1960,25 +1956,8 @@ export class FarmScene extends Phaser.Scene {
     this.addSlimeVisual(panel, monster.level, visualStyle, iconX, iconY, 0.58 * scale);
   }
 
-  private selectSlot(slotId: number): void {
-    const slot = this.farmSlots[slotId];
-
-    if (!slot?.monster) {
-      this.clearSelectedSlot();
-      return;
-    }
-
-    this.selectedSlotId = slotId;
-    this.showSelectionHighlight(slotId);
-    this.showMonsterTooltip(slotId, slot.monster);
-  }
-
   private clearSelectedSlot(): void {
-    this.selectedSlotId = null;
-    this.selectionHighlight?.destroy();
-    this.selectionHighlight = undefined;
-    this.monsterTooltip?.destroy();
-    this.monsterTooltip = undefined;
+    // On-farm monster details are intentionally disabled so tap state never blocks dragging.
   }
 
   private cancelActiveDrag(): void {
@@ -1991,58 +1970,6 @@ export class FarmScene extends Phaser.Scene {
     this.returnMonsterVisualToSlot(this.activeDragSlotId, this.activeDragVisual);
     this.activeDragSlotId = null;
     this.activeDragVisual = undefined;
-  }
-
-  private showSelectionHighlight(slotId: number): void {
-    const center = this.slotCenters[slotId];
-
-    this.selectionHighlight?.destroy();
-    this.selectionHighlight = this.add.rectangle(center.x, center.y, this.cellSize + 8, this.cellSize + 8, 0xfff4a8, 0)
-      .setStrokeStyle(4, 0xfff4a8, 0.95)
-      .setDepth(4);
-  }
-
-  private showMonsterTooltip(slotId: number, monster: MonsterInstance): void {
-    const definition = getMonsterDefinition(monster.family, monster.level) ?? monster;
-    const center = this.slotCenters[slotId];
-    const tooltipWidth = Math.min(220, this.scale.width - 24);
-    const tooltipHeight = 88;
-    const preferredTooltipX = center.x < this.scale.width / 2
-      ? center.x + tooltipWidth / 2 + this.cellSize / 2 + 14
-      : center.x - tooltipWidth / 2 - this.cellSize / 2 - 14;
-    const tooltipX = Phaser.Math.Clamp(
-      preferredTooltipX,
-      tooltipWidth / 2 + 12,
-      this.scale.width - tooltipWidth / 2 - 12,
-    );
-    const tooltipY = Phaser.Math.Clamp(center.y, tooltipHeight / 2 + 12, this.scale.height - tooltipHeight / 2 - 12);
-
-    this.monsterTooltip?.destroy();
-
-    const tooltip = this.add.container(tooltipX, tooltipY);
-    tooltip.setDepth(30);
-    tooltip.add(this.add.rectangle(3, 4, tooltipWidth, tooltipHeight, THEME.shadow, 0.25));
-    tooltip.add(this.add.rectangle(0, 0, tooltipWidth, tooltipHeight, THEME.panel, 0.95)
-      .setStrokeStyle(2, THEME.panelBorder, 0.75));
-    tooltip.add(this.add.text(-tooltipWidth / 2 + 14, -tooltipHeight / 2 + 12, definition.name, {
-      color: '#f7ffe8',
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '18px',
-      fontStyle: 'bold',
-    }));
-    tooltip.add(this.add.text(-tooltipWidth / 2 + 14, -tooltipHeight / 2 + 40, `Level ${definition.level}`, {
-      color: '#cdebb3',
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '15px',
-    }));
-    tooltip.add(this.add.text(-tooltipWidth / 2 + 14, -tooltipHeight / 2 + 62, `Income: +${definition.incomePerSecond}/sec`, {
-      color: '#fff4a8',
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '15px',
-      fontStyle: 'bold',
-    }));
-
-    this.monsterTooltip = tooltip;
   }
 
   private renderMonsterInSlot(slot: FarmSlotState): void {
@@ -2079,50 +2006,36 @@ export class FarmScene extends Phaser.Scene {
 
     this.input.setDraggable(visual);
 
-    let pointerDownX = 0;
-    let pointerDownY = 0;
-    let wasDragged = false;
-
     visual
       .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation();
+
         if (this.isModalOpen()) {
           return;
         }
 
-        pointerDownX = pointer.worldX;
-        pointerDownY = pointer.worldY;
-        wasDragged = false;
+        this.clearSelectedSlot();
       })
       .on('pointerup', (pointer: Phaser.Input.Pointer) => {
-        if (this.isModalOpen()) {
-          return;
-        }
-
-        const movedDistance = Phaser.Math.Distance.Between(
-          pointerDownX,
-          pointerDownY,
-          pointer.worldX,
-          pointer.worldY,
-        );
-
-        if (!wasDragged && movedDistance < 8) {
-          this.selectSlot(slot.id);
-        }
+        pointer.event?.stopPropagation();
       })
-      .on('dragstart', () => {
+      .on('dragstart', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation();
+
         if (this.isModalOpen()) {
           this.returnMonsterVisualToSlot(slot.id, visual);
           return;
         }
 
-        wasDragged = true;
         this.activeDragSlotId = slot.id;
         this.activeDragVisual = visual;
         this.clearSelectedSlot();
         visual.setScale(1.08);
         visual.setDepth(10);
       })
-      .on('drag', (_pointer: Phaser.Input.Pointer, dragX: number, dragY: number) => {
+      .on('drag', (pointer: Phaser.Input.Pointer, dragX: number, dragY: number) => {
+        pointer.event?.stopPropagation();
+
         if (this.isModalOpen()) {
           this.cancelActiveDrag();
           return;
@@ -2131,6 +2044,7 @@ export class FarmScene extends Phaser.Scene {
         visual.setPosition(dragX, dragY);
       })
       .on('dragend', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation();
         visual.setScale(1);
         visual.setDepth(0);
 
@@ -2649,7 +2563,6 @@ export class FarmScene extends Phaser.Scene {
     this.clearMonsterVisual(sourceSlotId);
     this.renderMonsterInSlot(this.farmSlots[targetSlotId]);
     this.updateHud();
-    this.selectSlot(targetSlotId);
     this.skipSavingUntilProgress = false;
     this.saveProgress();
   }
@@ -2674,7 +2587,6 @@ export class FarmScene extends Phaser.Scene {
     audioSystem.playMerge();
     this.showMergeFeedback(targetSlotId);
     this.updateHud();
-    this.selectSlot(targetSlotId);
     this.showOnboardingHint('upgrades', 'Upgrade Shop boosts your farm production.');
     this.skipSavingUntilProgress = false;
     this.saveProgress();
