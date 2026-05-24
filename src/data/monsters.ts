@@ -56,6 +56,41 @@ export const LEVEL_8_SLIME: MonsterDefinition = {
   incomePerSecond: 660,
 };
 
+export const BUTTON_MUSHROOM: MonsterDefinition = {
+  family: 'Mushroom',
+  level: 1,
+  name: 'Button Mushroom',
+  incomePerSecond: 2,
+};
+
+export const SPOTTED_MUSHROOM: MonsterDefinition = {
+  family: 'Mushroom',
+  level: 2,
+  name: 'Spotted Mushroom',
+  incomePerSecond: 6,
+};
+
+export const ELDER_MUSHROOM: MonsterDefinition = {
+  family: 'Mushroom',
+  level: 3,
+  name: 'Elder Mushroom',
+  incomePerSecond: 16,
+};
+
+export const MYSTIC_MUSHROOM: MonsterDefinition = {
+  family: 'Mushroom',
+  level: 4,
+  name: 'Mystic Mushroom',
+  incomePerSecond: 42,
+};
+
+export const GIANT_MUSHROOM: MonsterDefinition = {
+  family: 'Mushroom',
+  level: 5,
+  name: 'Giant Mushroom',
+  incomePerSecond: 110,
+};
+
 export const MONSTER_DEFINITIONS: MonsterDefinition[] = [
   BABY_SLIME,
   LEVEL_2_SLIME,
@@ -65,6 +100,11 @@ export const MONSTER_DEFINITIONS: MonsterDefinition[] = [
   LEVEL_6_SLIME,
   LEVEL_7_SLIME,
   LEVEL_8_SLIME,
+  BUTTON_MUSHROOM,
+  SPOTTED_MUSHROOM,
+  ELDER_MUSHROOM,
+  MYSTIC_MUSHROOM,
+  GIANT_MUSHROOM,
 ];
 
 export function getNextMonsterDefinition(

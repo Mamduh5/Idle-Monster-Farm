@@ -5,7 +5,9 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 ## Fresh Save
 - Start with 10 coins and an empty 3x3 grid.
 - Hatch the first Baby Slime and confirm passive coin ticks begin.
+- Hatch until a Button Mushroom appears, then confirm it earns coins and appears in the Compendium.
 - Hatch multiple Slimes, merge two matching Slimes, and confirm the merged monster remains selected.
+- Merge two matching Mushrooms, confirm Slime + Mushroom drops return safely, and confirm Level 5 Mushroom + Level 5 Mushroom does not merge.
 - Buy at least one upgrade and confirm coins, income/cooldown text, and upgrade level update.
 - Fill the grid, confirm the hatch panel says the farm is full, then merge a valid pair to free space.
 - Confirm the 3 expansion slots start locked and reject monster drops safely.

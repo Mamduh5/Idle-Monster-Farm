@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { EGG_COST_MULTIPLIER, EXPANSION_UNLOCK_COST, STARTING_EGG_COST } from '../data/economy';
 import {
   BABY_SLIME,
+  BUTTON_MUSHROOM,
   getMonsterDefinition,
   getNextMonsterDefinition,
   MONSTER_DEFINITIONS,
@@ -43,6 +44,7 @@ const MILLISECONDS_PER_SECOND = 1000;
 const SAVE_THROTTLE_MS = 5000;
 const MAX_OFFLINE_SECONDS = 7200;
 const HATCH_COOLDOWN_MS = 3000;
+const MUSHROOM_HATCH_CHANCE = 0.2;
 const HATCH_PROGRESS_WIDTH = 142;
 const STARTING_COINS = STARTING_EGG_COST;
 const MIN_HATCH_COOLDOWN_MS = 1200;
@@ -575,7 +577,7 @@ export class FarmScene extends Phaser.Scene {
         }
 
         this.playButtonClickSound();
-        this.hatchBabySlime();
+        this.hatchMonster();
       })
       .on('pointerover', () => {
         if (this.isModalOpen()) {
@@ -1547,7 +1549,7 @@ export class FarmScene extends Phaser.Scene {
 
   private checkMergeOnboardingHint(): void {
     if (this.hasMergeableMonsterPair()) {
-      this.showOnboardingHint('merge', 'Drag matching monsters together to merge.');
+      this.showOnboardingHint('merge', 'Drag same-family matching monsters together to merge.');
     }
   }
 
@@ -1626,7 +1628,7 @@ export class FarmScene extends Phaser.Scene {
     return `${minutes}m`;
   }
 
-  private hatchBabySlime(): void {
+  private hatchMonster(): void {
     const emptySlot = this.getUnlockedFarmSlots().find((slot) => slot.monster === null);
 
     if (!emptySlot) {
@@ -1644,11 +1646,13 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
+    const hatchDefinition = this.rollHatchMonsterDefinition();
+
     this.currency.coins = this.sanitizeCoins(this.currency.coins - this.currentEggCost);
-    emptySlot.monster = this.createMonsterInstance(BABY_SLIME);
+    emptySlot.monster = this.createMonsterInstance(hatchDefinition);
     this.currentEggCost = this.getNextEggCost(this.currentEggCost);
     audioSystem.playHatch();
-    this.discoverMonster(BABY_SLIME);
+    this.discoverMonster(hatchDefinition);
     this.hideFarmMessage();
     this.renderMonsterInSlot(emptySlot);
     this.updateHud();
@@ -1658,6 +1662,10 @@ export class FarmScene extends Phaser.Scene {
     this.updateHatchCooldownUi();
     this.skipSavingUntilProgress = false;
     this.saveProgress();
+  }
+
+  private rollHatchMonsterDefinition(): MonsterDefinition {
+    return Math.random() < MUSHROOM_HATCH_CHANCE ? BUTTON_MUSHROOM : BABY_SLIME;
   }
 
   private createMonsterInstance(definition = BABY_SLIME): MonsterInstance {
@@ -1760,12 +1768,20 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const slimeDefinitions = MONSTER_DEFINITIONS
-      .filter((definition) => definition.family === 'Slime')
-      .sort((first, second) => first.level - second.level);
-    const { width: panelWidth, height: panelHeight } = this.getPanelSize(430, 560);
-    const rowGap = Math.min(56, Math.max(44, (panelHeight - 116) / Math.max(1, slimeDefinitions.length)));
-    const rowHeight = Math.min(48, rowGap - 4);
+    const familyOrder: MonsterFamily[] = ['Slime', 'Mushroom'];
+    const groupedDefinitions = familyOrder.map((family) => ({
+      family,
+      definitions: MONSTER_DEFINITIONS
+        .filter((definition) => definition.family === family)
+        .sort((first, second) => first.level - second.level),
+    }));
+    const totalRows = groupedDefinitions.reduce(
+      (rowCount, group) => rowCount + 1 + group.definitions.length,
+      0,
+    );
+    const { width: panelWidth, height: panelHeight } = this.getPanelSize(460, 560);
+    const rowGap = Math.min(38, Math.max(28, (panelHeight - 116) / Math.max(1, totalRows)));
+    const rowHeight = Math.min(34, rowGap - 3);
     const firstRowY = -panelHeight / 2 + 82;
 
     panel.setDepth(20);
@@ -1799,8 +1815,16 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(closeText);
 
-    slimeDefinitions.forEach((definition, index) => {
-      this.addCompendiumRow(panel, definition, firstRowY + index * rowGap, panelWidth, rowHeight);
+    let rowIndex = 0;
+
+    groupedDefinitions.forEach((group) => {
+      this.addCompendiumFamilyLabel(panel, group.family, firstRowY + rowIndex * rowGap, panelWidth);
+      rowIndex += 1;
+
+      group.definitions.forEach((definition) => {
+        this.addCompendiumRow(panel, definition, firstRowY + rowIndex * rowGap, panelWidth, rowHeight);
+        rowIndex += 1;
+      });
     });
 
     this.compendiumPanel = panel;
@@ -1820,6 +1844,20 @@ export class FarmScene extends Phaser.Scene {
     }
   }
 
+  private addCompendiumFamilyLabel(
+    panel: Phaser.GameObjects.Container,
+    family: MonsterFamily,
+    rowY: number,
+    panelWidth: number,
+  ): void {
+    panel.add(this.add.text(-panelWidth / 2 + 28, rowY - 8, family, {
+      color: '#fff4a8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: panelWidth < 390 ? '13px' : '14px',
+      fontStyle: 'bold',
+    }));
+  }
+
   private addCompendiumRow(
     panel: Phaser.GameObjects.Container,
     monster: MonsterDefinition,
@@ -1830,35 +1868,38 @@ export class FarmScene extends Phaser.Scene {
     const isDiscovered = this.isMonsterDiscovered(monster);
     const rowColor = isDiscovered ? THEME.panelAlt : 0x29362f;
     const textColor = isDiscovered ? '#f7ffe8' : '#9ca79f';
-    const isCompactPanel = panelWidth < 390;
-    const iconX = -panelWidth / 2 + (isCompactPanel ? 45 : 56);
-    const textX = -panelWidth / 2 + (isCompactPanel ? 78 : 94);
+    const isCompactPanel = panelWidth < 390 || rowHeight < 38;
+    const iconX = -panelWidth / 2 + (isCompactPanel ? 38 : 56);
+    const textX = -panelWidth / 2 + (isCompactPanel ? 66 : 94);
+    const nameY = rowY - (isCompactPanel ? 10 : 16);
+    const detailY = rowY + (isCompactPanel ? 5 : 5);
+    const iconScale = isCompactPanel ? 0.72 : 1;
 
     panel.add(this.add.rectangle(0, rowY, panelWidth - 48, rowHeight, rowColor, 0.92)
       .setStrokeStyle(2, isDiscovered ? THEME.slot : THEME.lockedBorder, 0.75));
 
-    this.addCompendiumIcon(panel, monster, isDiscovered, iconX, rowY);
+    this.addCompendiumIcon(panel, monster, isDiscovered, iconX, rowY, iconScale);
 
-    panel.add(this.add.text(textX, rowY - 16, isDiscovered ? monster.name : '???', {
+    panel.add(this.add.text(textX, nameY, isDiscovered ? monster.name : '???', {
       color: textColor,
       fontFamily: 'Arial, sans-serif',
-      fontSize: isCompactPanel ? '15px' : '16px',
+      fontSize: isCompactPanel ? '13px' : '16px',
       fontStyle: 'bold',
       wordWrap: {
-        width: Math.max(120, panelWidth - (isCompactPanel ? 190 : 220)),
+        width: Math.max(108, panelWidth - (isCompactPanel ? 164 : 220)),
       },
     }));
 
-    panel.add(this.add.text(textX, rowY + 5, `Level ${monster.level}`, {
+    panel.add(this.add.text(textX, detailY, `Level ${monster.level}`, {
       color: textColor,
       fontFamily: 'Arial, sans-serif',
-      fontSize: isCompactPanel ? '12px' : '13px',
+      fontSize: isCompactPanel ? '11px' : '13px',
     }));
 
-    panel.add(this.add.text(panelWidth / 2 - 42, rowY - 8, isDiscovered ? `+${monster.incomePerSecond}/sec` : 'Unknown', {
+    panel.add(this.add.text(panelWidth / 2 - 42, rowY - (isCompactPanel ? 7 : 8), isDiscovered ? `+${monster.incomePerSecond}/sec` : 'Unknown', {
       color: isDiscovered ? '#fff4a8' : '#9ca79f',
       fontFamily: 'Arial, sans-serif',
-      fontSize: isCompactPanel ? '13px' : '14px',
+      fontSize: isCompactPanel ? '12px' : '14px',
       fontStyle: 'bold',
     }).setOrigin(1, 0));
   }
@@ -1869,26 +1910,28 @@ export class FarmScene extends Phaser.Scene {
     isDiscovered: boolean,
     iconX: number,
     iconY: number,
+    scale = 1,
   ): void {
     if (!isDiscovered) {
-      panel.add(this.add.circle(iconX, iconY, 18, 0x303735)
+      panel.add(this.add.circle(iconX, iconY, 18 * scale, 0x303735)
         .setStrokeStyle(2, 0x707a73, 0.85));
-      panel.add(this.add.text(iconX, iconY - 11, '?', {
+      panel.add(this.add.text(iconX, iconY - 11 * scale, '?', {
         color: '#d9d6ec',
         fontFamily: 'Arial, sans-serif',
-        fontSize: '22px',
+        fontSize: `${Math.round(22 * scale)}px`,
         fontStyle: 'bold',
       }).setOrigin(0.5, 0));
       return;
     }
 
-    const visualStyle = this.getMonsterVisualStyle(monster.level);
+    const visualStyle = this.getMonsterVisualStyle(monster.family, monster.level);
 
-    panel.add(this.add.ellipse(iconX, iconY, 34, 28, visualStyle.bodyColor)
-      .setStrokeStyle(2, visualStyle.strokeColor, 0.95));
-    panel.add(this.add.circle(iconX - 7, iconY - 3, 3, 0x10291a));
-    panel.add(this.add.circle(iconX + 7, iconY - 3, 3, 0x10291a));
-    this.addSlimeDecorations(panel, monster.level, visualStyle, iconX, iconY, 0.55);
+    if (monster.family === 'Mushroom') {
+      this.addMushroomVisual(panel, monster.level, visualStyle, iconX, iconY, 0.58 * scale);
+      return;
+    }
+
+    this.addSlimeVisual(panel, monster.level, visualStyle, iconX, iconY, 0.58 * scale);
   }
 
   private selectSlot(slotId: number): void {
@@ -1987,20 +2030,13 @@ export class FarmScene extends Phaser.Scene {
     this.clearMonsterVisual(slot.id);
 
     const visual = this.add.container(center.x, center.y);
-    const visualStyle = this.getMonsterVisualStyle(monster.level);
+    const visualStyle = this.getMonsterVisualStyle(monster.family, monster.level);
 
-    visual.add(this.add.ellipse(0, 8, visualStyle.bodyWidth + 6, visualStyle.bodyHeight - 2, 0x2f7d40, 0.26));
-    visual.add(this.add.ellipse(0, 0, visualStyle.bodyWidth, visualStyle.bodyHeight, visualStyle.bodyColor)
-      .setStrokeStyle(3, visualStyle.strokeColor, 0.95));
-    visual.add(this.add.ellipse(-12, -12, 14, 9, 0xffffff, 0.28));
-    visual.add(this.add.circle(-11, -4, 4, 0x10291a));
-    visual.add(this.add.circle(11, -4, 4, 0x10291a));
-    visual.add(this.add.circle(-10, -5, 1.5, 0xffffff, 0.85));
-    visual.add(this.add.circle(12, -5, 1.5, 0xffffff, 0.85));
-    visual.add(this.add.ellipse(-17, 4, 6, 4, 0xff9fb1, 0.35));
-    visual.add(this.add.ellipse(17, 4, 6, 4, 0xff9fb1, 0.35));
-
-    this.addSlimeDecorations(visual, monster.level, visualStyle);
+    if (monster.family === 'Mushroom') {
+      this.addMushroomVisual(visual, monster.level, visualStyle);
+    } else {
+      this.addSlimeVisual(visual, monster.level, visualStyle);
+    }
 
     visual.add(this.add.text(0, 27, `Lv ${monster.level}`, {
       color: '#f7ffe8',
@@ -2087,7 +2123,114 @@ export class FarmScene extends Phaser.Scene {
     this.monsterVisuals[slot.id] = visual;
   }
 
-  private getMonsterVisualStyle(level: number): MonsterVisualStyle {
+  private addSlimeVisual(
+    container: Phaser.GameObjects.Container,
+    level: number,
+    visualStyle: MonsterVisualStyle,
+    x = 0,
+    y = 0,
+    scale = 1,
+  ): void {
+    container.add(this.add.ellipse(
+      x,
+      y + 8 * scale,
+      (visualStyle.bodyWidth + 6) * scale,
+      (visualStyle.bodyHeight - 2) * scale,
+      0x2f7d40,
+      0.26,
+    ));
+    container.add(this.add.ellipse(
+      x,
+      y,
+      visualStyle.bodyWidth * scale,
+      visualStyle.bodyHeight * scale,
+      visualStyle.bodyColor,
+    ).setStrokeStyle(Math.max(1, Math.round(3 * scale)), visualStyle.strokeColor, 0.95));
+    container.add(this.add.ellipse(x - 12 * scale, y - 12 * scale, 14 * scale, 9 * scale, 0xffffff, 0.28));
+    container.add(this.add.circle(x - 11 * scale, y - 4 * scale, 4 * scale, 0x10291a));
+    container.add(this.add.circle(x + 11 * scale, y - 4 * scale, 4 * scale, 0x10291a));
+    container.add(this.add.circle(x - 10 * scale, y - 5 * scale, 1.5 * scale, 0xffffff, 0.85));
+    container.add(this.add.circle(x + 12 * scale, y - 5 * scale, 1.5 * scale, 0xffffff, 0.85));
+    container.add(this.add.ellipse(x - 17 * scale, y + 4 * scale, 6 * scale, 4 * scale, 0xff9fb1, 0.35));
+    container.add(this.add.ellipse(x + 17 * scale, y + 4 * scale, 6 * scale, 4 * scale, 0xff9fb1, 0.35));
+
+    this.addSlimeDecorations(container, level, visualStyle, x, y, scale);
+  }
+
+  private addMushroomVisual(
+    container: Phaser.GameObjects.Container,
+    level: number,
+    visualStyle: MonsterVisualStyle,
+    x = 0,
+    y = 0,
+    scale = 1,
+  ): void {
+    const strokeWidth = Math.max(1, Math.round(3 * scale));
+    const stemColor = level >= 4 ? 0xf0e6c4 : 0xf3d9ad;
+    const stemStroke = level >= 4 ? 0x927846 : 0x8a5a30;
+    const capWidth = visualStyle.bodyWidth * scale;
+    const capHeight = visualStyle.bodyHeight * scale;
+
+    container.add(this.add.ellipse(x, y + 16 * scale, 30 * scale, 10 * scale, 0x2f7d40, 0.24));
+    container.add(this.add.rectangle(x, y + 9 * scale, 17 * scale, 30 * scale, stemColor, 0.98)
+      .setStrokeStyle(strokeWidth, stemStroke, 0.9));
+    container.add(this.add.ellipse(x, y - 7 * scale, capWidth, capHeight, visualStyle.bodyColor, 0.98)
+      .setStrokeStyle(strokeWidth, visualStyle.strokeColor, 0.95));
+    container.add(this.add.ellipse(x, y + 2 * scale, capWidth * 0.78, capHeight * 0.34, visualStyle.strokeColor, 0.18));
+    container.add(this.add.circle(x - 6 * scale, y + 8 * scale, 3.2 * scale, 0x10291a));
+    container.add(this.add.circle(x + 6 * scale, y + 8 * scale, 3.2 * scale, 0x10291a));
+    container.add(this.add.circle(x - 5.2 * scale, y + 7.2 * scale, 1.1 * scale, 0xffffff, 0.85));
+    container.add(this.add.circle(x + 6.8 * scale, y + 7.2 * scale, 1.1 * scale, 0xffffff, 0.85));
+
+    this.addMushroomDecorations(container, level, visualStyle, x, y, scale);
+  }
+
+  private getMonsterVisualStyle(family: MonsterFamily, level: number): MonsterVisualStyle {
+    if (family === 'Mushroom') {
+      if (level >= 5) {
+        return {
+          bodyColor: 0x5d7f3f,
+          strokeColor: 0x2d4c25,
+          bodyWidth: 64,
+          bodyHeight: 42,
+        };
+      }
+
+      if (level === 4) {
+        return {
+          bodyColor: 0x8f65d8,
+          strokeColor: 0x4d347d,
+          bodyWidth: 60,
+          bodyHeight: 40,
+        };
+      }
+
+      if (level === 3) {
+        return {
+          bodyColor: 0xbe8f55,
+          strokeColor: 0x6b4c28,
+          bodyWidth: 56,
+          bodyHeight: 38,
+        };
+      }
+
+      if (level === 2) {
+        return {
+          bodyColor: 0xc9534a,
+          strokeColor: 0x742922,
+          bodyWidth: 52,
+          bodyHeight: 36,
+        };
+      }
+
+      return {
+        bodyColor: 0xd8a15e,
+        strokeColor: 0x754523,
+        bodyWidth: 46,
+        bodyHeight: 32,
+      };
+    }
+
     if (level >= 8) {
       return {
         bodyColor: 0x4f4bb8,
@@ -2157,6 +2300,70 @@ export class FarmScene extends Phaser.Scene {
       bodyWidth: 46,
       bodyHeight: 38,
     };
+  }
+
+  private addMushroomDecorations(
+    container: Phaser.GameObjects.Container,
+    level: number,
+    visualStyle: MonsterVisualStyle,
+    x = 0,
+    y = 0,
+    scale = 1,
+  ): void {
+    const strokeWidth = Math.max(1, Math.round(2 * scale));
+
+    if (level === 1) {
+      container.add(this.add.ellipse(x - 9 * scale, y - 11 * scale, 8 * scale, 5 * scale, 0xffe7bd, 0.9));
+      return;
+    }
+
+    if (level === 2) {
+      [
+        [-13, -10, 4],
+        [0, -17, 5],
+        [13, -8, 4],
+        [-3, -3, 3],
+      ].forEach(([spotX, spotY, radius]) => {
+        container.add(this.add.circle(
+          x + spotX * scale,
+          y + spotY * scale,
+          radius * scale,
+          0xffefd2,
+          0.95,
+        ));
+      });
+      return;
+    }
+
+    if (level === 3) {
+      container.add(this.add.ellipse(x - 16 * scale, y - 5 * scale, 9 * scale, 15 * scale, 0xd9c08a, 0)
+        .setStrokeStyle(strokeWidth, 0xe6d0a0, 0.82));
+      container.add(this.add.ellipse(x + 16 * scale, y - 5 * scale, 9 * scale, 15 * scale, 0xd9c08a, 0)
+        .setStrokeStyle(strokeWidth, 0xe6d0a0, 0.82));
+      container.add(this.add.circle(x, y - 18 * scale, 4 * scale, 0xf0e0b2, 0.92));
+      return;
+    }
+
+    if (level === 4) {
+      container.add(this.add.ellipse(x, y - 8 * scale, 48 * scale, 18 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, 0xdcc7ff, 0.76));
+      container.add(this.add.star(x - 12 * scale, y - 17 * scale, 5, 2.5 * scale, 5 * scale, 0xf4dcff, 0.95));
+      container.add(this.add.star(x + 13 * scale, y - 5 * scale, 5, 2.5 * scale, 5 * scale, 0xfff1a8, 0.95));
+      return;
+    }
+
+    if (level >= 5) {
+      container.add(this.add.ellipse(x, y - 9 * scale, 55 * scale, 20 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, 0xf2e08f, 0.8));
+      container.add(this.add.circle(x - 16 * scale, y - 11 * scale, 4.2 * scale, 0xf6dc85, 0.95)
+        .setStrokeStyle(1, visualStyle.strokeColor, 0.4));
+      container.add(this.add.circle(x, y - 18 * scale, 5 * scale, 0xffee9c, 0.95)
+        .setStrokeStyle(1, visualStyle.strokeColor, 0.4));
+      container.add(this.add.circle(x + 16 * scale, y - 8 * scale, 4.2 * scale, 0xf6dc85, 0.95)
+        .setStrokeStyle(1, visualStyle.strokeColor, 0.4));
+      container.add(this.add.rectangle(x, y + 25 * scale, 26 * scale, 5 * scale, 0x9fcb73, 0.85)
+        .setStrokeStyle(1, 0x3f6a31, 0.65));
+    }
   }
 
   private addSlimeDecorations(

@@ -2,7 +2,13 @@ export type CurrencyState = {
   coins: number;
 };
 
-export type MonsterFamily = 'Slime';
+export const MONSTER_FAMILIES = ['Slime', 'Mushroom'] as const;
+
+export type MonsterFamily = typeof MONSTER_FAMILIES[number];
+
+export function isMonsterFamily(value: unknown): value is MonsterFamily {
+  return typeof value === 'string' && MONSTER_FAMILIES.includes(value as MonsterFamily);
+}
 
 export type MonsterDefinition = {
   family: MonsterFamily;

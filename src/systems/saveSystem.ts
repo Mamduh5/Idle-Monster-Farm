@@ -1,6 +1,11 @@
 import { STARTING_EGG_COST } from '../data/economy';
 import { UPGRADE_DEFINITIONS, type UpgradeId } from '../data/upgrades';
-import { ONBOARDING_HINT_IDS, type MonsterFamily, type OnboardingHintId } from '../types/game-state';
+import {
+  isMonsterFamily,
+  ONBOARDING_HINT_IDS,
+  type MonsterFamily,
+  type OnboardingHintId,
+} from '../types/game-state';
 
 export const SAVE_STORAGE_KEY = 'idle-monster-farm-save';
 export const SAVE_VERSION = 1;
@@ -159,12 +164,12 @@ function normalizeSavedMonsterReference(rawMonster: unknown): SavedMonsterDiscov
 
   const level = Number(rawMonster.level);
 
-  if (typeof rawMonster.family !== 'string' || !Number.isInteger(level) || level <= 0) {
+  if (!isMonsterFamily(rawMonster.family) || !Number.isInteger(level) || level <= 0) {
     return null;
   }
 
   return {
-    family: rawMonster.family as MonsterFamily,
+    family: rawMonster.family,
     level,
   };
 }
