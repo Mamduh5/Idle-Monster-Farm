@@ -85,6 +85,7 @@ const THEME = {
 };
 
 type MonsterVisual = Phaser.GameObjects.Container;
+type MonsterDragZone = Phaser.GameObjects.Zone;
 type MonsterVisualStyle = {
   bodyColor: number;
   strokeColor: number;
@@ -139,6 +140,7 @@ export class FarmScene extends Phaser.Scene {
   private farmSlots: FarmSlotState[] = [];
   private slotCenters: Phaser.Math.Vector2[] = [];
   private monsterVisuals: Array<MonsterVisual | null> = [];
+  private monsterDragZones: Array<MonsterDragZone | null> = [];
   private hatchCooldownMs = HATCH_COOLDOWN_MS;
   private hatchLabelText?: Phaser.GameObjects.Text;
   private hatchStatusText?: Phaser.GameObjects.Text;
@@ -166,6 +168,7 @@ export class FarmScene extends Phaser.Scene {
   private economyDebugText?: Phaser.GameObjects.Text;
   private activeDragSlotId: number | null = null;
   private activeDragVisual?: MonsterVisual;
+  private activeDragPointerId: number | null = null;
   private upgradeLevels: Record<UpgradeId, number> = this.createInitialUpgradeLevels();
   private settings: GameSettings = loadSettings();
   private resetConfirmationArmed = false;
@@ -179,6 +182,14 @@ export class FarmScene extends Phaser.Scene {
     if (document.visibilityState === 'hidden') {
       this.saveProgress();
     }
+  };
+
+  private readonly handleManualDragPointerMove = (pointer: Phaser.Input.Pointer): void => {
+    this.updateManualMonsterDrag(pointer);
+  };
+
+  private readonly handleManualDragPointerUp = (pointer: Phaser.Input.Pointer): void => {
+    this.finishManualMonsterDrag(pointer);
   };
 
   constructor() {
@@ -206,6 +217,7 @@ export class FarmScene extends Phaser.Scene {
     this.economyDebugText = undefined;
     this.activeDragSlotId = null;
     this.activeDragVisual = undefined;
+    this.activeDragPointerId = null;
     this.upgradeLevels = this.createInitialUpgradeLevels();
     this.settings = loadSettings();
     this.syncAudioSettings();
@@ -224,6 +236,7 @@ export class FarmScene extends Phaser.Scene {
     this.clearToast();
     this.farmSlots = this.createInitialFarmSlots();
     this.monsterVisuals = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
+    this.monsterDragZones = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
     this.createFarmBackground();
     this.createFarmGrid();
     this.createExpansionPlaceholder();
@@ -235,6 +248,7 @@ export class FarmScene extends Phaser.Scene {
     this.createUpgradeShopControl();
     this.createEconomyDebugControl();
     this.registerKeyboardShortcuts();
+    this.registerManualDragInput();
     this.loadProgress();
     this.registerPersistenceEvents();
     this.updateHud();
@@ -864,6 +878,15 @@ export class FarmScene extends Phaser.Scene {
 
       this.toggleEconomyDebugPanel();
     });
+  }
+
+  private registerManualDragInput(): void {
+    this.input.off('pointermove', this.handleManualDragPointerMove);
+    this.input.off('pointerup', this.handleManualDragPointerUp);
+    this.input.off('pointerupoutside', this.handleManualDragPointerUp);
+    this.input.on('pointermove', this.handleManualDragPointerMove);
+    this.input.on('pointerup', this.handleManualDragPointerUp);
+    this.input.on('pointerupoutside', this.handleManualDragPointerUp);
   }
 
   private toggleSettingsPanel(): void {
@@ -1969,8 +1992,77 @@ export class FarmScene extends Phaser.Scene {
     this.activeDragVisual.setScale(1);
     this.activeDragVisual.setDepth(0);
     this.returnMonsterVisualToSlot(this.activeDragSlotId, this.activeDragVisual);
+    this.resetManualDragState();
+  }
+
+  private startManualMonsterDrag(slotId: number, pointer: Phaser.Input.Pointer): void {
+    if (this.isModalOpen()) {
+      return;
+    }
+
+    const visual = this.monsterVisuals[slotId];
+
+    if (!visual || !this.farmSlots[slotId]?.monster) {
+      return;
+    }
+
+    if (this.activeDragVisual) {
+      this.cancelActiveDrag();
+    }
+
+    this.activeDragSlotId = slotId;
+    this.activeDragVisual = visual;
+    this.activeDragPointerId = pointer.id;
+    this.clearSelectedSlot();
+    visual.setScale(1.08);
+    visual.setDepth(10);
+    visual.setPosition(pointer.worldX, pointer.worldY);
+  }
+
+  private updateManualMonsterDrag(pointer: Phaser.Input.Pointer): void {
+    if (
+      this.activeDragSlotId === null
+      || !this.activeDragVisual
+      || this.activeDragPointerId !== pointer.id
+    ) {
+      return;
+    }
+
+    pointer.event?.stopPropagation();
+
+    if (this.isModalOpen()) {
+      this.cancelActiveDrag();
+      return;
+    }
+
+    this.activeDragVisual.setPosition(pointer.worldX, pointer.worldY);
+  }
+
+  private finishManualMonsterDrag(pointer: Phaser.Input.Pointer): void {
+    if (
+      this.activeDragSlotId === null
+      || !this.activeDragVisual
+      || this.activeDragPointerId !== pointer.id
+    ) {
+      return;
+    }
+
+    pointer.event?.stopPropagation();
+
+    const sourceSlotId = this.activeDragSlotId;
+    const visual = this.activeDragVisual;
+
+    visual.setScale(1);
+    visual.setDepth(0);
+    this.resetManualDragState();
+
+    this.handleMonsterDrop(sourceSlotId, pointer.worldX, pointer.worldY, visual);
+  }
+
+  private resetManualDragState(): void {
     this.activeDragSlotId = null;
     this.activeDragVisual = undefined;
+    this.activeDragPointerId = null;
   }
 
   private renderMonsterInSlot(slot: FarmSlotState): void {
@@ -1999,86 +2091,54 @@ export class FarmScene extends Phaser.Scene {
       fontStyle: 'bold',
     }).setOrigin(0.5));
 
-    const hitAreaSize = this.cellSize;
-    const hitArea = new Phaser.Geom.Rectangle(-hitAreaSize / 2, -hitAreaSize / 2, hitAreaSize, hitAreaSize);
-
-    visual.setSize(hitAreaSize, hitAreaSize);
-    visual.setInteractive({
-      hitArea,
-      hitAreaCallback: Phaser.Geom.Rectangle.Contains,
-      draggable: true,
-      useHandCursor: true,
-    });
-    this.addMonsterHitboxDebugVisual(visual, hitAreaSize);
-
-    this.input.setDraggable(visual, true);
-    this.input.dragDistanceThreshold = Math.min(this.input.dragDistanceThreshold, 4);
-    this.input.dragTimeThreshold = 0;
-
-    visual
-      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-        pointer.event?.stopPropagation();
-
-        if (this.isModalOpen()) {
-          return;
-        }
-
-        this.clearSelectedSlot();
-      })
-      .on('pointerup', (pointer: Phaser.Input.Pointer) => {
-        pointer.event?.stopPropagation();
-      })
-      .on('dragstart', (pointer: Phaser.Input.Pointer) => {
-        pointer.event?.stopPropagation();
-
-        if (this.isModalOpen()) {
-          this.returnMonsterVisualToSlot(slot.id, visual);
-          return;
-        }
-
-        this.activeDragSlotId = slot.id;
-        this.activeDragVisual = visual;
-        this.clearSelectedSlot();
-        visual.setScale(1.08);
-        visual.setDepth(10);
-      })
-      .on('drag', (pointer: Phaser.Input.Pointer, dragX: number, dragY: number) => {
-        pointer.event?.stopPropagation();
-
-        if (this.isModalOpen()) {
-          this.cancelActiveDrag();
-          return;
-        }
-
-        visual.setPosition(dragX, dragY);
-      })
-      .on('dragend', (pointer: Phaser.Input.Pointer) => {
-        pointer.event?.stopPropagation();
-        visual.setScale(1);
-        visual.setDepth(0);
-
-        if (this.isModalOpen()) {
-          this.returnMonsterVisualToSlot(slot.id, visual);
-          this.activeDragSlotId = null;
-          this.activeDragVisual = undefined;
-          return;
-        }
-
-        this.handleMonsterDrop(slot.id, pointer.worldX, pointer.worldY, visual);
-        this.activeDragSlotId = null;
-        this.activeDragVisual = undefined;
-      });
-
     this.monsterVisuals[slot.id] = visual;
+    this.createMonsterDragZone(slot.id);
   }
 
-  private addMonsterHitboxDebugVisual(visual: MonsterVisual, hitAreaSize: number): void {
+  private createMonsterDragZone(slotId: number): void {
+    this.clearMonsterDragZone(slotId);
+
+    const center = this.slotCenters[slotId];
+    const zone = this.add.zone(center.x, center.y, this.cellSize, this.cellSize)
+      .setOrigin(0.5)
+      .setDepth(9)
+      .setInteractive({ useHandCursor: true });
+
+    zone.on(
+      'pointerdown',
+      (
+        pointer: Phaser.Input.Pointer,
+        _localX: number,
+        _localY: number,
+        event: Phaser.Types.Input.EventData,
+      ) => {
+        event.stopPropagation();
+        pointer.event?.stopPropagation();
+        this.startManualMonsterDrag(slotId, pointer);
+      },
+    );
+
+    this.addMonsterHitboxDebugVisual(zone);
+    this.monsterDragZones[slotId] = zone;
+  }
+
+  private clearMonsterDragZone(slotId: number): void {
+    this.monsterDragZones[slotId]?.destroy();
+    this.monsterDragZones[slotId] = null;
+  }
+
+  private addMonsterHitboxDebugVisual(zone: MonsterDragZone): void {
     if (!SHOW_MONSTER_HITBOX_DEBUG) {
       return;
     }
 
-    visual.add(this.add.rectangle(0, 0, hitAreaSize, hitAreaSize, 0xff00ff, 0)
-      .setStrokeStyle(2, 0xff00ff, 0.7));
+    const debugOutline = this.add.rectangle(zone.x, zone.y, this.cellSize, this.cellSize, 0xff00ff, 0)
+      .setDepth(zone.depth + 0.1)
+      .setStrokeStyle(2, 0xff00ff, 0.7);
+
+    zone.once(Phaser.GameObjects.Events.DESTROY, () => {
+      debugOutline.destroy();
+    });
   }
 
   private addSlimeVisual(
@@ -2626,6 +2686,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private clearMonsterVisual(slotId: number): void {
+    this.clearMonsterDragZone(slotId);
     this.monsterVisuals[slotId]?.destroy();
     this.monsterVisuals[slotId] = null;
   }
@@ -2798,7 +2859,11 @@ export class FarmScene extends Phaser.Scene {
     this.monsterVisuals.forEach((visual) => {
       visual?.destroy();
     });
+    this.monsterDragZones.forEach((zone) => {
+      zone?.destroy();
+    });
     this.monsterVisuals = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
+    this.monsterDragZones = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
     this.createExpansionPlaceholder();
 
     this.hideFarmMessage();
@@ -2818,7 +2883,11 @@ export class FarmScene extends Phaser.Scene {
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.saveProgress();
+      this.cancelActiveDrag();
       this.clearToast();
+      this.input.off('pointermove', this.handleManualDragPointerMove);
+      this.input.off('pointerup', this.handleManualDragPointerUp);
+      this.input.off('pointerupoutside', this.handleManualDragPointerUp);
       window.removeEventListener('pagehide', this.handlePageHide);
       window.removeEventListener('beforeunload', this.handlePageHide);
       document.removeEventListener('visibilitychange', this.handleVisibilityChange);
