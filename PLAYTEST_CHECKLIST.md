@@ -23,6 +23,9 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 ## Mobile Viewports
 - Check `360x640` and `390x844`.
 - Confirm HUD, production stats, compact Menu button, grid, expansion placeholder, and hatch panel do not overlap.
+- In deployed mobile Chrome or an equivalent 360px-wide browser viewport, confirm the Hatch panel is fully visible above browser/navigation bars.
+- Confirm the Production panel shows Income/sec, Next Egg, and Offline Cap without clipping.
+- Confirm the expansion row or unlock button remains visible above the Hatch panel.
 - Open Menu and confirm it is readable, compact, and does not cover the hatch panel unnecessarily.
 - From Menu, open Upgrades, Goals, Prestige, Zone, Compendium, Help, and Settings; confirm Menu closes and each panel fits and can close.
 - With outside-tap close enabled, open Menu and tap outside it to confirm Menu closes.

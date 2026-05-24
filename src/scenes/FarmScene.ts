@@ -132,6 +132,7 @@ type FarmSceneLayout = {
   menuY: number;
   menuGap: number;
   menuFontSize: string;
+  bottomSafePadding: number;
   expansionLabelY: number;
   expansionStartX: number;
   expansionStartY: number;
@@ -150,7 +151,11 @@ export class FarmScene extends Phaser.Scene {
   private incomeText?: Phaser.GameObjects.Text;
   private productionStatsText?: Phaser.GameObjects.Text;
   private backgroundContainer?: Phaser.GameObjects.Container;
+  private farmGridContainer?: Phaser.GameObjects.Container;
+  private hudContainer?: Phaser.GameObjects.Container;
   private expansionContainer?: Phaser.GameObjects.Container;
+  private hatchContainer?: Phaser.GameObjects.Container;
+  private menuControlsContainer?: Phaser.GameObjects.Container;
   private toastContainer?: Phaser.GameObjects.Container;
   private toastTween?: Phaser.Tweens.Tween;
   private farmSlots: FarmSlotState[] = [];
@@ -221,6 +226,10 @@ export class FarmScene extends Phaser.Scene {
     this.finishManualMonsterDrag(pointer);
   };
 
+  private readonly handleScaleResize = (): void => {
+    this.rebuildResponsiveFarmView();
+  };
+
   constructor() {
     super('FarmScene');
   }
@@ -269,7 +278,11 @@ export class FarmScene extends Phaser.Scene {
     this.hatchProgressFill = undefined;
     this.hatchPanel = undefined;
     this.backgroundContainer = undefined;
+    this.farmGridContainer = undefined;
+    this.hudContainer = undefined;
     this.expansionContainer = undefined;
+    this.hatchContainer = undefined;
+    this.menuControlsContainer = undefined;
     this.menuButtons = [];
     this.productionStatsText = undefined;
     this.currentEggCost = STARTING_EGG_COST;
@@ -289,6 +302,7 @@ export class FarmScene extends Phaser.Scene {
     this.createEconomyDebugControl();
     this.registerKeyboardShortcuts();
     this.registerManualDragInput();
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.handleScaleResize);
     this.loadProgress();
     this.registerPersistenceEvents();
     this.updateHud();
@@ -301,6 +315,34 @@ export class FarmScene extends Phaser.Scene {
     this.updateOnboardingHints();
     this.saveProgressWhenReady(delta);
     this.refreshEconomyDebugPanel();
+  }
+
+  private rebuildResponsiveFarmView(): void {
+    if (this.isModalOpen() || this.activeDragSlotId !== null) {
+      return;
+    }
+
+    this.monsterVisuals.forEach((visual) => {
+      visual?.destroy();
+    });
+    this.monsterDragZones.forEach((zone) => {
+      zone?.destroy();
+    });
+    this.monsterVisuals = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
+    this.monsterDragZones = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
+
+    this.createFarmBackground();
+    this.createFarmGrid();
+    this.createExpansionPlaceholder();
+    this.createHud();
+    this.createHatchArea();
+    this.createNavigationControl();
+    this.createEconomyDebugControl();
+
+    this.farmSlots.forEach((slot) => {
+      this.renderMonsterInSlot(slot);
+    });
+    this.updateHud();
   }
 
   private createFarmBackground(): void {
@@ -358,39 +400,56 @@ export class FarmScene extends Phaser.Scene {
     const height = this.scale.height;
     const isNarrow = width < 700;
     const margin = isNarrow ? 12 : 24;
-    const gridGap = GRID_GAP;
-    const cellSize = Math.max(
-      56,
-      Math.min(CELL_SIZE, Math.floor((width - margin * 2 - (GRID_COLUMNS - 1) * gridGap) / GRID_COLUMNS)),
-    );
-    const gridWidth = GRID_COLUMNS * cellSize + (GRID_COLUMNS - 1) * gridGap;
-    const gridHeight = GRID_ROWS * cellSize + (GRID_ROWS - 1) * gridGap;
+    const gridGap = isNarrow && height < 680 ? 8 : GRID_GAP;
     const hudWidth = isNarrow ? 158 : 220;
-    const hudHeight = isNarrow ? 56 : 64;
+    const hudHeight = isNarrow ? 54 : 64;
     const hudX = margin;
-    const hudY = isNarrow ? 10 : 20;
+    const hudY = isNarrow ? 8 : 20;
     const statsWidth = hudWidth;
-    const statsHeight = isNarrow ? 94 : 104;
+    const statsHeight = isNarrow ? 88 : 104;
     const statsX = margin;
-    const statsY = isNarrow ? hudY + hudHeight + 8 : 94;
+    const statsY = isNarrow ? hudY + hudHeight + 6 : 94;
     const menuX = width - margin;
-    const menuY = isNarrow ? 10 : 22;
+    const menuY = isNarrow ? 8 : 22;
     const menuGap = isNarrow ? 25 : 40;
     const menuButtonCount = SHOW_DEBUG_PANEL ? 2 : 1;
     const menuBottom = menuY + (menuButtonCount - 1) * menuGap + 30;
     const topContentBottom = isNarrow ? Math.max(statsY + statsHeight, menuBottom) : 126;
     const hatchWidth = Math.min(260, width - margin * 2);
     const hatchHeight = 76;
+    const bottomSafePadding = isNarrow ? (height < 700 ? 24 : 18) : 18;
     const hatchX = isNarrow ? (width - hatchWidth) / 2 : width - hatchWidth - margin;
-    const hatchY = height - hatchHeight - (isNarrow ? 12 : 18);
-    const expansionHeight = (isNarrow ? 12 : 20) + (isNarrow ? 24 : 34) + cellSize;
-    const maxGridStartY = hatchY - gridHeight - expansionHeight - 12;
-    const minGridStartY = topContentBottom + (isNarrow ? 12 : 0);
+    const hatchY = height - hatchHeight - bottomSafePadding;
+    const gridTopGap = isNarrow ? (height < 680 ? 6 : 10) : 0;
+    const gridToExpansionLabelGap = isNarrow ? (height < 680 ? 8 : 12) : 20;
+    const expansionLabelToRowGap = isNarrow ? (height < 680 ? 18 : 24) : 34;
+    const expansionToHatchGap = isNarrow ? (height < 680 ? 8 : 12) : 12;
+    const minGridStartY = topContentBottom + gridTopGap;
+    const widthLimitedCellSize = Math.floor((width - margin * 2 - (GRID_COLUMNS - 1) * gridGap) / GRID_COLUMNS);
+    const availableStackHeight = Math.max(0, hatchY - minGridStartY);
+    const heightLimitedCellSize = Math.floor(
+      (
+        availableStackHeight
+        - (GRID_ROWS - 1) * gridGap
+        - gridToExpansionLabelGap
+        - expansionLabelToRowGap
+        - expansionToHatchGap
+      ) / (GRID_ROWS + EXPANSION_ROWS),
+    );
+    const mobileMinimumCellSize = height < 560 ? 48 : 52;
+    const cellSize = Math.max(
+      isNarrow ? mobileMinimumCellSize : 56,
+      Math.min(CELL_SIZE, widthLimitedCellSize, isNarrow ? heightLimitedCellSize : CELL_SIZE),
+    );
+    const gridWidth = GRID_COLUMNS * cellSize + (GRID_COLUMNS - 1) * gridGap;
+    const gridHeight = GRID_ROWS * cellSize + (GRID_ROWS - 1) * gridGap;
+    const expansionHeight = gridToExpansionLabelGap + expansionLabelToRowGap + cellSize;
+    const maxGridStartY = hatchY - gridHeight - expansionHeight - expansionToHatchGap;
     const gridStartY = isNarrow
       ? Math.max(minGridStartY, Math.min(minGridStartY, maxGridStartY))
       : 126;
-    const expansionLabelY = gridStartY + gridHeight + (isNarrow ? 12 : 20);
-    const expansionStartY = expansionLabelY + (isNarrow ? 24 : 34);
+    const expansionLabelY = gridStartY + gridHeight + gridToExpansionLabelGap;
+    const expansionStartY = expansionLabelY + expansionLabelToRowGap;
 
     return {
       isNarrow,
@@ -411,6 +470,7 @@ export class FarmScene extends Phaser.Scene {
       menuY,
       menuGap,
       menuFontSize: isNarrow ? '13px' : '15px',
+      bottomSafePadding,
       expansionLabelY,
       expansionStartX: (width - gridWidth) / 2,
       expansionStartY,
@@ -422,9 +482,12 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private createFarmGrid(): void {
+    this.farmGridContainer?.destroy();
+
     const layout = this.getLayout();
     const startX = layout.gridStartX;
     const startY = layout.gridStartY;
+    const farmGridContainer = this.add.container(0, 0);
 
     this.cellSize = layout.cellSize;
     this.gridGap = layout.gridGap;
@@ -437,10 +500,12 @@ export class FarmScene extends Phaser.Scene {
         const y = startY + row * (this.cellSize + this.gridGap);
 
         const slotId = row * GRID_COLUMNS + column;
-        this.addUnlockedSlotTile(undefined, x, y, slotId);
+        this.addUnlockedSlotTile(farmGridContainer, x, y, slotId);
         this.slotCenters[slotId] = new Phaser.Math.Vector2(x + this.cellSize / 2, y + this.cellSize / 2);
       }
     }
+
+    this.farmGridContainer = farmGridContainer;
   }
 
   private createExpansionPlaceholder(): void {
@@ -585,15 +650,21 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private createHud(): void {
+    this.hudContainer?.destroy();
+
     const layout = this.getLayout();
     const coinFontSize = layout.isNarrow ? '20px' : '24px';
+    const productionTitleFontSize = layout.isNarrow ? '15px' : '16px';
+    const productionTextFontSize = layout.isNarrow ? '13px' : '14px';
+    const productionLineSpacing = layout.isNarrow ? 2 : 5;
+    const hudContainer = this.add.container(0, 0);
 
-    this.add.rectangle(layout.hudX + 3, layout.hudY + 4, layout.hudWidth, layout.hudHeight, THEME.shadow, 0.25)
-      .setOrigin(0);
+    hudContainer.add(this.add.rectangle(layout.hudX + 3, layout.hudY + 4, layout.hudWidth, layout.hudHeight, THEME.shadow, 0.25)
+      .setOrigin(0));
 
-    this.add.rectangle(layout.hudX, layout.hudY, layout.hudWidth, layout.hudHeight, THEME.panel, 0.86)
+    hudContainer.add(this.add.rectangle(layout.hudX, layout.hudY, layout.hudWidth, layout.hudHeight, THEME.panel, 0.86)
       .setOrigin(0)
-      .setStrokeStyle(2, THEME.panelBorder, 0.72);
+      .setStrokeStyle(2, THEME.panelBorder, 0.72));
 
     this.coinText = this.add.text(layout.hudX + 18, layout.hudY + 10, `Coins: ${this.currency.coins}`, {
       color: THEME.goldText,
@@ -601,6 +672,7 @@ export class FarmScene extends Phaser.Scene {
       fontSize: coinFontSize,
       fontStyle: 'bold',
     });
+    hudContainer.add(this.coinText);
 
     this.incomeText = this.add.text(layout.hudX + 18, layout.hudY + (layout.isNarrow ? 36 : 39), '+0/sec', {
       color: '#d9f6ba',
@@ -608,30 +680,36 @@ export class FarmScene extends Phaser.Scene {
       fontSize: '15px',
       fontStyle: 'bold',
     });
+    hudContainer.add(this.incomeText);
 
-    this.add.rectangle(layout.statsX + 3, layout.statsY + 4, layout.statsWidth, layout.statsHeight, THEME.shadow, 0.2)
-      .setOrigin(0);
+    hudContainer.add(this.add.rectangle(layout.statsX + 3, layout.statsY + 4, layout.statsWidth, layout.statsHeight, THEME.shadow, 0.2)
+      .setOrigin(0));
 
-    this.add.rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight, THEME.panel, 0.8)
+    hudContainer.add(this.add.rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight, THEME.panel, 0.8)
       .setOrigin(0)
-      .setStrokeStyle(2, THEME.slot, 0.62);
+      .setStrokeStyle(2, THEME.slot, 0.62));
 
-    this.add.text(layout.statsX + 18, layout.statsY + 10, 'Production', {
+    hudContainer.add(this.add.text(layout.statsX + 18, layout.statsY + 9, 'Production', {
       color: THEME.text,
       fontFamily: 'Arial, sans-serif',
-      fontSize: '16px',
+      fontSize: productionTitleFontSize,
       fontStyle: 'bold',
-    });
+    }));
 
-    this.productionStatsText = this.add.text(layout.statsX + 18, layout.statsY + 36, '', {
+    this.productionStatsText = this.add.text(layout.statsX + 18, layout.statsY + 32, '', {
       color: THEME.mutedText,
       fontFamily: 'Arial, sans-serif',
-      fontSize: '14px',
-      lineSpacing: 5,
+      fontSize: productionTextFontSize,
+      lineSpacing: productionLineSpacing,
     });
+    hudContainer.add(this.productionStatsText);
+
+    this.hudContainer = hudContainer;
   }
 
   private createHatchArea(): void {
+    this.hatchContainer?.destroy();
+
     const layout = this.getLayout();
     const panelWidth = layout.hatchWidth;
     const panelHeight = layout.hatchHeight;
@@ -639,14 +717,16 @@ export class FarmScene extends Phaser.Scene {
     const y = layout.hatchY;
     const eggX = x + Math.min(48, panelWidth * 0.19);
     const textX = x + Math.min(88, panelWidth * 0.34);
+    const hatchContainer = this.add.container(0, 0);
 
-    this.add.rectangle(x + 4, y + 5, panelWidth, panelHeight, THEME.shadow, 0.35)
-      .setOrigin(0);
+    hatchContainer.add(this.add.rectangle(x + 4, y + 5, panelWidth, panelHeight, THEME.shadow, 0.35)
+      .setOrigin(0));
 
     const hatchPanel = this.add.rectangle(x, y, panelWidth, panelHeight, 0x49395d, 0.92)
       .setOrigin(0)
       .setStrokeStyle(3, THEME.panelBorder, 0.9);
     this.hatchPanel = hatchPanel;
+    hatchContainer.add(hatchPanel);
 
     hatchPanel
       .setInteractive({ useHandCursor: true })
@@ -670,10 +750,10 @@ export class FarmScene extends Phaser.Scene {
         hatchPanel.setFillStyle(0x49395d, 0.92);
       });
 
-    this.add.ellipse(eggX + 2, y + 40, 44, 56, THEME.shadow, 0.2);
-    this.add.ellipse(eggX, y + 38, 44, 56, 0xffe7a8)
-      .setStrokeStyle(3, 0x9f6a2a, 0.95);
-    this.add.ellipse(eggX - 8, y + 29, 12, 18, 0xffffff, 0.35);
+    hatchContainer.add(this.add.ellipse(eggX + 2, y + 40, 44, 56, THEME.shadow, 0.2));
+    hatchContainer.add(this.add.ellipse(eggX, y + 38, 44, 56, 0xffe7a8)
+      .setStrokeStyle(3, 0x9f6a2a, 0.95));
+    hatchContainer.add(this.add.ellipse(eggX - 8, y + 29, 12, 18, 0xffffff, 0.35));
 
     this.hatchLabelText = this.add.text(textX, y + 16, 'Hatch Egg', {
       color: '#ffffff',
@@ -681,26 +761,35 @@ export class FarmScene extends Phaser.Scene {
       fontSize: '24px',
       fontStyle: 'bold',
     });
+    hatchContainer.add(this.hatchLabelText);
 
     this.hatchStatusText = this.add.text(textX, y + 44, 'Ready', {
       color: '#d9d6ec',
       fontFamily: 'Arial, sans-serif',
       fontSize: '14px',
     });
+    hatchContainer.add(this.hatchStatusText);
 
     this.hatchProgressWidth = Math.min(HATCH_PROGRESS_WIDTH, panelWidth - (textX - x) - 18);
 
-    this.add.rectangle(textX, y + 61, this.hatchProgressWidth, 8, 0x17152a, 0.9)
+    hatchContainer.add(this.add.rectangle(textX, y + 61, this.hatchProgressWidth, 8, 0x17152a, 0.9)
       .setOrigin(0)
-      .setStrokeStyle(1, 0xf3d06b, 0.55);
+      .setStrokeStyle(1, 0xf3d06b, 0.55));
 
     this.hatchProgressFill = this.add.rectangle(textX, y + 61, this.hatchProgressWidth, 8, 0x8ecf62, 0.95)
       .setOrigin(0);
+    hatchContainer.add(this.hatchProgressFill);
+
+    this.hatchContainer = hatchContainer;
 
     this.updateHatchCooldownUi();
   }
 
   private createNavigationControl(): void {
+    this.menuControlsContainer?.destroy();
+    this.menuControlsContainer = this.add.container(0, 0);
+    this.menuButtons = [];
+
     this.createMenuButton('Menu', 0, () => {
       this.toggleNavigationMenuPanel();
     });
@@ -739,6 +828,7 @@ export class FarmScene extends Phaser.Scene {
       text: button,
       defaultBackgroundColor: backgroundColor,
     });
+    this.menuControlsContainer?.add(button);
 
     button
       .setInteractive({ useHandCursor: true })
@@ -3102,17 +3192,18 @@ export class FarmScene extends Phaser.Scene {
 
     const visual = this.add.container(center.x, center.y);
     const visualStyle = this.getMonsterVisualStyle(monster.family, monster.level);
+    const visualScale = Math.min(1, Math.max(0.72, this.cellSize / CELL_SIZE));
 
     if (monster.family === 'Mushroom') {
-      this.addMushroomVisual(visual, monster.level, visualStyle);
+      this.addMushroomVisual(visual, monster.level, visualStyle, 0, 0, visualScale);
     } else {
-      this.addSlimeVisual(visual, monster.level, visualStyle);
+      this.addSlimeVisual(visual, monster.level, visualStyle, 0, 0, visualScale);
     }
 
-    visual.add(this.add.text(0, 27, `Lv ${monster.level}`, {
+    visual.add(this.add.text(0, 27 * visualScale, `Lv ${monster.level}`, {
       color: '#f7ffe8',
       fontFamily: 'Arial, sans-serif',
-      fontSize: '13px',
+      fontSize: visualScale < 0.9 ? '12px' : '13px',
       fontStyle: 'bold',
     }).setOrigin(0.5));
 
@@ -3951,6 +4042,7 @@ export class FarmScene extends Phaser.Scene {
       this.saveProgress();
       this.cancelActiveDrag();
       this.clearToast();
+      this.scale.off(Phaser.Scale.Events.RESIZE, this.handleScaleResize);
       this.input.off('pointermove', this.handleManualDragPointerMove);
       this.input.off('pointerup', this.handleManualDragPointerUp);
       this.input.off('pointerupoutside', this.handleManualDragPointerUp);
