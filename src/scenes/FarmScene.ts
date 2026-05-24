@@ -109,6 +109,10 @@ type MenuButtonVisual = {
   text: Phaser.GameObjects.Text;
   defaultBackgroundColor: string;
 };
+type NavigationMenuItem = {
+  label: string;
+  openPanel: () => void;
+};
 type FarmSceneLayout = {
   isNarrow: boolean;
   margin: number;
@@ -180,6 +184,7 @@ export class FarmScene extends Phaser.Scene {
   private missionsPanel?: Phaser.GameObjects.Container;
   private upgradeShopPanel?: Phaser.GameObjects.Container;
   private prestigePanel?: Phaser.GameObjects.Container;
+  private navigationMenuPanel?: Phaser.GameObjects.Container;
   private modalOverlay?: Phaser.GameObjects.Rectangle;
   private economyDebugPanel?: Phaser.GameObjects.Container;
   private economyDebugText?: Phaser.GameObjects.Text;
@@ -239,6 +244,7 @@ export class FarmScene extends Phaser.Scene {
     this.missionsPanel = undefined;
     this.upgradeShopPanel = undefined;
     this.prestigePanel = undefined;
+    this.navigationMenuPanel = undefined;
     this.modalOverlay = undefined;
     this.economyDebugPanel = undefined;
     this.economyDebugText = undefined;
@@ -279,13 +285,7 @@ export class FarmScene extends Phaser.Scene {
     this.createExpansionPlaceholder();
     this.createHud();
     this.createHatchArea();
-    this.createSettingsControl();
-    this.createCompendiumControl();
-    this.createHelpControl();
-    this.createZoneControl();
-    this.createMissionsControl();
-    this.createUpgradeShopControl();
-    this.createPrestigeControl();
+    this.createNavigationControl();
     this.createEconomyDebugControl();
     this.registerKeyboardShortcuts();
     this.registerManualDragInput();
@@ -376,7 +376,7 @@ export class FarmScene extends Phaser.Scene {
     const menuX = width - margin;
     const menuY = isNarrow ? 10 : 22;
     const menuGap = isNarrow ? 25 : 40;
-    const menuButtonCount = SHOW_DEBUG_PANEL ? 8 : 7;
+    const menuButtonCount = SHOW_DEBUG_PANEL ? 2 : 1;
     const menuBottom = menuY + (menuButtonCount - 1) * menuGap + 30;
     const topContentBottom = isNarrow ? Math.max(statsY + statsHeight, menuBottom) : 126;
     const hatchWidth = Math.min(260, width - margin * 2);
@@ -700,45 +700,9 @@ export class FarmScene extends Phaser.Scene {
     this.updateHatchCooldownUi();
   }
 
-  private createSettingsControl(): void {
-    this.createMenuButton('Settings (S)', 0, () => {
-      this.toggleSettingsPanel();
-    });
-  }
-
-  private createCompendiumControl(): void {
-    this.createMenuButton('Compendium (C)', 1, () => {
-      this.toggleCompendiumPanel();
-    });
-  }
-
-  private createHelpControl(): void {
-    this.createMenuButton('Help (H)', 2, () => {
-      this.toggleHelpPanel();
-    });
-  }
-
-  private createMissionsControl(): void {
-    this.createMenuButton('Goals', 4, () => {
-      this.toggleMissionsPanel();
-    });
-  }
-
-  private createZoneControl(): void {
-    this.createMenuButton('Zone', 3, () => {
-      this.toggleZonePanel();
-    });
-  }
-
-  private createUpgradeShopControl(): void {
-    this.createMenuButton('Upgrades', 5, () => {
-      this.toggleUpgradeShopPanel();
-    });
-  }
-
-  private createPrestigeControl(): void {
-    this.createMenuButton('Prestige', 6, () => {
-      this.togglePrestigePanel();
+  private createNavigationControl(): void {
+    this.createMenuButton('Menu', 0, () => {
+      this.toggleNavigationMenuPanel();
     });
   }
 
@@ -747,7 +711,7 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    this.createMenuButton('Debug (D)', 7, () => {
+    this.createMenuButton('Debug (D)', 1, () => {
       this.toggleEconomyDebugPanel();
     }, `#${THEME.buttonWarm.toString(16).padStart(6, '0')}`);
   }
@@ -797,6 +761,151 @@ export class FarmScene extends Phaser.Scene {
         this.playButtonClickSound();
         onClick();
       });
+  }
+
+  private toggleNavigationMenuPanel(): void {
+    if (this.navigationMenuPanel) {
+      this.closeNavigationMenuPanel();
+      return;
+    }
+
+    if (this.isModalOpen()) {
+      return;
+    }
+
+    this.openNavigationMenuPanel();
+  }
+
+  private openNavigationMenuPanel(): void {
+    this.closeNavigationMenuPanel();
+    this.closeCompendiumPanel();
+    this.closeSettingsPanel();
+    this.closeHelpPanel();
+    this.closeZonePanel();
+    this.closeMissionsPanel();
+    this.closeUpgradeShopPanel();
+    this.closePrestigePanel();
+    this.closeEconomyDebugPanel();
+    this.cancelActiveDrag();
+    this.clearSelectedSlot();
+    this.showModalOverlay();
+
+    const layout = this.getLayout();
+    const preferredPanelWidth = layout.isNarrow ? 260 : 280;
+    const preferredPanelHeight = 358;
+    const { width: panelWidth, height: panelHeight } = this.getPanelSize(preferredPanelWidth, preferredPanelHeight);
+    const panelX = layout.isNarrow
+      ? Math.min(this.scale.width - layout.margin - panelWidth / 2, Math.max(layout.margin + panelWidth / 2, layout.menuX - panelWidth / 2))
+      : this.scale.width - layout.margin - panelWidth / 2;
+    const panelY = Math.min(
+      this.scale.height - layout.margin - panelHeight / 2,
+      layout.menuY + 42 + panelHeight / 2,
+    );
+    const panel = this.add.container(panelX, panelY);
+
+    panel.setDepth(26);
+    this.addPanelBackground(panel, panelWidth, panelHeight);
+
+    panel.add(this.add.text(-panelWidth / 2 + 22, -panelHeight / 2 + 18, 'Menu', {
+      color: THEME.text,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '23px',
+      fontStyle: 'bold',
+    }));
+
+    const closeText = this.add.text(panelWidth / 2 - 20, -panelHeight / 2 + 20, 'Close', {
+      color: THEME.text,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '14px',
+      fontStyle: 'bold',
+      backgroundColor: '#49395d',
+      padding: {
+        x: 9,
+        y: 5,
+      },
+    }).setOrigin(1, 0);
+
+    closeText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation();
+        this.playButtonClickSound();
+        this.closeNavigationMenuPanel();
+      });
+
+    panel.add(closeText);
+
+    const menuItems: NavigationMenuItem[] = [
+      { label: 'Upgrades', openPanel: () => this.openUpgradeShopPanel() },
+      { label: 'Goals', openPanel: () => this.openMissionsPanel() },
+      { label: 'Prestige', openPanel: () => this.openPrestigePanel() },
+      { label: 'Zone', openPanel: () => this.openZonePanel() },
+      { label: 'Compendium', openPanel: () => this.openCompendiumPanel() },
+      { label: 'Help', openPanel: () => this.openHelpPanel() },
+      { label: 'Settings', openPanel: () => this.openSettingsPanel() },
+    ];
+
+    const itemWidth = panelWidth - 42;
+    const itemHeight = 32;
+    const itemGap = 8;
+    const firstItemY = -panelHeight / 2 + 72;
+
+    menuItems.forEach((item, index) => {
+      this.addNavigationMenuItem(
+        panel,
+        item,
+        -panelWidth / 2 + 21,
+        firstItemY + index * (itemHeight + itemGap),
+        itemWidth,
+        itemHeight,
+      );
+    });
+
+    this.navigationMenuPanel = panel;
+  }
+
+  private addNavigationMenuItem(
+    panel: Phaser.GameObjects.Container,
+    item: NavigationMenuItem,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ): void {
+    const itemBackground = this.add.rectangle(x, y, width, height, THEME.button, 0.96)
+      .setOrigin(0)
+      .setStrokeStyle(1, THEME.panelBorder, 0.34)
+      .setInteractive({ useHandCursor: true });
+    const itemLabel = this.add.text(x + 14, y + height / 2, item.label, {
+      color: THEME.text,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      fontStyle: 'bold',
+    }).setOrigin(0, 0.5);
+
+    itemBackground
+      .on('pointerover', () => {
+        itemBackground.setFillStyle(THEME.buttonHover, 0.98);
+      })
+      .on('pointerout', () => {
+        itemBackground.setFillStyle(THEME.button, 0.96);
+      })
+      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation();
+        this.playButtonClickSound();
+        this.closeNavigationMenuPanel();
+        item.openPanel();
+      });
+
+    panel.add([itemBackground, itemLabel]);
+  }
+
+  private closeNavigationMenuPanel(): void {
+    if (this.navigationMenuPanel) {
+      this.navigationMenuPanel.destroy();
+      this.navigationMenuPanel = undefined;
+      this.hideModalOverlay();
+    }
   }
 
   private syncAudioSettings(): void {
@@ -879,6 +988,7 @@ export class FarmScene extends Phaser.Scene {
       || this.missionsPanel
       || this.upgradeShopPanel
       || this.prestigePanel
+      || this.navigationMenuPanel
       || this.modalOverlay
     );
   }
@@ -929,6 +1039,11 @@ export class FarmScene extends Phaser.Scene {
 
     if (this.compendiumPanel) {
       this.closeCompendiumPanel();
+      return;
+    }
+
+    if (this.navigationMenuPanel) {
+      this.closeNavigationMenuPanel();
     }
   }
 
@@ -960,11 +1075,15 @@ export class FarmScene extends Phaser.Scene {
 
   private registerKeyboardShortcuts(): void {
     this.input.keyboard?.on('keydown-C', () => {
+      if (this.hasArmedDestructiveConfirmation()) {
+        return;
+      }
+
       this.toggleCompendiumPanel();
     });
 
     this.input.keyboard?.on('keydown-S', () => {
-      if (this.resetConfirmationArmed) {
+      if (this.hasArmedDestructiveConfirmation()) {
         return;
       }
 
@@ -972,20 +1091,32 @@ export class FarmScene extends Phaser.Scene {
     });
 
     this.input.keyboard?.on('keydown-H', () => {
-      if (this.resetConfirmationArmed) {
+      if (this.hasArmedDestructiveConfirmation()) {
         return;
       }
 
       this.toggleHelpPanel();
     });
 
+    this.input.keyboard?.on('keydown-M', () => {
+      if (this.hasArmedDestructiveConfirmation()) {
+        return;
+      }
+
+      this.toggleNavigationMenuPanel();
+    });
+
     this.input.keyboard?.on('keydown-D', () => {
-      if (this.resetConfirmationArmed || !SHOW_DEBUG_PANEL) {
+      if (this.hasArmedDestructiveConfirmation() || !SHOW_DEBUG_PANEL) {
         return;
       }
 
       this.toggleEconomyDebugPanel();
     });
+  }
+
+  private hasArmedDestructiveConfirmation(): boolean {
+    return this.resetConfirmationArmed || this.prestigeConfirmationArmed;
   }
 
   private registerManualDragInput(): void {
@@ -1009,6 +1140,7 @@ export class FarmScene extends Phaser.Scene {
 
   private openSettingsPanel(): void {
     this.closeSettingsPanel(false);
+    this.closeNavigationMenuPanel();
     this.closeCompendiumPanel();
     this.closeHelpPanel();
     this.closeZonePanel();
@@ -1178,6 +1310,7 @@ export class FarmScene extends Phaser.Scene {
 
   private openHelpPanel(): void {
     this.closeHelpPanel();
+    this.closeNavigationMenuPanel();
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeZonePanel();
@@ -1228,8 +1361,8 @@ export class FarmScene extends Phaser.Scene {
       ['Hatch Egg', 'Click/tap Hatch Egg when ready.'],
       ['Drag-to-merge', 'Drag matching same-family, same-level monsters onto each other.'],
       ['Monster info', 'Click/tap a monster to show its tooltip.'],
-      ['Compendium', 'Press C or click Compendium.'],
-      ['Settings', 'Press S or click Settings.'],
+      ['Compendium', 'Open Menu or press C.'],
+      ['Settings', 'Open Menu or press S.'],
     ];
 
     const lineGap = panelWidth < 420 ? 52 : 44;
@@ -1307,6 +1440,7 @@ export class FarmScene extends Phaser.Scene {
 
   private openZonePanel(): void {
     this.closeZonePanel();
+    this.closeNavigationMenuPanel();
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
@@ -1489,6 +1623,7 @@ export class FarmScene extends Phaser.Scene {
 
   private openMissionsPanel(): void {
     this.closeMissionsPanel();
+    this.closeNavigationMenuPanel();
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
@@ -1632,6 +1767,7 @@ export class FarmScene extends Phaser.Scene {
 
   private openEconomyDebugPanel(): void {
     this.closeEconomyDebugPanel();
+    this.closeNavigationMenuPanel();
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
@@ -1741,6 +1877,7 @@ export class FarmScene extends Phaser.Scene {
 
   private openUpgradeShopPanel(): void {
     this.closeUpgradeShopPanel();
+    this.closeNavigationMenuPanel();
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
@@ -1901,6 +2038,7 @@ export class FarmScene extends Phaser.Scene {
 
   private openPrestigePanel(): void {
     this.closePrestigePanel(false);
+    this.closeNavigationMenuPanel();
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
@@ -2688,6 +2826,7 @@ export class FarmScene extends Phaser.Scene {
 
   private openCompendiumPanel(): void {
     this.closeCompendiumPanel();
+    this.closeNavigationMenuPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
     this.closeZonePanel();
@@ -3797,6 +3936,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeMissionsPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
+    this.closeNavigationMenuPanel();
     this.closeEconomyDebugPanel();
     this.updateHatchCooldownUi();
     this.updateHud();

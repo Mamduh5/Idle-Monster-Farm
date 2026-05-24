@@ -22,8 +22,11 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 
 ## Mobile Viewports
 - Check `360x640` and `390x844`.
-- Confirm HUD, production stats, menu buttons, grid, expansion placeholder, and hatch panel do not overlap.
-- Open Settings, Help, Compendium, and Upgrade Shop and confirm each panel fits and can close.
+- Confirm HUD, production stats, compact Menu button, grid, expansion placeholder, and hatch panel do not overlap.
+- Open Menu and confirm it is readable, compact, and does not cover the hatch panel unnecessarily.
+- From Menu, open Upgrades, Goals, Prestige, Zone, Compendium, Help, and Settings; confirm Menu closes and each panel fits and can close.
+- With outside-tap close enabled, open Menu and tap outside it to confirm Menu closes.
+- With outside-tap close disabled, open Menu and tap outside it to confirm the tap is blocked and Menu remains open.
 
 ## Persistence
 - Reload after hatching, merging, and buying an upgrade.
