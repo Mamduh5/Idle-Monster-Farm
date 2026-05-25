@@ -50,6 +50,7 @@ const EN: TranslationTable = {
   'ui.hatch.unlockSlots': 'Unlock +3 slots',
   'ui.tapFarm.label': 'Tap Farm',
   'ui.tapFarm.status': 'Tap {amount} | Burst {energy}/{goal}',
+  'ui.tapFarm.comboStatus': 'Combo {combo} - x{multiplier}',
   'ui.tapFarm.burstPopup': 'Farm Burst! {amount}',
 
   'ui.expansion.slots': 'Expansion Slots',
@@ -267,6 +268,7 @@ const TH: TranslationTable = {
   'ui.hatch.unlockSlots': 'ปลดล็อก +3 ช่อง',
   'ui.tapFarm.label': 'Tap Farm',
   'ui.tapFarm.status': 'Tap {amount} | Burst {energy}/{goal}',
+  'ui.tapFarm.comboStatus': 'คอมโบ {combo} - x{multiplier}',
   'ui.tapFarm.burstPopup': 'Farm Burst! {amount}',
 
   'ui.expansion.slots': 'ช่องเสริม',
