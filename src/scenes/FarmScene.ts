@@ -533,7 +533,7 @@ export class FarmScene extends Phaser.Scene {
         fontStyle: 'bold',
       }).setOrigin(0.5));
     } else {
-      const unlockText = this.add.text(this.scale.width / 2, labelY, `Unlock +3 slots - ${EXPANSION_UNLOCK_COST}`, {
+      const unlockText = this.add.text(this.scale.width / 2, labelY, `Unlock +3 slots - ${this.formatCoinAmount(EXPANSION_UNLOCK_COST)}`, {
         color: THEME.text,
         fontFamily: 'Arial, sans-serif',
         fontSize: layout.isNarrow ? '13px' : '15px',
@@ -649,7 +649,7 @@ export class FarmScene extends Phaser.Scene {
       fontStyle: 'bold',
     }).setOrigin(0.5));
 
-    container.add(this.add.text(x + this.cellSize / 2, y + this.cellSize / 2 + 13, `${EXPANSION_UNLOCK_COST}`, {
+    container.add(this.add.text(x + this.cellSize / 2, y + this.cellSize / 2 + 13, this.formatCoinAmount(EXPANSION_UNLOCK_COST), {
       color: '#fff4a8',
       fontFamily: 'Arial, sans-serif',
       fontSize: '12px',
@@ -661,9 +661,9 @@ export class FarmScene extends Phaser.Scene {
     this.hudContainer?.destroy();
 
     const layout = this.getLayout();
-    const coinFontSize = layout.isNarrow ? '20px' : '24px';
+    const coinFontSize = layout.isNarrow ? '18px' : '24px';
     const productionTitleFontSize = layout.isNarrow ? '15px' : '16px';
-    const productionTextFontSize = layout.isNarrow ? '13px' : '14px';
+    const productionTextFontSize = layout.isNarrow ? '12px' : '14px';
     const productionLineSpacing = layout.isNarrow ? 2 : 5;
     const hudContainer = this.add.container(0, 0);
 
@@ -679,14 +679,16 @@ export class FarmScene extends Phaser.Scene {
       fontFamily: 'Arial, sans-serif',
       fontSize: coinFontSize,
       fontStyle: 'bold',
+      fixedWidth: layout.hudWidth - 30,
     });
     hudContainer.add(this.coinText);
 
     this.incomeText = this.add.text(layout.hudX + 18, layout.hudY + (layout.isNarrow ? 36 : 39), '+0/sec', {
       color: '#d9f6ba',
       fontFamily: 'Arial, sans-serif',
-      fontSize: '15px',
+      fontSize: layout.isNarrow ? '13px' : '15px',
       fontStyle: 'bold',
+      fixedWidth: layout.hudWidth - 30,
     });
     hudContainer.add(this.incomeText);
 
@@ -709,6 +711,10 @@ export class FarmScene extends Phaser.Scene {
       fontFamily: 'Arial, sans-serif',
       fontSize: productionTextFontSize,
       lineSpacing: productionLineSpacing,
+      fixedWidth: layout.statsWidth - 30,
+      wordWrap: {
+        width: layout.statsWidth - 30,
+      },
     });
     hudContainer.add(this.productionStatsText);
 
@@ -766,15 +772,20 @@ export class FarmScene extends Phaser.Scene {
     this.hatchLabelText = this.add.text(textX, y + 16, 'Hatch Egg', {
       color: '#ffffff',
       fontFamily: 'Arial, sans-serif',
-      fontSize: '24px',
+      fontSize: layout.isNarrow ? '21px' : '24px',
       fontStyle: 'bold',
+      fixedWidth: panelWidth - (textX - x) - 16,
     });
     hatchContainer.add(this.hatchLabelText);
 
     this.hatchStatusText = this.add.text(textX, y + 44, 'Ready', {
       color: '#d9d6ec',
       fontFamily: 'Arial, sans-serif',
-      fontSize: '14px',
+      fontSize: layout.isNarrow ? '12px' : '14px',
+      fixedWidth: panelWidth - (textX - x) - 16,
+      wordWrap: {
+        width: panelWidth - (textX - x) - 16,
+      },
     });
     hatchContainer.add(this.hatchStatusText);
 
@@ -907,7 +918,7 @@ export class FarmScene extends Phaser.Scene {
     panel.add(this.add.text(-panelWidth / 2 + 22, -panelHeight / 2 + 18, 'Menu', {
       color: THEME.text,
       fontFamily: 'Arial, sans-serif',
-      fontSize: '23px',
+      fontSize: this.getPanelTitleFontSize(panelWidth, 23),
       fontStyle: 'bold',
     }));
 
@@ -1021,6 +1032,10 @@ export class FarmScene extends Phaser.Scene {
       width: Math.min(preferredWidth, this.scale.width - 24),
       height: Math.min(preferredHeight, this.scale.height - 24),
     };
+  }
+
+  private getPanelTitleFontSize(panelWidth: number, desktopSize = 24): string {
+    return `${panelWidth < 390 ? Math.min(desktopSize, 21) : desktopSize}px`;
   }
 
   private addPanelBackground(
@@ -1260,7 +1275,7 @@ export class FarmScene extends Phaser.Scene {
     panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Settings', {
       color: THEME.text,
       fontFamily: 'Arial, sans-serif',
-      fontSize: '24px',
+      fontSize: this.getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
@@ -1430,7 +1445,7 @@ export class FarmScene extends Phaser.Scene {
     panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Help', {
       color: THEME.text,
       fontFamily: 'Arial, sans-serif',
-      fontSize: '24px',
+      fontSize: this.getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
@@ -1562,7 +1577,7 @@ export class FarmScene extends Phaser.Scene {
     panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Zone', {
       color: THEME.text,
       fontFamily: 'Arial, sans-serif',
-      fontSize: '24px',
+      fontSize: this.getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
@@ -1745,7 +1760,7 @@ export class FarmScene extends Phaser.Scene {
     panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Goals', {
       color: THEME.text,
       fontFamily: 'Arial, sans-serif',
-      fontSize: '24px',
+      fontSize: this.getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
@@ -1885,7 +1900,7 @@ export class FarmScene extends Phaser.Scene {
     panel.add(this.add.text(-panelWidth / 2 + 20, -panelHeight / 2 + 18, 'Economy Debug', {
       color: '#fff4a8',
       fontFamily: 'Arial, sans-serif',
-      fontSize: '22px',
+      fontSize: this.getPanelTitleFontSize(panelWidth, 22),
       fontStyle: 'bold',
     }));
 
@@ -2000,7 +2015,7 @@ export class FarmScene extends Phaser.Scene {
     panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Upgrade Shop', {
       color: THEME.text,
       fontFamily: 'Arial, sans-serif',
-      fontSize: '24px',
+      fontSize: this.getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
@@ -2081,7 +2096,7 @@ export class FarmScene extends Phaser.Scene {
       },
     ));
 
-    panel.add(this.add.text(panelWidth / 2 - 42, rowTop + 6, isMaxLevel ? 'Maxed' : `Cost: ${cost}`, {
+    panel.add(this.add.text(panelWidth / 2 - 42, rowTop + 6, isMaxLevel ? 'Maxed' : `Cost: ${this.formatCoinAmount(cost)}`, {
       color: isMaxLevel ? '#cdebb3' : '#fff4a8',
       fontFamily: 'Arial, sans-serif',
       fontSize: isCompactPanel ? '13px' : '15px',
@@ -2160,7 +2175,7 @@ export class FarmScene extends Phaser.Scene {
     panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Prestige', {
       color: THEME.text,
       fontFamily: 'Arial, sans-serif',
-      fontSize: '24px',
+      fontSize: this.getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
@@ -2201,14 +2216,19 @@ export class FarmScene extends Phaser.Scene {
     panel.add(this.add.text(contentX, -panelHeight / 2 + 108, statusText, {
       color: canPrestige ? '#cdebb3' : THEME.mutedText,
       fontFamily: 'Arial, sans-serif',
-      fontSize: '14px',
+      fontSize: panelWidth < 390 ? '13px' : '14px',
+      fixedWidth: contentWidth,
+      wordWrap: {
+        width: contentWidth,
+      },
     }));
 
     panel.add(this.add.text(contentX, -panelHeight / 2 + 134, `Reward: ${reward} Monster Essence`, {
       color: canPrestige ? '#fff4a8' : '#9ca79f',
       fontFamily: 'Arial, sans-serif',
-      fontSize: '14px',
+      fontSize: panelWidth < 390 ? '13px' : '14px',
       fontStyle: 'bold',
+      fixedWidth: contentWidth,
     }));
 
     panel.add(this.add.text(contentX, -panelHeight / 2 + 160, 'Reset farm progress for permanent power.', {
@@ -2258,7 +2278,7 @@ export class FarmScene extends Phaser.Scene {
       fontSize: '12px',
     }));
 
-    panel.add(this.add.text(panelWidth / 2 - 42, y - 30, `Cost: ${ESSENCE_POWER_COST}`, {
+    panel.add(this.add.text(panelWidth / 2 - 42, y - 30, `Cost: ${this.formatCoinAmount(ESSENCE_POWER_COST)}`, {
       color: '#fff4a8',
       fontFamily: 'Arial, sans-serif',
       fontSize: '13px',
@@ -2959,7 +2979,7 @@ export class FarmScene extends Phaser.Scene {
     panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Monster Compendium', {
       color: THEME.text,
       fontFamily: 'Arial, sans-serif',
-      fontSize: '22px',
+      fontSize: this.getPanelTitleFontSize(panelWidth, 22),
       fontStyle: 'bold',
     }));
 
@@ -3065,7 +3085,7 @@ export class FarmScene extends Phaser.Scene {
       fontSize: isCompactPanel ? '11px' : '13px',
     }));
 
-    panel.add(this.add.text(panelWidth / 2 - 42, rowY - (isCompactPanel ? 7 : 8), isDiscovered ? `+${monster.incomePerSecond}/sec` : 'Unknown', {
+    panel.add(this.add.text(panelWidth / 2 - 42, rowY - (isCompactPanel ? 7 : 8), isDiscovered ? `${this.formatSignedCoinAmount(monster.incomePerSecond)}/sec` : 'Unknown', {
       color: isDiscovered ? '#fff4a8' : '#9ca79f',
       fontFamily: 'Arial, sans-serif',
       fontSize: isCompactPanel ? '12px' : '14px',
@@ -3609,7 +3629,7 @@ export class FarmScene extends Phaser.Scene {
     const borderColor = variant === 'success' ? 0xc9f5b5 : variant === 'warning' ? 0xffe0a0 : THEME.panelBorder;
     const layout = this.getLayout();
     const toastWidth = Math.min(280, Math.max(220, this.scale.width - 28));
-    const toastHeight = 38;
+    const toastHeight = layout.isNarrow ? 44 : 38;
     const x = this.scale.width / 2;
     const preferredY = layout.isNarrow ? layout.hatchY - 26 : layout.gridStartY - 28;
     const y = Phaser.Math.Clamp(preferredY, 116, this.scale.height - 104);
@@ -3622,10 +3642,14 @@ export class FarmScene extends Phaser.Scene {
     const text = this.add.text(0, 0, message, {
       color: THEME.text,
       fontFamily: 'Arial, sans-serif',
-      fontSize: this.scale.width < 380 ? '14px' : '15px',
+      fontSize: this.scale.width < 380 ? '13px' : '15px',
       fontStyle: 'bold',
       align: 'center',
       fixedWidth: toastWidth - 24,
+      wordWrap: {
+        width: toastWidth - 24,
+        useAdvancedWrap: true,
+      },
     }).setOrigin(0.5);
 
     background.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
@@ -4147,26 +4171,35 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private showOfflineEarningsMessage(offlineCoins: number): void {
+    const layout = this.getLayout();
+    const popupWidth = Math.min(layout.isNarrow ? 300 : 380, this.scale.width - 32);
+    const popupY = Phaser.Math.Clamp(layout.isNarrow ? 86 : 96, 52, this.scale.height - 52);
     const popup = this.add.text(
       this.scale.width / 2,
-      96,
-      `Welcome back! You earned ${this.formatCoinAmount(offlineCoins)} coins while away.`,
+      popupY,
+      `Welcome back! ${this.formatSignedCoinAmount(offlineCoins)} coins`,
       {
         color: '#fff4a8',
         fontFamily: 'Arial, sans-serif',
-        fontSize: '20px',
+        fontSize: layout.isNarrow ? '16px' : '19px',
         fontStyle: 'bold',
+        align: 'center',
         backgroundColor: `#${THEME.panel.toString(16).padStart(6, '0')}`,
         padding: {
-          x: 14,
-          y: 8,
+          x: layout.isNarrow ? 10 : 14,
+          y: layout.isNarrow ? 7 : 8,
+        },
+        fixedWidth: popupWidth - 20,
+        wordWrap: {
+          width: popupWidth - 24,
+          useAdvancedWrap: true,
         },
       },
-    ).setOrigin(0.5);
+    ).setOrigin(0.5).setDepth(85);
 
     this.tweens.add({
       targets: popup,
-      y: popup.y - 20,
+      y: popup.y - 16,
       alpha: 0,
       delay: 2200,
       duration: 700,
@@ -4216,7 +4249,7 @@ export class FarmScene extends Phaser.Scene {
 
   private showCoinGainIndicator(slotId: number, amount: number): void {
     const center = this.slotCenters[slotId];
-    const indicator = this.add.text(center.x, center.y - 34, `+${this.formatCoinAmount(amount)}`, {
+    const indicator = this.add.text(center.x, center.y - 34, this.formatSignedCoinAmount(amount), {
       color: '#fff4a8',
       fontFamily: 'Arial, sans-serif',
       fontSize: '18px',
@@ -4294,15 +4327,22 @@ export class FarmScene extends Phaser.Scene {
       return `${this.formatCompactAmount(safeCoins / 1_000_000)}M`;
     }
 
-    if (safeCoins >= 100_000) {
+    if (safeCoins >= 1_000) {
       return `${this.formatCompactAmount(safeCoins / 1_000)}K`;
     }
 
-    if (Number.isInteger(safeCoins)) {
-      return `${safeCoins}`;
+    if (safeCoins < 10 && !Number.isInteger(safeCoins)) {
+      return safeCoins.toFixed(1).replace(/\.0$/, '');
     }
 
-    return safeCoins.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+    return Math.round(safeCoins).toString();
+  }
+
+  private formatSignedCoinAmount(coins: number): string {
+    const safeCoins = this.sanitizeCoins(coins);
+    const sign = safeCoins > 0 ? '+' : '';
+
+    return `${sign}${this.formatCoinAmount(safeCoins)}`;
   }
 
   private formatCompactAmount(amount: number): string {
@@ -4310,11 +4350,7 @@ export class FarmScene extends Phaser.Scene {
       return Math.floor(amount).toString();
     }
 
-    if (amount >= 10) {
-      return amount.toFixed(1).replace(/\.0$/, '');
-    }
-
-    return amount.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+    return amount.toFixed(1).replace(/\.0$/, '');
   }
 
   private updateHud(): void {

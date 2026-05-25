@@ -24,11 +24,13 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 ## Mobile Viewports
 - Check `360x640` and `390x844`.
 - Confirm HUD, production stats, compact Menu button, grid, expansion placeholder, and hatch panel do not overlap.
+- At `360px` width, confirm HUD, hatch, toast, and panel text do not visibly overflow their bounds.
 - In deployed mobile Chrome or an equivalent 360px-wide browser viewport, confirm the Hatch panel is fully visible above browser/navigation bars.
 - Confirm the Production panel shows Income/sec, Next Egg, and Offline Cap without clipping.
+- Confirm coin values use clean whole or compact text with no long decimal strings.
 - Confirm the expansion row or unlock button remains visible above the Hatch panel.
 - Open Menu and confirm it is readable, compact, and does not cover the hatch panel unnecessarily.
-- From Menu, open Upgrades, Goals, Prestige, Zone, Compendium, Help, and Settings; confirm Menu closes and each panel fits and can close.
+- From Menu, open Upgrades, Goals, Prestige, Zone, Compendium, Help, and Settings; confirm Menu closes and each panel is readable, fits, and can close.
 - With outside-tap close enabled, open Menu and tap outside it to confirm Menu closes.
 - With outside-tap close disabled, open Menu and tap outside it to confirm the tap is blocked and Menu remains open.
 
@@ -47,6 +49,7 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 ## Offline Return
 - Leave and return after a few minutes, or set `lastActiveAt` backward in localStorage for a manual check.
 - Confirm offline coins are added and the welcome-back message appears without console errors.
+- Confirm the offline earnings popup stays inside a `360px` mobile viewport and uses compact/no-long-decimal coin text.
 - In mobile Chrome, switch apps or background the browser without closing it, then return and confirm offline coins are added without a reload.
 - Background the app while Hatch is cooling down, return, and confirm Hatch cooldown advanced or became ready.
 - Trigger visible/focus repeatedly after returning and confirm the same offline reward is not granted again.
