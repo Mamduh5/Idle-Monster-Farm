@@ -182,6 +182,34 @@ export const COSMIC_SPORE: MonsterDefinition = {
   incomePerSecond: 950,
 };
 
+export const ASTRAL_SPORE: MonsterDefinition = {
+  family: 'Spore',
+  level: 7,
+  name: 'Astral Spore',
+  incomePerSecond: 2600,
+};
+
+export const DREAM_SPORE: MonsterDefinition = {
+  family: 'Spore',
+  level: 8,
+  name: 'Dream Spore',
+  incomePerSecond: 7200,
+};
+
+export const MYTHIC_SPORE: MonsterDefinition = {
+  family: 'Spore',
+  level: 9,
+  name: 'Mythic Spore',
+  incomePerSecond: 20000,
+};
+
+export const ETERNAL_SPORE: MonsterDefinition = {
+  family: 'Spore',
+  level: 10,
+  name: 'Eternal Spore',
+  incomePerSecond: 55000,
+};
+
 export const MONSTER_DEFINITIONS: MonsterDefinition[] = [
   BABY_SLIME,
   LEVEL_2_SLIME,
@@ -209,6 +237,10 @@ export const MONSTER_DEFINITIONS: MonsterDefinition[] = [
   ELDER_SPORE,
   ROYAL_SPORE,
   COSMIC_SPORE,
+  ASTRAL_SPORE,
+  DREAM_SPORE,
+  MYTHIC_SPORE,
+  ETERNAL_SPORE,
 ];
 
 export function getNextMonsterDefinition(

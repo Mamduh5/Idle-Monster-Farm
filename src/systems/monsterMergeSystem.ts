@@ -32,7 +32,8 @@ export function getMonsterMergeResult(
   targetMonster: MergeableMonster | null | undefined,
 ): MonsterDefinition | undefined {
   return getSameFamilyNextMonsterDefinition(sourceMonster, targetMonster)
-    ?? getCrossFamilySporeFusionResult(sourceMonster, targetMonster);
+    ?? getSlimeMushroomSporeFusionResult(sourceMonster, targetMonster)
+    ?? getSporeCatalystFusionResult(sourceMonster, targetMonster);
 }
 
 export function canMergeMonsters(
@@ -42,7 +43,7 @@ export function canMergeMonsters(
   return Boolean(getMonsterMergeResult(sourceMonster, targetMonster));
 }
 
-function getCrossFamilySporeFusionResult(
+function getSlimeMushroomSporeFusionResult(
   sourceMonster: MergeableMonster | null | undefined,
   targetMonster: MergeableMonster | null | undefined,
 ): MonsterDefinition | undefined {
@@ -58,4 +59,24 @@ function getCrossFamilySporeFusionResult(
   }
 
   return getMonsterDefinition('Spore', sourceMonster.level);
+}
+
+function getSporeCatalystFusionResult(
+  sourceMonster: MergeableMonster | null | undefined,
+  targetMonster: MergeableMonster | null | undefined,
+): MonsterDefinition | undefined {
+  if (!sourceMonster || !targetMonster || sourceMonster.level !== targetMonster.level) {
+    return undefined;
+  }
+
+  const sourceFamily = sourceMonster.family;
+  const targetFamily = targetMonster.family;
+  const isSporeCatalystPair = (sourceFamily === 'Spore' && (targetFamily === 'Slime' || targetFamily === 'Mushroom'))
+    || (targetFamily === 'Spore' && (sourceFamily === 'Slime' || sourceFamily === 'Mushroom'));
+
+  if (!isSporeCatalystPair) {
+    return undefined;
+  }
+
+  return getNextMonsterDefinition('Spore', sourceMonster.level);
 }

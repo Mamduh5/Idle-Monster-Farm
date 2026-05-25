@@ -15,17 +15,23 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Merge Slime + Mushroom of the same level, and Mushroom + Slime of the same level, and confirm both create the matching-level Spore.
 - Try Slime + Mushroom at different levels and confirm the invalid fusion rejects safely.
 - Merge two same-level Spores and confirm they create the next Spore level; confirm max-level Spore + max-level Spore rejects safely.
+- Merge Spore + Slime and Mushroom + Spore at the same level and confirm both create the next Spore level.
+- Confirm Spore Level 10 exists, looks distinct, and Spore Level 10 + same-level Slime/Mushroom rejects safely because no Level 11 Spore exists.
 - Confirm Mushroom Level 5 and Mushroom Level 6 look visually distinct on the farm and in the Compendium.
 - Open Compendium after discovering a Spore and confirm the Spore family appears with locked/visible rows as expected.
 - Confirm Mushroom Levels 5-8 and high-level Slimes look visually distinguishable and more impressive at higher levels.
+- Confirm the Next Order widget is visible on the main farm screen and does not overlap Hatch, Tap Farm, Menu, grid, or expansion controls.
+- Own or seed a claimable Order, claim it from the Next Order widget, and confirm the required monster remains on the farm.
 - Buy at least one upgrade and confirm coins, income/cooldown text, and upgrade level update.
+- In Upgrade Shop, switch buy mode to x10, x50, and Max, then confirm buying purchases up to the selected amount without exceeding coins or max level.
 - Claim a completed coin mission, confirm coins increase, and confirm the mission cannot be claimed again.
 - Buy Mushroom Income Boost and Mushroom Chance, then confirm Mushroom income and hatch odds text update.
 - Fill the grid, confirm the hatch panel says the farm is full, then merge a valid pair to free space.
 - Tap Tap Farm and confirm coins increase immediately with a compact `+coins` popup.
 - Tap Tap Farm repeatedly and confirm the combo count and multiplier appear, and tap reward popups grow at combo tiers.
+- Tap Tap Farm repeatedly and confirm floating hearts/particles increase with combo tier.
 - Stop tapping for more than 2 seconds and confirm the combo resets back to the normal Tap Farm status.
-- Tap Tap Farm repeatedly and confirm Farm Burst still triggers at 20 taps, grants bonus coins, and resets the meter.
+- Tap Tap Farm repeatedly and confirm Farm Burst still triggers at 20 taps, grants bonus coins, resets the meter, and shows a bigger particle burst.
 - Open Menu or another panel, tap where Tap Farm sits, and confirm Tap Farm does not trigger through the modal.
 - Wait for a Coin Bug to appear, tap it, and confirm coins increase with a compact `+coins` popup.
 - Tap near a Coin Bug without hitting the exact visual and confirm proximity pickup collects it reliably.
@@ -41,11 +47,13 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Unlock the expansion row, confirm 350 coins are deducted, then hatch into an expanded slot.
 - Drag or merge monsters using expanded slots.
 - During early/mid play, confirm visible progress happens roughly every 30-90 seconds and first prestige looks reachable in about 20-40 minutes.
+- During early/mid play, confirm egg costs rise less sharply and repeated hatching does not stall for minutes while income is still modest.
 
 ## Mobile Viewports
 - Check `360x640` and `390x844`.
 - Confirm HUD, production stats, compact Menu button, grid, expansion placeholder, and hatch panel do not overlap.
 - Confirm Tap Farm, Hatch, Menu, grid, and expansion controls remain distinct and usable.
+- Confirm the Next Order widget remains readable and tappable at `360px` width.
 - At `360px` width, confirm HUD, Tap Farm combo text, hatch, toast, and panel text do not visibly overflow their bounds.
 - In deployed mobile Chrome or an equivalent 360px-wide browser viewport, confirm the Hatch panel is fully visible above browser/navigation bars.
 - Confirm the Production panel shows Income/sec, Next Egg, and Offline Cap without clipping.
@@ -62,6 +70,7 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Confirm farm-grid monsters and Compendium icons remain readable at mobile size.
 - Open Compendium on a desktop/wide browser, page through all entries, and confirm the layout is not compressed or overflowing.
 - Open Upgrade Shop on mobile and confirm rows and Buy buttons are visible without clipping.
+- Open Upgrade Shop on mobile and confirm x1/x10/x50/Max buy mode controls are readable and tappable.
 - Open Goals on mobile and confirm the mission list remains readable and Claim buttons still work.
 - With a paginated panel open, tap inside the panel body and confirm outside-tap close is not triggered.
 - With outside-tap close enabled, open Menu and tap outside it to confirm Menu closes.

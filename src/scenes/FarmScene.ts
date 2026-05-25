@@ -165,6 +165,12 @@ type NavigationMenuItem = {
   label: string;
   openPanel: () => void;
 };
+type UpgradeBuyMode = 'x1' | 'x10' | 'x50' | 'max';
+type UpgradePurchasePreview = {
+  levels: number;
+  totalCost: number;
+  nextCost: number;
+};
 type CompendiumListItem =
   | {
     type: 'family';
@@ -198,6 +204,10 @@ type FarmSceneLayout = {
   statsY: number;
   statsWidth: number;
   statsHeight: number;
+  orderWidgetX: number;
+  orderWidgetY: number;
+  orderWidgetWidth: number;
+  orderWidgetHeight: number;
   menuX: number;
   menuY: number;
   menuGap: number;
@@ -227,6 +237,7 @@ export class FarmScene extends Phaser.Scene {
   private backgroundContainer?: Phaser.GameObjects.Container;
   private farmGridContainer?: Phaser.GameObjects.Container;
   private hudContainer?: Phaser.GameObjects.Container;
+  private orderWidgetContainer?: Phaser.GameObjects.Container;
   private expansionContainer?: Phaser.GameObjects.Container;
   private tapFarmContainer?: Phaser.GameObjects.Container;
   private tapFarmPanel?: Phaser.GameObjects.Rectangle;
@@ -291,6 +302,7 @@ export class FarmScene extends Phaser.Scene {
   private upgradeShopPageIndex = 0;
   private missionsPageIndex = 0;
   private ordersPageIndex = 0;
+  private upgradeBuyMode: UpgradeBuyMode = 'x1';
   private lastBlockedOutsideTapToastAt = 0;
   private lastHiddenAt: number | null = null;
   private nextCoinBugId = 1;
@@ -380,6 +392,7 @@ export class FarmScene extends Phaser.Scene {
     this.upgradeShopPageIndex = 0;
     this.missionsPageIndex = 0;
     this.ordersPageIndex = 0;
+    this.upgradeBuyMode = 'x1';
     this.lastBlockedOutsideTapToastAt = 0;
     this.lastHiddenAt = null;
     this.nextCoinBugId = 1;
@@ -399,6 +412,7 @@ export class FarmScene extends Phaser.Scene {
     this.backgroundContainer = undefined;
     this.farmGridContainer = undefined;
     this.hudContainer = undefined;
+    this.orderWidgetContainer = undefined;
     this.expansionContainer = undefined;
     this.tapFarmContainer = undefined;
     this.tapFarmPanel = undefined;
@@ -420,6 +434,7 @@ export class FarmScene extends Phaser.Scene {
     this.createFarmGrid();
     this.createExpansionPlaceholder();
     this.createHud();
+    this.createOrderWidget();
     this.createHatchArea();
     this.createTapFarmArea();
     this.createNavigationControl();
@@ -463,6 +478,7 @@ export class FarmScene extends Phaser.Scene {
     this.createFarmGrid();
     this.createExpansionPlaceholder();
     this.createHud();
+    this.createOrderWidget();
     this.createHatchArea();
     this.createTapFarmArea();
     this.createNavigationControl();
@@ -543,6 +559,12 @@ export class FarmScene extends Phaser.Scene {
     const menuGap = isNarrow ? 25 : 40;
     const menuButtonCount = SHOW_DEBUG_PANEL ? 2 : 1;
     const menuBottom = menuY + (menuButtonCount - 1) * menuGap + 30;
+    const orderWidgetWidth = isNarrow
+      ? Math.max(146, Math.min(168, width - hudWidth - margin * 3))
+      : 236;
+    const orderWidgetHeight = isNarrow ? 80 : 88;
+    const orderWidgetX = width - margin - orderWidgetWidth;
+    const orderWidgetY = isNarrow ? menuY + 38 : menuY + 44;
     const topContentBottom = isNarrow ? Math.max(statsY + statsHeight, menuBottom) : 126;
     const hatchWidth = Math.min(260, width - margin * 2);
     const hatchHeight = 76;
@@ -600,6 +622,10 @@ export class FarmScene extends Phaser.Scene {
       statsY,
       statsWidth,
       statsHeight,
+      orderWidgetX,
+      orderWidgetY,
+      orderWidgetWidth,
+      orderWidgetHeight,
       menuX,
       menuY,
       menuGap,
@@ -853,6 +879,117 @@ export class FarmScene extends Phaser.Scene {
     hudContainer.add(this.productionStatsText);
 
     this.hudContainer = hudContainer;
+  }
+
+  private createOrderWidget(): void {
+    this.orderWidgetContainer?.destroy();
+
+    const order = this.getRecommendedOrder();
+
+    if (!order) {
+      this.orderWidgetContainer = undefined;
+      return;
+    }
+
+    const layout = this.getLayout();
+    const x = layout.orderWidgetX;
+    const y = layout.orderWidgetY;
+    const width = layout.orderWidgetWidth;
+    const height = layout.orderWidgetHeight;
+    const isCompact = layout.isNarrow || width < 190;
+    const isClaimable = this.isOrderComplete(order) && !this.claimedOrderIds.has(order.id);
+    const container = this.add.container(0, 0).setDepth(7);
+
+    container.add(this.add.rectangle(x + 3, y + 4, width, height, THEME.shadow, 0.22)
+      .setOrigin(0));
+
+    const background = this.add.rectangle(x, y, width, height, isClaimable ? 0x365b32 : THEME.panel, 0.88)
+      .setOrigin(0)
+      .setStrokeStyle(2, isClaimable ? THEME.slot : THEME.panelBorder, 0.72)
+      .setInteractive({ useHandCursor: true });
+
+    background.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.stopPropagation();
+
+      if (this.isModalOpen()) {
+        return;
+      }
+
+      this.playButtonClickSound();
+      this.openOrdersPanel();
+    });
+
+    container.add(background);
+
+    container.add(this.add.text(x + 10, y + 6, this.t('ui.orderWidget.title'), {
+      color: isClaimable ? '#fff4a8' : THEME.goldText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompact ? '12px' : '13px',
+      fontStyle: 'bold',
+      fixedWidth: width - 20,
+    }));
+
+    container.add(this.add.text(x + 10, y + (isCompact ? 23 : 25), this.getOrderRequirementText(order), {
+      color: THEME.text,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompact ? '11px' : '12px',
+      fontStyle: 'bold',
+      fixedWidth: isClaimable ? width - 68 : width - 20,
+      wordWrap: {
+        width: isClaimable ? width - 68 : width - 20,
+      },
+    }));
+
+    container.add(this.add.text(x + 10, y + (isCompact ? 43 : 47), this.t('ui.orderWidget.reward', {
+      reward: this.getOrderRewardText(order.reward),
+    }), {
+      color: isClaimable ? '#fff4a8' : THEME.mutedText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompact ? '10px' : '11px',
+      fixedWidth: isClaimable ? width - 70 : width - 20,
+      wordWrap: {
+        width: isClaimable ? width - 70 : width - 20,
+      },
+    }));
+
+    container.add(this.add.text(x + 10, y + height - 18, this.getOrderWidgetStatusText(order), {
+      color: isClaimable ? '#d9f6ba' : '#cdebb3',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompact ? '10px' : '11px',
+      fontStyle: 'bold',
+      fixedWidth: isClaimable ? width - 70 : width - 20,
+    }));
+
+    if (isClaimable) {
+      const claimText = this.add.text(x + width - 10, y + height / 2 + 8, this.t('ui.orders.claim'), {
+        color: '#ffffff',
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: isCompact ? '11px' : '12px',
+        fontStyle: 'bold',
+        backgroundColor: `#${THEME.buttonHover.toString(16).padStart(6, '0')}`,
+        padding: {
+          x: isCompact ? 7 : 9,
+          y: 5,
+        },
+      }).setOrigin(1, 0.5);
+
+      claimText
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+          pointer.event?.stopPropagation();
+
+          if (this.isModalOpen()) {
+            return;
+          }
+
+          this.playButtonClickSound();
+          this.claimOrderReward(order.id);
+        });
+
+      container.add(claimText);
+    }
+
+    this.orderWidgetContainer = container;
   }
 
   private createHatchArea(): void {
@@ -1295,6 +1432,7 @@ export class FarmScene extends Phaser.Scene {
     writeSettings(this.settings);
     this.createExpansionPlaceholder();
     this.createHud();
+    this.createOrderWidget();
     this.createHatchArea();
     this.createTapFarmArea();
     this.createNavigationControl();
@@ -1565,6 +1703,7 @@ export class FarmScene extends Phaser.Scene {
     this.resetFarmControlHoverState();
     this.hatchPanel?.setAlpha(isOpen ? 0.82 : 1);
     this.tapFarmPanel?.setAlpha(isOpen ? 0.82 : 1);
+    this.orderWidgetContainer?.setAlpha(isOpen ? 0.72 : 1);
 
     this.menuButtons.forEach(({ text }) => {
       text.setAlpha(isOpen ? 0.72 : 1);
@@ -1705,6 +1844,7 @@ export class FarmScene extends Phaser.Scene {
     const farmControlRects = [
       new Phaser.Geom.Rectangle(layout.hudX, layout.hudY, layout.hudWidth, layout.hudHeight),
       new Phaser.Geom.Rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight),
+      new Phaser.Geom.Rectangle(layout.orderWidgetX, layout.orderWidgetY, layout.orderWidgetWidth, layout.orderWidgetHeight),
       new Phaser.Geom.Rectangle(layout.tapFarmX, layout.tapFarmY, layout.tapFarmWidth, layout.tapFarmHeight),
       new Phaser.Geom.Rectangle(layout.hatchX, layout.hatchY, layout.hatchWidth, layout.hatchHeight),
       new Phaser.Geom.Rectangle(
@@ -2019,6 +2159,7 @@ export class FarmScene extends Phaser.Scene {
       [this.t('ui.help.hatch.label'), this.t('ui.help.hatch.description')],
       [this.t('ui.help.tapFarm.label'), this.t('ui.help.tapFarm.description')],
       [this.t('ui.help.merge.label'), this.t('ui.help.merge.description')],
+      [this.t('ui.help.orders.label'), this.t('ui.help.orders.description')],
       [this.t('ui.help.info.label'), this.t('ui.help.info.description')],
       [this.t('ui.help.compendium.label'), this.t('ui.help.compendium.description')],
       [this.t('ui.help.settings.label'), this.t('ui.help.settings.description')],
@@ -2615,6 +2756,10 @@ export class FarmScene extends Phaser.Scene {
     }
   }
 
+  private refreshOrderWidget(): void {
+    this.createOrderWidget();
+  }
+
   private getOrderDefinition(orderId: OrderId): OrderDefinition | undefined {
     return ORDER_DEFINITIONS.find((order) => order.id === orderId);
   }
@@ -2644,6 +2789,28 @@ export class FarmScene extends Phaser.Scene {
     }
 
     return this.t('ui.orders.inProgress');
+  }
+
+  private getOrderWidgetStatusText(order: OrderDefinition): string {
+    if (this.claimedOrderIds.has(order.id)) {
+      return this.t('ui.orders.done');
+    }
+
+    if (this.isOrderComplete(order)) {
+      return this.t('ui.orderWidget.ready');
+    }
+
+    if (!this.isOrderUnlocked(order)) {
+      return this.t('ui.orders.locked');
+    }
+
+    return this.t('ui.orders.inProgress');
+  }
+
+  private getRecommendedOrder(): OrderDefinition | undefined {
+    return ORDER_DEFINITIONS.find((order) => !this.claimedOrderIds.has(order.id) && this.isOrderComplete(order))
+      ?? ORDER_DEFINITIONS.find((order) => !this.claimedOrderIds.has(order.id) && this.isOrderUnlocked(order))
+      ?? ORDER_DEFINITIONS.find((order) => !this.claimedOrderIds.has(order.id));
   }
 
   private isOrderUnlocked(order: OrderDefinition): boolean {
@@ -2684,6 +2851,7 @@ export class FarmScene extends Phaser.Scene {
     this.updateHud();
     this.saveProgress();
     this.refreshOrdersPanel();
+    this.refreshOrderWidget();
     this.showToast(this.t('toast.claimed', {
       reward: this.getOrderRewardText(order.reward),
     }), 'success');
@@ -2840,8 +3008,8 @@ export class FarmScene extends Phaser.Scene {
     const { width: panelWidth, height: panelHeight } = this.getModalSize('upgrade-shop', 640, 560);
     const rowGap = panelWidth < 500 ? 76 : 82;
     const rowHeight = Math.min(72, rowGap - 8);
-    const firstRowY = -panelHeight / 2 + 100;
-    const bodyHeight = panelHeight - 150;
+    const firstRowY = -panelHeight / 2 + 124;
+    const bodyHeight = panelHeight - 174;
     const rowsPerPage = this.getRowsPerPage(rowGap, bodyHeight, UPGRADE_DEFINITIONS.length, 5, 6);
     const pageCount = this.getPageCount(UPGRADE_DEFINITIONS.length, rowsPerPage);
     const pageIndex = Phaser.Math.Clamp(this.upgradeShopPageIndex, 0, pageCount - 1);
@@ -2881,6 +3049,8 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(closeText);
 
+    this.addUpgradeBuyModeControls(panel, panelWidth, -panelHeight / 2 + 66);
+
     pageUpgrades.forEach((upgrade, index) => {
       this.addUpgradeRow(panel, upgrade, firstRowY + index * rowGap, panelWidth, rowHeight);
     });
@@ -2905,8 +3075,10 @@ export class FarmScene extends Phaser.Scene {
     const level = this.getUpgradeLevel(upgrade.id);
     const isMaxLevel = level >= upgrade.maxLevel;
     const cost = this.getUpgradeCostForLevel(upgrade, level);
-    const canAfford = this.currency.coins >= cost && !isMaxLevel;
+    const purchasePreview = this.getUpgradePurchasePreview(upgrade, level);
+    const canAfford = purchasePreview.levels > 0 && !isMaxLevel;
     const rowTop = rowY - rowHeight / 2;
+    const costAmount = canAfford ? purchasePreview.totalCost : cost;
 
     panel.add(this.add.rectangle(0, rowY, panelWidth - 48, rowHeight, THEME.panelAlt, 0.92)
       .setStrokeStyle(2, canAfford ? THEME.slot : THEME.lockedBorder, 0.78));
@@ -2949,7 +3121,7 @@ export class FarmScene extends Phaser.Scene {
     ));
 
     panel.add(this.add.text(panelWidth / 2 - 42, rowTop + 6, isMaxLevel ? this.t('ui.upgrades.maxed') : this.t('common.cost', {
-      amount: this.formatCoinAmount(cost),
+      amount: this.formatCoinAmount(costAmount),
     }), {
       color: isMaxLevel ? '#cdebb3' : '#fff4a8',
       fontFamily: UI_FONT_FAMILY,
@@ -2957,7 +3129,9 @@ export class FarmScene extends Phaser.Scene {
       fontStyle: 'bold',
     }).setOrigin(1, 0));
 
-    const buyText = this.add.text(panelWidth / 2 - 42, rowTop + (isCompactPanel ? 30 : 32), isMaxLevel ? this.t('ui.upgrades.max') : this.t('common.buy'), {
+    const buyText = this.add.text(panelWidth / 2 - 42, rowTop + (isCompactPanel ? 30 : 32), isMaxLevel ? this.t('ui.upgrades.max') : this.t('ui.upgrades.buyModeButton', {
+      mode: this.getUpgradeBuyModeLabel(this.upgradeBuyMode),
+    }), {
       color: '#ffffff',
       fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '15px' : '16px',
@@ -3413,6 +3587,7 @@ export class FarmScene extends Phaser.Scene {
     const criticalRects = [
       new Phaser.Geom.Rectangle(layout.hudX, layout.hudY, layout.hudWidth, layout.hudHeight),
       new Phaser.Geom.Rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight),
+      new Phaser.Geom.Rectangle(layout.orderWidgetX, layout.orderWidgetY, layout.orderWidgetWidth, layout.orderWidgetHeight),
       new Phaser.Geom.Rectangle(layout.tapFarmX, layout.tapFarmY, layout.tapFarmWidth, layout.tapFarmHeight),
       new Phaser.Geom.Rectangle(layout.hatchX, layout.hatchY, layout.hatchWidth, layout.hatchHeight),
       new Phaser.Geom.Rectangle(layout.menuX - 82, layout.menuY - 6, 92, 42),
@@ -3526,6 +3701,7 @@ export class FarmScene extends Phaser.Scene {
 
     this.showFloatingCoinReward(popupX, popupY, reward);
     this.showTapFarmPulse(this.isTapFarmComboTierTap() ? 0xf3d06b : 0xd9f6ba);
+    this.showTapFarmParticles(popupX, popupY, false);
 
     if (this.tapFarmEnergy >= TAP_FARM_BURST_THRESHOLD) {
       this.triggerFarmBurst();
@@ -3613,6 +3789,7 @@ export class FarmScene extends Phaser.Scene {
     this.currency.coins = this.sanitizeCoins(this.currency.coins + reward);
     this.showFarmBurstReward(x, y, reward);
     this.showTapFarmPulse(0xf3d06b);
+    this.showTapFarmParticles(x, y, true);
   }
 
   private getTapFarmBurstReward(): number {
@@ -3646,6 +3823,68 @@ export class FarmScene extends Phaser.Scene {
         pulse.destroy();
       },
     });
+  }
+
+  private showTapFarmParticles(x: number, y: number, isBurst: boolean): void {
+    const combo = this.getActiveTapFarmCombo();
+    const particleCount = isBurst
+      ? 14
+      : combo >= 40
+        ? 7
+        : combo >= 20
+          ? 5
+          : combo >= 10
+            ? 3
+            : 2;
+    const colors = isBurst
+      ? ['#fff4a8', '#ff8fb3', '#9ff7ff', '#d8bdff']
+      : combo >= 20
+        ? ['#ff8fb3', '#fff4a8', '#d8bdff']
+        : ['#ff9fb1', '#f3d06b'];
+
+    for (let index = 0; index < particleCount; index += 1) {
+      const startX = x + Phaser.Math.Between(-12, 12);
+      const startY = y + Phaser.Math.Between(-8, 8);
+      const driftX = Phaser.Math.Between(isBurst ? -42 : -24, isBurst ? 42 : 24);
+      const driftY = Phaser.Math.Between(isBurst ? -64 : -42, isBurst ? -32 : -20);
+      const color = colors[index % colors.length];
+      const useHeart = isBurst || index % 2 === 0;
+      const particle = useHeart
+        ? this.add.text(startX, startY, '♥', {
+          color,
+          fontFamily: UI_FONT_FAMILY,
+          fontSize: `${Phaser.Math.Between(isBurst ? 15 : 10, isBurst ? 22 : 16)}px`,
+          fontStyle: 'bold',
+          stroke: '#10291a',
+          strokeThickness: 2,
+        }).setOrigin(0.5)
+        : this.add.star(
+          startX,
+          startY,
+          5,
+          isBurst ? 2.5 : 1.6,
+          isBurst ? 6 : 4,
+          Number.parseInt(color.slice(1), 16),
+          0.9,
+        );
+
+      particle.setDepth(84);
+      particle.setScale(isBurst ? 1.08 : 0.95);
+
+      this.tweens.add({
+        targets: particle,
+        x: startX + driftX,
+        y: startY + driftY,
+        alpha: 0,
+        scale: isBurst ? 1.46 : 1.24,
+        angle: Phaser.Math.Between(-18, 18),
+        duration: Phaser.Math.Between(isBurst ? 720 : 520, isBurst ? 980 : 760),
+        ease: 'Sine.easeOut',
+        onComplete: () => {
+          particle.destroy();
+        },
+      });
+    }
   }
 
   private showFarmBurstReward(x: number, y: number, amount: number): void {
@@ -3941,6 +4180,46 @@ export class FarmScene extends Phaser.Scene {
     return getUpgradeCost(upgrade, this.sanitizeUpgradeLevel(level, upgrade.maxLevel));
   }
 
+  private getUpgradeBuyModeLabel(mode: UpgradeBuyMode): string {
+    return mode === 'max' ? this.t('ui.upgrades.max') : mode;
+  }
+
+  private getUpgradeBuyModeLimit(mode: UpgradeBuyMode): number {
+    if (mode === 'max') {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    return Number.parseInt(mode.slice(1), 10);
+  }
+
+  private getUpgradePurchasePreview(upgrade: UpgradeDefinition, currentLevel: number): UpgradePurchasePreview {
+    const sanitizedLevel = this.sanitizeUpgradeLevel(currentLevel, upgrade.maxLevel);
+    const nextCost = this.getUpgradeCostForLevel(upgrade, sanitizedLevel);
+    const maxLevelsToBuy = this.getUpgradeBuyModeLimit(this.upgradeBuyMode);
+    let levels = 0;
+    let totalCost = 0;
+
+    while (
+      sanitizedLevel + levels < upgrade.maxLevel
+      && levels < maxLevelsToBuy
+    ) {
+      const levelCost = this.getUpgradeCostForLevel(upgrade, sanitizedLevel + levels);
+
+      if (levelCost <= 0 || this.currency.coins < totalCost + levelCost) {
+        break;
+      }
+
+      totalCost += levelCost;
+      levels += 1;
+    }
+
+    return {
+      levels,
+      totalCost,
+      nextCost,
+    };
+  }
+
   private sanitizeUpgradeLevel(level: number, maxLevel: number): number {
     if (!Number.isFinite(level) || level < 0) {
       return 0;
@@ -3962,22 +4241,24 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    const cost = this.getUpgradeCostForLevel(upgrade, currentLevel);
+    const purchasePreview = this.getUpgradePurchasePreview(upgrade, currentLevel);
 
-    if (this.currency.coins < cost) {
+    if (purchasePreview.levels <= 0) {
       this.showNotEnoughCoinsMessage();
       return;
     }
 
-    this.currency.coins = this.sanitizeCoins(this.currency.coins - cost);
-    this.upgradeLevels[upgradeId] = currentLevel + 1;
+    this.currency.coins = this.sanitizeCoins(this.currency.coins - purchasePreview.totalCost);
+    this.upgradeLevels[upgradeId] = currentLevel + purchasePreview.levels;
     this.hatchCooldownMs = Math.min(this.hatchCooldownMs, this.getHatchCooldownMs());
     this.completeMission('buy-upgrade-1');
     this.hideFarmMessage();
     this.updateHud();
     this.saveProgress();
     this.openUpgradeShopPanel();
-    this.showToast(this.t('toast.upgradePurchased'), 'success');
+    this.showToast(purchasePreview.levels === 1
+      ? this.t('toast.upgradePurchased')
+      : this.t('toast.upgradePurchasedLevels', { count: purchasePreview.levels }), 'success');
   }
 
   private buyEssencePower(): void {
@@ -4311,6 +4592,55 @@ export class FarmScene extends Phaser.Scene {
     this.discoveredMonsters.add(this.getDiscoveryKey(monster.family, monster.level));
     this.refreshCompendiumPanel();
     this.refreshOrdersPanel();
+    this.refreshOrderWidget();
+  }
+
+  private addUpgradeBuyModeControls(
+    panel: Phaser.GameObjects.Container,
+    panelWidth: number,
+    y: number,
+  ): void {
+    const modes: UpgradeBuyMode[] = ['x1', 'x10', 'x50', 'max'];
+    const label = this.add.text(-panelWidth / 2 + 24, y, this.t('ui.upgrades.buyMode'), {
+      color: THEME.mutedText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: panelWidth < 430 ? '11px' : '12px',
+      fontStyle: 'bold',
+    }).setOrigin(0, 0.5);
+    panel.add(label);
+
+    const buttonWidth = panelWidth < 430 ? 38 : 46;
+    const gap = panelWidth < 430 ? 5 : 7;
+    const totalWidth = modes.length * buttonWidth + (modes.length - 1) * gap;
+    const startX = panelWidth / 2 - 24 - totalWidth;
+
+    modes.forEach((mode, index) => {
+      const isSelected = this.upgradeBuyMode === mode;
+      const button = this.add.text(startX + index * (buttonWidth + gap), y, this.getUpgradeBuyModeLabel(mode), {
+        color: '#ffffff',
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: panelWidth < 430 ? '11px' : '12px',
+        fontStyle: 'bold',
+        align: 'center',
+        backgroundColor: `#${(isSelected ? THEME.buttonHover : THEME.lockedInner).toString(16).padStart(6, '0')}`,
+        padding: {
+          x: 7,
+          y: 5,
+        },
+        fixedWidth: buttonWidth,
+      }).setOrigin(0, 0.5);
+
+      button
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+          pointer.event?.stopPropagation();
+          this.playButtonClickSound();
+          this.upgradeBuyMode = mode;
+          this.openUpgradeShopPanel();
+        });
+
+      panel.add(button);
+    });
   }
 
   private getDiscoveryKey(family: MonsterFamily, level: number): DiscoveryKey {
@@ -4946,7 +5276,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getMonsterVisualIntensity(family: MonsterFamily, level: number): MonsterVisualIntensity {
-    const maxLevel = family === 'Mushroom' ? 8 : family === 'Spore' ? 6 : 12;
+    const maxLevel = family === 'Mushroom' ? 8 : family === 'Spore' ? 10 : 12;
     const normalizedLevel = Phaser.Math.Clamp(level, 1, maxLevel);
     const progress = maxLevel <= 1 ? 0 : (normalizedLevel - 1) / (maxLevel - 1);
     const tier = Math.min(5, Math.floor(progress * 6));
@@ -5353,13 +5683,73 @@ export class FarmScene extends Phaser.Scene {
         stemColor: 0xe9e2ff,
         stemStrokeColor: 0x5a4a8f,
       },
+      7: {
+        bodyColor: 0x5b42c8,
+        baseColor: 0x4fd6b6,
+        strokeColor: 0x1d174f,
+        accentColor: 0xbff8ff,
+        secondaryAccentColor: 0xffe38a,
+        bodyWidth: 71,
+        bodyHeight: 57,
+        silhouetteVariant: 'astral-spore',
+        patternVariant: 'astral orbit',
+        accessories: ['orbit spores', 'astral halo'],
+        auraType: 'astral',
+        stemColor: 0xe9e2ff,
+        stemStrokeColor: 0x514184,
+      },
+      8: {
+        bodyColor: 0xa676e8,
+        baseColor: 0x68d7e6,
+        strokeColor: 0x4c2d7a,
+        accentColor: 0xffd6f5,
+        secondaryAccentColor: 0xbff8ff,
+        bodyWidth: 74,
+        bodyHeight: 59,
+        silhouetteVariant: 'dream-spore',
+        patternVariant: 'dream moons',
+        accessories: ['moon spots', 'dream bubbles'],
+        auraType: 'dream',
+        stemColor: 0xf4e7ff,
+        stemStrokeColor: 0x704d92,
+      },
+      9: {
+        bodyColor: 0xd44d9c,
+        baseColor: 0x69d077,
+        strokeColor: 0x6d1d56,
+        accentColor: 0xfff0a8,
+        secondaryAccentColor: 0x9ff7ff,
+        bodyWidth: 77,
+        bodyHeight: 61,
+        silhouetteVariant: 'mythic-spore',
+        patternVariant: 'mythic runes',
+        accessories: ['rune crown', 'mythic spores'],
+        auraType: 'mythic',
+        stemColor: 0xf4e7ff,
+        stemStrokeColor: 0x7a3f82,
+      },
+      10: {
+        bodyColor: 0xf4f0ff,
+        baseColor: 0x65e0b9,
+        strokeColor: 0x33577f,
+        accentColor: 0xfff4a8,
+        secondaryAccentColor: 0x8ff7ff,
+        bodyWidth: 80,
+        bodyHeight: 64,
+        silhouetteVariant: 'eternal-spore',
+        patternVariant: 'eternal halo',
+        accessories: ['halo crown', 'radiant spores'],
+        auraType: 'eternal',
+        stemColor: 0xfff0d0,
+        stemStrokeColor: 0x7d6d35,
+      },
     };
 
     return {
       family: 'Spore',
       level,
       visualIntensity,
-      ...(paletteByLevel[level] ?? paletteByLevel[6]),
+      ...(paletteByLevel[level] ?? paletteByLevel[10]),
     };
   }
 
@@ -5486,21 +5876,113 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    container.add(this.add.ellipse(x, y - 5 * scale, 62 * scale, 30 * scale, 0xffffff, 0)
-      .setStrokeStyle(strokeWidth, visualStyle.accentColor, 0.48));
+    if (level === 6) {
+      container.add(this.add.ellipse(x, y - 5 * scale, 62 * scale, 30 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, visualStyle.accentColor, 0.48));
+      [
+        [-24, -3, 3.2],
+        [24, -7, 3.4],
+        [0, -27, 3.8],
+      ].forEach(([sporeX, sporeY, radius], index) => {
+        container.add(this.add.star(
+          x + sporeX * scale,
+          y + sporeY * scale,
+          5,
+          Math.max(1.4, radius * 0.46 * scale),
+          radius * scale,
+          index === 1 ? visualStyle.secondaryAccentColor : visualStyle.accentColor,
+          0.92,
+        ));
+      });
+      return;
+    }
+
+    if (level === 7) {
+      container.add(this.add.ellipse(x, y - 6 * scale, 70 * scale, 34 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, visualStyle.accentColor, 0.6));
+      container.add(this.add.ellipse(x, y - 6 * scale, 48 * scale, 60 * scale, 0xffffff, 0)
+        .setStrokeStyle(Math.max(1, Math.round(1.3 * scale)), visualStyle.secondaryAccentColor, 0.36));
+      [
+        [-29, -8, 3.4],
+        [29, -3, 3.2],
+        [0, -32, 4],
+        [14, -25, 2.8],
+      ].forEach(([sporeX, sporeY, radius], index) => {
+        container.add(this.add.star(
+          x + sporeX * scale,
+          y + sporeY * scale,
+          5,
+          Math.max(1.4, radius * 0.45 * scale),
+          radius * scale,
+          index % 2 === 0 ? visualStyle.accentColor : visualStyle.secondaryAccentColor,
+          0.92,
+        ));
+      });
+      return;
+    }
+
+    if (level === 8) {
+      container.add(this.add.arc(x - 18 * scale, y - 26 * scale, 8 * scale, 55, 300, false, visualStyle.accentColor, 0.88));
+      [
+        [-27, -7, 4.4],
+        [26, -12, 3.6],
+        [12, -30, 3],
+        [-6, -24, 2.6],
+      ].forEach(([bubbleX, bubbleY, radius], index) => {
+        container.add(this.add.circle(
+          x + bubbleX * scale,
+          y + bubbleY * scale,
+          radius * scale,
+          index % 2 === 0 ? visualStyle.accentColor : visualStyle.secondaryAccentColor,
+          0.52,
+        ).setStrokeStyle(Math.max(1, Math.round(1.1 * scale)), visualStyle.strokeColor, 0.28));
+      });
+      return;
+    }
+
+    if (level === 9) {
+      container.add(this.add.rectangle(x, y - 28 * scale, 34 * scale, 6 * scale, visualStyle.accentColor, 0.88)
+        .setStrokeStyle(strokeWidth, visualStyle.strokeColor, 0.72));
+      [-16, 0, 16].forEach((runeX, index) => {
+        container.add(this.add.star(
+          x + runeX * scale,
+          y - (index === 1 ? 35 : 31) * scale,
+          6,
+          2.2 * scale,
+          6.2 * scale,
+          index === 1 ? visualStyle.secondaryAccentColor : visualStyle.accentColor,
+          0.92,
+        ).setStrokeStyle(Math.max(1, Math.round(1.1 * scale)), visualStyle.strokeColor, 0.46));
+      });
+      [
+        [-23, -3],
+        [23, -4],
+        [0, 3],
+      ].forEach(([runeX, runeY]) => {
+        container.add(this.add.rectangle(x + runeX * scale, y + runeY * scale, 8 * scale, 3 * scale, visualStyle.secondaryAccentColor, 0.72));
+      });
+      return;
+    }
+
+    container.add(this.add.ellipse(x, y - 9 * scale, 78 * scale, 40 * scale, 0xffffff, 0)
+      .setStrokeStyle(strokeWidth, visualStyle.accentColor, 0.72));
+    container.add(this.add.ellipse(x, y - 9 * scale, 54 * scale, 68 * scale, 0xffffff, 0)
+      .setStrokeStyle(Math.max(1, Math.round(1.4 * scale)), visualStyle.secondaryAccentColor, 0.48));
     [
-      [-24, -3, 3.2],
-      [24, -7, 3.4],
-      [0, -27, 3.8],
+      [-31, -9, 4],
+      [31, -9, 4],
+      [-18, -28, 3.4],
+      [18, -28, 3.4],
+      [0, -39, 4.8],
     ].forEach(([sporeX, sporeY, radius], index) => {
       container.add(this.add.star(
         x + sporeX * scale,
         y + sporeY * scale,
-        5,
-        Math.max(1.4, radius * 0.46 * scale),
+        6,
+        Math.max(1.6, radius * 0.42 * scale),
         radius * scale,
-        index === 1 ? visualStyle.secondaryAccentColor : visualStyle.accentColor,
-        0.92,
+        index === 4 ? visualStyle.secondaryAccentColor : visualStyle.accentColor,
+        0.94,
       ));
     });
   }
@@ -6124,6 +6606,7 @@ export class FarmScene extends Phaser.Scene {
     this.syncZoneUnlockFromPrestigeProgress();
     this.createFarmBackground();
     this.refreshOrdersPanel();
+    this.refreshOrderWidget();
 
     this.applyAwayProgress(saveData.lastActiveAt, Date.now(), true);
 
@@ -6277,6 +6760,7 @@ export class FarmScene extends Phaser.Scene {
     this.lastTapFarmComboAt = -TAP_FARM_COMBO_TIMEOUT_MS;
     this.createExpansionPlaceholder();
     this.createFarmBackground();
+    this.refreshOrderWidget();
 
     this.hideFarmMessage();
     this.clearSelectedSlot();

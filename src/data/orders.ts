@@ -23,6 +23,9 @@ export type OrderId =
   | 'own-spore-1'
   | 'own-spore-3'
   | 'own-spore-4'
+  | 'own-spore-7'
+  | 'own-spore-8'
+  | 'own-spore-10'
   | 'own-mushroom-3'
   | 'own-slime-6'
   | 'own-mushroom-6'
@@ -111,6 +114,51 @@ export const ORDER_DEFINITIONS: OrderDefinition[] = [
       type: 'discovered',
       family: 'Spore',
       level: 3,
+    },
+  },
+  {
+    id: 'own-spore-7',
+    title: 'Own Astral Spore',
+    requiredFamily: 'Spore',
+    requiredLevel: 7,
+    reward: {
+      type: 'essence',
+      amount: 3,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Spore',
+      level: 6,
+    },
+  },
+  {
+    id: 'own-spore-8',
+    title: 'Own Dream Spore',
+    requiredFamily: 'Spore',
+    requiredLevel: 8,
+    reward: {
+      type: 'essence',
+      amount: 5,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Spore',
+      level: 7,
+    },
+  },
+  {
+    id: 'own-spore-10',
+    title: 'Own Eternal Spore',
+    requiredFamily: 'Spore',
+    requiredLevel: 10,
+    reward: {
+      type: 'essence',
+      amount: 10,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Spore',
+      level: 8,
     },
   },
   {
