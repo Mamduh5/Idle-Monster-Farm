@@ -18,6 +18,9 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Claim a completed coin mission, confirm coins increase, and confirm the mission cannot be claimed again.
 - Buy Mushroom Income Boost and Mushroom Chance, then confirm Mushroom income and hatch odds text update.
 - Fill the grid, confirm the hatch panel says the farm is full, then merge a valid pair to free space.
+- Tap Tap Farm and confirm coins increase immediately with a compact `+coins` popup.
+- Tap Tap Farm repeatedly and confirm Farm Burst triggers at 20 taps, grants bonus coins, and resets the meter.
+- Open Menu or another panel, tap where Tap Farm sits, and confirm Tap Farm does not trigger through the modal.
 - Wait for a Coin Bug to appear, tap it, and confirm coins increase with a compact `+coins` popup.
 - Tap near a Coin Bug without hitting the exact visual and confirm proximity pickup collects it reliably.
 - On mobile, tap around the edge of a Coin Bug and confirm it is still easy to collect.
@@ -35,7 +38,8 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 ## Mobile Viewports
 - Check `360x640` and `390x844`.
 - Confirm HUD, production stats, compact Menu button, grid, expansion placeholder, and hatch panel do not overlap.
-- At `360px` width, confirm HUD, hatch, toast, and panel text do not visibly overflow their bounds.
+- Confirm Tap Farm, Hatch, Menu, grid, and expansion controls remain distinct and usable.
+- At `360px` width, confirm HUD, Tap Farm, hatch, toast, and panel text do not visibly overflow their bounds.
 - In deployed mobile Chrome or an equivalent 360px-wide browser viewport, confirm the Hatch panel is fully visible above browser/navigation bars.
 - Confirm the Production panel shows Income/sec, Next Egg, and Offline Cap without clipping.
 - Confirm coin values use clean whole or compact text with no long decimal strings.
@@ -56,6 +60,7 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - With outside-tap close enabled, open Menu and tap outside it to confirm Menu closes.
 - With outside-tap close disabled, open Menu and tap outside it to confirm the tap is blocked and Menu remains open.
 - With a Coin Bug visible, drag a monster near it and confirm normal drag still works.
+- Drag monsters near and over the Tap Farm area and confirm normal drag/drop behavior still works.
 - Open a panel while a Coin Bug is visible and confirm the bug cannot be tapped through the modal.
 - Open Orders on mobile and confirm rows, status labels, Claim buttons, and pagination fit at `360px`.
 

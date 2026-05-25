@@ -81,6 +81,12 @@ const COIN_BUG_MIN_REWARD = 25;
 const COIN_BUG_HITBOX_SIZE = 72;
 const COIN_BUG_PICKUP_RADIUS_DESKTOP = 52;
 const COIN_BUG_PICKUP_RADIUS_MOBILE = 64;
+const TAP_FARM_REWARD_SECONDS = 0.5;
+const TAP_FARM_MIN_REWARD = 1;
+const TAP_FARM_BURST_THRESHOLD = 20;
+const TAP_FARM_BURST_REWARD_SECONDS = 10;
+const TAP_FARM_BURST_MIN_REWARD = 25;
+const TAP_FARM_COOLDOWN_MS = 90;
 const SHOW_DEBUG_PANEL = false;
 const SHOW_MONSTER_HITBOX_DEBUG = false;
 const MODAL_OVERLAY_DEPTH = 18;
@@ -197,6 +203,10 @@ type FarmSceneLayout = {
   expansionLabelY: number;
   expansionStartX: number;
   expansionStartY: number;
+  tapFarmX: number;
+  tapFarmY: number;
+  tapFarmWidth: number;
+  tapFarmHeight: number;
   hatchX: number;
   hatchY: number;
   hatchWidth: number;
@@ -215,6 +225,10 @@ export class FarmScene extends Phaser.Scene {
   private farmGridContainer?: Phaser.GameObjects.Container;
   private hudContainer?: Phaser.GameObjects.Container;
   private expansionContainer?: Phaser.GameObjects.Container;
+  private tapFarmContainer?: Phaser.GameObjects.Container;
+  private tapFarmPanel?: Phaser.GameObjects.Rectangle;
+  private tapFarmStatusText?: Phaser.GameObjects.Text;
+  private tapFarmEnergyFill?: Phaser.GameObjects.Rectangle;
   private hatchContainer?: Phaser.GameObjects.Container;
   private menuControlsContainer?: Phaser.GameObjects.Container;
   private toastContainer?: Phaser.GameObjects.Container;
@@ -279,6 +293,8 @@ export class FarmScene extends Phaser.Scene {
   private nextCoinBugId = 1;
   private coinBugSpawnAccumulatorMs = 0;
   private nextCoinBugSpawnMs = 0;
+  private tapFarmEnergy = 0;
+  private lastTapFarmAt = -TAP_FARM_COOLDOWN_MS;
 
   private readonly handlePageHide = (): void => {
     this.saveProgress();
@@ -364,6 +380,8 @@ export class FarmScene extends Phaser.Scene {
     this.nextCoinBugId = 1;
     this.coinBugSpawnAccumulatorMs = 0;
     this.nextCoinBugSpawnMs = this.getNextCoinBugSpawnDelayMs();
+    this.tapFarmEnergy = 0;
+    this.lastTapFarmAt = -TAP_FARM_COOLDOWN_MS;
     this.validateMonsterVisualIdentities();
     this.clearCoinBugs();
     this.hatchCooldownMs = HATCH_COOLDOWN_MS;
@@ -375,6 +393,10 @@ export class FarmScene extends Phaser.Scene {
     this.farmGridContainer = undefined;
     this.hudContainer = undefined;
     this.expansionContainer = undefined;
+    this.tapFarmContainer = undefined;
+    this.tapFarmPanel = undefined;
+    this.tapFarmStatusText = undefined;
+    this.tapFarmEnergyFill = undefined;
     this.hatchContainer = undefined;
     this.menuControlsContainer = undefined;
     this.menuButtons = [];
@@ -392,6 +414,7 @@ export class FarmScene extends Phaser.Scene {
     this.createExpansionPlaceholder();
     this.createHud();
     this.createHatchArea();
+    this.createTapFarmArea();
     this.createNavigationControl();
     this.createEconomyDebugControl();
     this.registerKeyboardShortcuts();
@@ -433,6 +456,7 @@ export class FarmScene extends Phaser.Scene {
     this.createExpansionPlaceholder();
     this.createHud();
     this.createHatchArea();
+    this.createTapFarmArea();
     this.createNavigationControl();
     this.createEconomyDebugControl();
 
@@ -517,20 +541,25 @@ export class FarmScene extends Phaser.Scene {
     const bottomSafePadding = isNarrow ? (height < 700 ? 24 : 18) : 18;
     const hatchX = isNarrow ? (width - hatchWidth) / 2 : width - hatchWidth - margin;
     const hatchY = height - hatchHeight - bottomSafePadding;
+    const tapFarmWidth = hatchWidth;
+    const tapFarmHeight = isNarrow ? 42 : 46;
+    const tapFarmGap = isNarrow ? (height < 680 ? 6 : 8) : 10;
+    const tapFarmX = hatchX;
+    const tapFarmY = hatchY - tapFarmHeight - tapFarmGap;
     const gridTopGap = isNarrow ? (height < 680 ? 6 : 10) : 0;
     const gridToExpansionLabelGap = isNarrow ? (height < 680 ? 8 : 12) : 20;
     const expansionLabelToRowGap = isNarrow ? (height < 680 ? 18 : 24) : 34;
-    const expansionToHatchGap = isNarrow ? (height < 680 ? 8 : 12) : 12;
+    const expansionToTapGap = isNarrow ? (height < 680 ? 6 : 8) : 12;
     const minGridStartY = topContentBottom + gridTopGap;
     const widthLimitedCellSize = Math.floor((width - margin * 2 - (GRID_COLUMNS - 1) * gridGap) / GRID_COLUMNS);
-    const availableStackHeight = Math.max(0, hatchY - minGridStartY);
+    const availableStackHeight = Math.max(0, tapFarmY - minGridStartY);
     const heightLimitedCellSize = Math.floor(
       (
         availableStackHeight
         - (GRID_ROWS - 1) * gridGap
         - gridToExpansionLabelGap
         - expansionLabelToRowGap
-        - expansionToHatchGap
+        - expansionToTapGap
       ) / (GRID_ROWS + EXPANSION_ROWS),
     );
     const mobileMinimumCellSize = height < 560 ? 48 : 52;
@@ -541,7 +570,7 @@ export class FarmScene extends Phaser.Scene {
     const gridWidth = GRID_COLUMNS * cellSize + (GRID_COLUMNS - 1) * gridGap;
     const gridHeight = GRID_ROWS * cellSize + (GRID_ROWS - 1) * gridGap;
     const expansionHeight = gridToExpansionLabelGap + expansionLabelToRowGap + cellSize;
-    const maxGridStartY = hatchY - gridHeight - expansionHeight - expansionToHatchGap;
+    const maxGridStartY = tapFarmY - gridHeight - expansionHeight - expansionToTapGap;
     const gridStartY = isNarrow
       ? Math.max(minGridStartY, Math.min(minGridStartY, maxGridStartY))
       : 126;
@@ -571,6 +600,10 @@ export class FarmScene extends Phaser.Scene {
       expansionLabelY,
       expansionStartX: (width - gridWidth) / 2,
       expansionStartY,
+      tapFarmX,
+      tapFarmY,
+      tapFarmWidth,
+      tapFarmHeight,
       hatchX,
       hatchY,
       hatchWidth,
@@ -897,6 +930,101 @@ export class FarmScene extends Phaser.Scene {
     this.updateHatchCooldownUi();
   }
 
+  private createTapFarmArea(): void {
+    this.tapFarmContainer?.destroy();
+
+    const layout = this.getLayout();
+    const x = layout.tapFarmX;
+    const y = layout.tapFarmY;
+    const panelWidth = layout.tapFarmWidth;
+    const panelHeight = layout.tapFarmHeight;
+    const tapFarmContainer = this.add.container(0, 0);
+
+    tapFarmContainer.add(this.add.rectangle(x + 3, y + 4, panelWidth, panelHeight, THEME.shadow, 0.28)
+      .setOrigin(0));
+
+    const tapFarmPanel = this.add.rectangle(x, y, panelWidth, panelHeight, 0x2f6b45, 0.94)
+      .setOrigin(0)
+      .setStrokeStyle(2, THEME.panelBorder, 0.78);
+    this.tapFarmPanel = tapFarmPanel;
+    tapFarmContainer.add(tapFarmPanel);
+
+    const coinX = x + 28;
+    const centerY = y + panelHeight / 2;
+    tapFarmContainer.add(this.add.circle(coinX + 1, centerY + 1, 12, THEME.shadow, 0.22));
+    tapFarmContainer.add(this.add.circle(coinX, centerY, 12, 0xf3d06b, 0.96)
+      .setStrokeStyle(2, 0x8a6221, 0.9));
+    tapFarmContainer.add(this.add.text(coinX, centerY, '+', {
+      color: '#6b4a16',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: layout.isNarrow ? '15px' : '17px',
+      fontStyle: 'bold',
+    }).setOrigin(0.5));
+
+    tapFarmContainer.add(this.add.text(x + 50, y + 8, this.t('ui.tapFarm.label'), {
+      color: '#ffffff',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: layout.isNarrow ? '17px' : '19px',
+      fontStyle: 'bold',
+      fixedWidth: panelWidth - 64,
+    }));
+
+    this.tapFarmStatusText = this.add.text(x + 50, y + panelHeight - 18, '', {
+      color: '#d9f6ba',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: layout.isNarrow ? '11px' : '12px',
+      fontStyle: 'bold',
+      fixedWidth: panelWidth - 64,
+    });
+    tapFarmContainer.add(this.tapFarmStatusText);
+
+    const energyTrackWidth = Math.max(58, panelWidth - 184);
+    const energyTrackX = x + panelWidth - energyTrackWidth - 14;
+    const energyTrackY = y + panelHeight - 10;
+    tapFarmContainer.add(this.add.rectangle(energyTrackX, energyTrackY, energyTrackWidth, 5, 0x14351f, 0.84)
+      .setOrigin(0)
+      .setStrokeStyle(1, 0xf4e6a6, 0.4));
+
+    this.tapFarmEnergyFill = this.add.rectangle(energyTrackX, energyTrackY, energyTrackWidth, 5, 0xf3d06b, 0.96)
+      .setOrigin(0);
+    tapFarmContainer.add(this.tapFarmEnergyFill);
+
+    tapFarmPanel
+      .setInteractive({ useHandCursor: true })
+      .on(
+        'pointerdown',
+        (
+          pointer: Phaser.Input.Pointer,
+          _localX: number,
+          _localY: number,
+          event: Phaser.Types.Input.EventData,
+        ) => {
+          event.stopPropagation();
+          pointer.event?.stopPropagation();
+
+          if (this.isModalOpen() || this.activeDragSlotId !== null) {
+            return;
+          }
+
+          this.handleTapFarm(pointer);
+        },
+      )
+      .on('pointerover', () => {
+        if (this.isModalOpen()) {
+          this.resetFarmControlHoverState();
+          return;
+        }
+
+        tapFarmPanel.setFillStyle(THEME.buttonHover, 0.98);
+      })
+      .on('pointerout', () => {
+        tapFarmPanel.setFillStyle(THEME.button, 0.94);
+      });
+
+    this.tapFarmContainer = tapFarmContainer;
+    this.updateTapFarmUi();
+  }
+
   private createNavigationControl(): void {
     this.menuControlsContainer?.destroy();
     this.menuControlsContainer = this.add.container(0, 0);
@@ -1160,6 +1288,7 @@ export class FarmScene extends Phaser.Scene {
     this.createExpansionPlaceholder();
     this.createHud();
     this.createHatchArea();
+    this.createTapFarmArea();
     this.createNavigationControl();
     this.updateHud();
     this.openSettingsPanel();
@@ -1427,6 +1556,7 @@ export class FarmScene extends Phaser.Scene {
   private setModalOpenVisualState(isOpen: boolean): void {
     this.resetFarmControlHoverState();
     this.hatchPanel?.setAlpha(isOpen ? 0.82 : 1);
+    this.tapFarmPanel?.setAlpha(isOpen ? 0.82 : 1);
 
     this.menuButtons.forEach(({ text }) => {
       text.setAlpha(isOpen ? 0.72 : 1);
@@ -1435,6 +1565,7 @@ export class FarmScene extends Phaser.Scene {
 
   private resetFarmControlHoverState(): void {
     this.hatchPanel?.setFillStyle(0x49395d, 0.92);
+    this.tapFarmPanel?.setFillStyle(THEME.button, 0.94);
 
     this.menuButtons.forEach(({ text, defaultBackgroundColor }) => {
       text.setBackgroundColor(defaultBackgroundColor);
@@ -1566,6 +1697,7 @@ export class FarmScene extends Phaser.Scene {
     const farmControlRects = [
       new Phaser.Geom.Rectangle(layout.hudX, layout.hudY, layout.hudWidth, layout.hudHeight),
       new Phaser.Geom.Rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight),
+      new Phaser.Geom.Rectangle(layout.tapFarmX, layout.tapFarmY, layout.tapFarmWidth, layout.tapFarmHeight),
       new Phaser.Geom.Rectangle(layout.hatchX, layout.hatchY, layout.hatchWidth, layout.hatchHeight),
       new Phaser.Geom.Rectangle(
         layout.expansionStartX - 8,
@@ -1841,7 +1973,7 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = this.getPanelSize(500, 390);
+    const { width: panelWidth, height: panelHeight } = this.getPanelSize(500, 430);
 
     panel.setDepth(26);
 
@@ -1877,13 +2009,14 @@ export class FarmScene extends Phaser.Scene {
 
     const helpLines = [
       [this.t('ui.help.hatch.label'), this.t('ui.help.hatch.description')],
+      [this.t('ui.help.tapFarm.label'), this.t('ui.help.tapFarm.description')],
       [this.t('ui.help.merge.label'), this.t('ui.help.merge.description')],
       [this.t('ui.help.info.label'), this.t('ui.help.info.description')],
       [this.t('ui.help.compendium.label'), this.t('ui.help.compendium.description')],
       [this.t('ui.help.settings.label'), this.t('ui.help.settings.description')],
     ];
 
-    const lineGap = panelWidth < 420 ? 52 : 44;
+    const lineGap = Math.min(panelWidth < 420 ? 46 : 42, (panelHeight - 146) / helpLines.length);
 
     helpLines.forEach(([label, description], index) => {
       this.addHelpLine(panel, label, description, -panelHeight / 2 + 82 + index * lineGap, panelWidth);
@@ -3272,6 +3405,7 @@ export class FarmScene extends Phaser.Scene {
     const criticalRects = [
       new Phaser.Geom.Rectangle(layout.hudX, layout.hudY, layout.hudWidth, layout.hudHeight),
       new Phaser.Geom.Rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight),
+      new Phaser.Geom.Rectangle(layout.tapFarmX, layout.tapFarmY, layout.tapFarmWidth, layout.tapFarmHeight),
       new Phaser.Geom.Rectangle(layout.hatchX, layout.hatchY, layout.hatchWidth, layout.hatchHeight),
       new Phaser.Geom.Rectangle(layout.menuX - 82, layout.menuY - 6, 92, 42),
       new Phaser.Geom.Rectangle(this.scale.width / 2 - 120, layout.expansionLabelY - 18, 240, 36),
@@ -3360,6 +3494,112 @@ export class FarmScene extends Phaser.Scene {
       COIN_BUG_MIN_REWARD,
       this.getTotalIncomePerSecond() * COIN_BUG_REWARD_SECONDS,
     ));
+  }
+
+  private handleTapFarm(pointer: Phaser.Input.Pointer): void {
+    if (this.time.now - this.lastTapFarmAt < TAP_FARM_COOLDOWN_MS) {
+      return;
+    }
+
+    this.lastTapFarmAt = this.time.now;
+
+    const reward = this.getTapFarmReward();
+    this.currency.coins = this.sanitizeCoins(this.currency.coins + reward);
+    this.tapFarmEnergy = Math.min(TAP_FARM_BURST_THRESHOLD, this.tapFarmEnergy + 1);
+    this.hasUnsavedProgress = true;
+    this.skipSavingUntilProgress = false;
+    audioSystem.resume();
+    audioSystem.playCoinTick();
+
+    const layout = this.getLayout();
+    const popupX = Number.isFinite(pointer.worldX) ? pointer.worldX : layout.tapFarmX + layout.tapFarmWidth / 2;
+    const popupY = Number.isFinite(pointer.worldY) ? pointer.worldY - 10 : layout.tapFarmY;
+
+    this.showFloatingCoinReward(popupX, popupY, reward);
+    this.showTapFarmPulse();
+
+    if (this.tapFarmEnergy >= TAP_FARM_BURST_THRESHOLD) {
+      this.triggerFarmBurst();
+    }
+
+    this.updateHud();
+  }
+
+  private getTapFarmReward(): number {
+    return this.sanitizeCoins(Math.max(
+      TAP_FARM_MIN_REWARD,
+      this.getTotalIncomePerSecond() * TAP_FARM_REWARD_SECONDS,
+    ));
+  }
+
+  private triggerFarmBurst(): void {
+    const reward = this.getTapFarmBurstReward();
+    const layout = this.getLayout();
+    const x = layout.tapFarmX + layout.tapFarmWidth / 2;
+    const y = layout.tapFarmY - 4;
+
+    this.tapFarmEnergy = 0;
+    this.currency.coins = this.sanitizeCoins(this.currency.coins + reward);
+    this.showFarmBurstReward(x, y, reward);
+    this.showTapFarmPulse(0xf3d06b);
+  }
+
+  private getTapFarmBurstReward(): number {
+    return this.sanitizeCoins(Math.max(
+      TAP_FARM_BURST_MIN_REWARD,
+      this.getTotalIncomePerSecond() * TAP_FARM_BURST_REWARD_SECONDS,
+    ));
+  }
+
+  private showTapFarmPulse(color = 0xd9f6ba): void {
+    const layout = this.getLayout();
+    const pulse = this.add.rectangle(
+      layout.tapFarmX + layout.tapFarmWidth / 2,
+      layout.tapFarmY + layout.tapFarmHeight / 2,
+      layout.tapFarmWidth,
+      layout.tapFarmHeight,
+      color,
+      0,
+    )
+      .setStrokeStyle(3, color, 0.62)
+      .setDepth(82);
+
+    this.tweens.add({
+      targets: pulse,
+      alpha: 0,
+      scaleX: 1.06,
+      scaleY: 1.18,
+      duration: 180,
+      ease: 'Sine.easeOut',
+      onComplete: () => {
+        pulse.destroy();
+      },
+    });
+  }
+
+  private showFarmBurstReward(x: number, y: number, amount: number): void {
+    const text = this.add.text(x, y, this.t('ui.tapFarm.burstPopup', {
+      amount: this.formatSignedCoinAmount(amount),
+    }), {
+      color: '#fff4a8',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: this.scale.width < 380 ? '16px' : '19px',
+      fontStyle: 'bold',
+      stroke: '#10291a',
+      strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(84);
+
+    this.tweens.add({
+      targets: text,
+      y: text.y - 28,
+      alpha: 0,
+      scale: 1.08,
+      duration: 900,
+      ease: 'Sine.easeOut',
+      onComplete: () => {
+        text.destroy();
+      },
+    });
   }
 
   private showFloatingCoinReward(x: number, y: number, amount: number): void {
@@ -5720,6 +5960,8 @@ export class FarmScene extends Phaser.Scene {
     this.monsterDragZones = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
     this.nextCoinBugId = 1;
     this.scheduleNextCoinBugSpawn();
+    this.tapFarmEnergy = 0;
+    this.lastTapFarmAt = -TAP_FARM_COOLDOWN_MS;
     this.createExpansionPlaceholder();
     this.createFarmBackground();
 
@@ -5735,6 +5977,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeNavigationMenuPanel();
     this.closeEconomyDebugPanel();
     this.updateHatchCooldownUi();
+    this.updateTapFarmUi();
     this.updateHud();
   }
 
@@ -5994,6 +6237,25 @@ export class FarmScene extends Phaser.Scene {
     }));
     this.updateProductionStatsUi();
     this.updateHatchCooldownUi();
+    this.updateTapFarmUi();
+  }
+
+  private updateTapFarmUi(): void {
+    const energy = Phaser.Math.Clamp(Math.floor(this.tapFarmEnergy), 0, TAP_FARM_BURST_THRESHOLD);
+    const progress = energy / TAP_FARM_BURST_THRESHOLD;
+
+    this.tapFarmStatusText?.setText(this.t('ui.tapFarm.status', {
+      amount: this.formatSignedCoinAmount(this.getTapFarmReward()),
+      energy,
+      goal: TAP_FARM_BURST_THRESHOLD,
+    }));
+
+    if (this.tapFarmEnergyFill) {
+      const energyTrackWidth = Math.max(58, this.getLayout().tapFarmWidth - 184);
+
+      this.tapFarmEnergyFill.setVisible(progress > 0);
+      this.tapFarmEnergyFill.setDisplaySize(energyTrackWidth * progress, 5);
+    }
   }
 
   private updateProductionStatsUi(): void {
