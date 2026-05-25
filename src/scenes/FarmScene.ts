@@ -123,10 +123,15 @@ type NavigationMenuItem = {
   label: string;
   openPanel: () => void;
 };
-type ScrollableContent = {
-  content: Phaser.GameObjects.Container;
-  registerInteractive: (target: Phaser.GameObjects.GameObject, localY: number, margin?: number) => void;
-};
+type CompendiumListItem =
+  | {
+    type: 'family';
+    family: MonsterFamily;
+  }
+  | {
+    type: 'monster';
+    monster: MonsterDefinition;
+  };
 type CoinBug = {
   id: number;
   container: Phaser.GameObjects.Container;
@@ -230,6 +235,9 @@ export class FarmScene extends Phaser.Scene {
   private settings: GameSettings = loadSettings();
   private resetConfirmationArmed = false;
   private prestigeConfirmationArmed = false;
+  private compendiumPageIndex = 0;
+  private upgradeShopPageIndex = 0;
+  private missionsPageIndex = 0;
   private lastBlockedOutsideTapToastAt = 0;
   private lastHiddenAt: number | null = null;
   private nextCoinBugId = 1;
@@ -305,6 +313,9 @@ export class FarmScene extends Phaser.Scene {
     this.syncAudioSettings();
     this.resetConfirmationArmed = false;
     this.prestigeConfirmationArmed = false;
+    this.compendiumPageIndex = 0;
+    this.upgradeShopPageIndex = 0;
+    this.missionsPageIndex = 0;
     this.lastBlockedOutsideTapToastAt = 0;
     this.lastHiddenAt = null;
     this.nextCoinBugId = 1;
@@ -1124,123 +1135,83 @@ export class FarmScene extends Phaser.Scene {
     return panelBackground;
   }
 
-  private createScrollableContent(
+  private getRowsPerPage(rowGap: number, bodyHeight: number, totalRows: number, mobilePreferredRows: number, desktopPreferredRows: number): number {
+    const mode = this.getUiLayoutMode();
+    const preferredRows = mode === 'mobile' ? mobilePreferredRows : desktopPreferredRows;
+    const fitRows = Math.max(1, Math.floor(bodyHeight / rowGap));
+
+    return Math.max(1, Math.min(totalRows, preferredRows, fitRows));
+  }
+
+  private getPageCount(totalItems: number, rowsPerPage: number): number {
+    return Math.max(1, Math.ceil(totalItems / Math.max(1, rowsPerPage)));
+  }
+
+  private addPaginationControls(
     panel: Phaser.GameObjects.Container,
     panelWidth: number,
-    viewportTop: number,
-    viewportHeight: number,
-    contentHeight: number,
-  ): ScrollableContent {
-    const viewportWidth = panelWidth - 44;
-    const maxScroll = Math.max(0, contentHeight - viewportHeight);
-    const content = this.add.container(0, viewportTop);
-    const maskGraphics = this.add.graphics();
-    const viewportHitArea = this.add.rectangle(0, viewportTop + viewportHeight / 2, viewportWidth, viewportHeight, 0x000000, 0.001)
-      .setInteractive({ useHandCursor: false });
-    const interactiveTargets: Array<{ target: Phaser.GameObjects.GameObject; localY: number; margin: number }> = [];
-    let scrollOffset = 0;
-    let dragPointerId: number | null = null;
-    let dragStartY = 0;
-    let dragStartOffset = 0;
-
-    maskGraphics.fillStyle(0xffffff, 1);
-    maskGraphics.fillRect(-viewportWidth / 2, viewportTop, viewportWidth, viewportHeight);
-    maskGraphics.setVisible(false);
-    panel.add(maskGraphics);
-
-    const mask = maskGraphics.createGeometryMask();
-    content.setMask(mask);
-
-    const scrollbarTrack = maxScroll > 0
-      ? this.add.rectangle(panelWidth / 2 - 18, viewportTop + viewportHeight / 2, 4, viewportHeight, 0x0d2718, 0.42)
-      : undefined;
-    const scrollbarThumbHeight = maxScroll > 0
-      ? Math.max(32, viewportHeight * (viewportHeight / contentHeight))
-      : 0;
-    const scrollbarThumb = maxScroll > 0
-      ? this.add.rectangle(panelWidth / 2 - 18, viewportTop + scrollbarThumbHeight / 2, 4, scrollbarThumbHeight, THEME.panelBorder, 0.72)
-      : undefined;
-
-    const updateInteractiveTargets = (): void => {
-      interactiveTargets.forEach(({ target, localY, margin }) => {
-        if (!target.input) {
-          return;
-        }
-
-        target.input.enabled = localY >= scrollOffset - margin
-          && localY <= scrollOffset + viewportHeight + margin;
-      });
-    };
-
-    const applyScroll = (nextOffset: number): void => {
-      scrollOffset = Phaser.Math.Clamp(nextOffset, 0, maxScroll);
-      content.y = viewportTop - scrollOffset;
-
-      if (scrollbarThumb && maxScroll > 0) {
-        const travel = viewportHeight - scrollbarThumbHeight;
-        scrollbarThumb.y = viewportTop + scrollbarThumbHeight / 2 + travel * (scrollOffset / maxScroll);
-      }
-
-      updateInteractiveTargets();
-    };
-
-    viewportHitArea
-      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-        pointer.event?.stopPropagation();
-        dragPointerId = pointer.id;
-        dragStartY = pointer.y;
-        dragStartOffset = scrollOffset;
-      })
-      .on('pointermove', (pointer: Phaser.Input.Pointer) => {
-        pointer.event?.stopPropagation();
-
-        if (dragPointerId !== pointer.id || !pointer.isDown) {
-          return;
-        }
-
-        applyScroll(dragStartOffset - (pointer.y - dragStartY));
-      })
-      .on('pointerup', (pointer: Phaser.Input.Pointer) => {
-        pointer.event?.stopPropagation();
-
-        if (dragPointerId === pointer.id) {
-          dragPointerId = null;
-        }
-      })
-      .on('pointerupoutside', (pointer: Phaser.Input.Pointer) => {
-        pointer.event?.stopPropagation();
-
-        if (dragPointerId === pointer.id) {
-          dragPointerId = null;
-        }
-      })
-      .on('wheel', (
-        pointer: Phaser.Input.Pointer,
-        _deltaX: number,
-        deltaY: number,
-        _deltaZ: number,
-        event: Phaser.Types.Input.EventData,
-      ) => {
-        event.stopPropagation();
-        pointer.event?.stopPropagation();
-        applyScroll(scrollOffset + deltaY * 0.45);
-      });
-
-    panel.add([viewportHitArea, content]);
-
-    if (scrollbarTrack && scrollbarThumb) {
-      panel.add([scrollbarTrack, scrollbarThumb]);
+    panelHeight: number,
+    pageIndex: number,
+    pageCount: number,
+    onPageChange: (nextPageIndex: number) => void,
+  ): void {
+    if (pageCount <= 1) {
+      return;
     }
 
-    applyScroll(0);
-
-    return {
-      content,
-      registerInteractive: (target: Phaser.GameObjects.GameObject, localY: number, margin = 56): void => {
-        interactiveTargets.push({ target, localY, margin });
-        updateInteractiveTargets();
+    const y = panelHeight / 2 - 32;
+    const previousText = this.add.text(-panelWidth / 2 + 24, y, 'Prev', {
+      color: pageIndex > 0 ? THEME.text : '#9ca79f',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: panelWidth < 390 ? '14px' : '15px',
+      fontStyle: 'bold',
+      backgroundColor: `#${(pageIndex > 0 ? THEME.button : THEME.lockedInner).toString(16).padStart(6, '0')}`,
+      padding: {
+        x: panelWidth < 390 ? 13 : 15,
+        y: 7,
       },
-    };
+    }).setOrigin(0, 0.5);
+
+    if (pageIndex > 0) {
+      previousText
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+          pointer.event?.stopPropagation();
+          this.playButtonClickSound();
+          onPageChange(pageIndex - 1);
+        });
+    }
+
+    const nextText = this.add.text(panelWidth / 2 - 24, y, 'Next', {
+      color: pageIndex < pageCount - 1 ? THEME.text : '#9ca79f',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: panelWidth < 390 ? '14px' : '15px',
+      fontStyle: 'bold',
+      backgroundColor: `#${(pageIndex < pageCount - 1 ? THEME.button : THEME.lockedInner).toString(16).padStart(6, '0')}`,
+      padding: {
+        x: panelWidth < 390 ? 13 : 15,
+        y: 7,
+      },
+    }).setOrigin(1, 0.5);
+
+    if (pageIndex < pageCount - 1) {
+      nextText
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+          pointer.event?.stopPropagation();
+          this.playButtonClickSound();
+          onPageChange(pageIndex + 1);
+        });
+    }
+
+    const pageLabel = this.add.text(0, y, `${pageIndex + 1}/${pageCount}`, {
+      color: THEME.mutedText,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: panelWidth < 390 ? '13px' : '14px',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+
+    panel.add([previousText, nextText, pageLabel]);
   }
 
   private showModalOverlay(): void {
@@ -1935,9 +1906,14 @@ export class FarmScene extends Phaser.Scene {
     const { width: panelWidth, height: panelHeight } = this.getModalSize('goals', 540, 520);
     const rowGap = panelWidth < 420 ? 50 : 56;
     const rowHeight = Math.min(50, rowGap - 6);
-    const viewportTop = -panelHeight / 2 + 76;
-    const viewportHeight = panelHeight - 100;
-    const contentHeight = MISSION_DEFINITIONS.length * rowGap + 16;
+    const firstRowY = -panelHeight / 2 + 90;
+    const bodyHeight = panelHeight - 138;
+    const rowsPerPage = this.getRowsPerPage(rowGap, bodyHeight, MISSION_DEFINITIONS.length, 7, 8);
+    const pageCount = this.getPageCount(MISSION_DEFINITIONS.length, rowsPerPage);
+    const pageIndex = Phaser.Math.Clamp(this.missionsPageIndex, 0, pageCount - 1);
+    const pageMissions = MISSION_DEFINITIONS.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage);
+
+    this.missionsPageIndex = pageIndex;
 
     panel.setDepth(24);
     this.addPanelBackground(panel, panelWidth, panelHeight);
@@ -1970,15 +1946,13 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(closeText);
 
-    const scrollable = this.createScrollableContent(panel, panelWidth, viewportTop, viewportHeight, contentHeight);
+    pageMissions.forEach((mission, index) => {
+      this.addMissionRow(panel, mission, firstRowY + index * rowGap, panelWidth, rowHeight);
+    });
 
-    MISSION_DEFINITIONS.forEach((mission, index) => {
-      const rowY = 8 + index * rowGap + rowGap / 2;
-      const actionText = this.addMissionRow(scrollable.content, mission, rowY, panelWidth, rowHeight);
-
-      if (actionText?.input) {
-        scrollable.registerInteractive(actionText, rowY);
-      }
+    this.addPaginationControls(panel, panelWidth, panelHeight, pageIndex, pageCount, (nextPageIndex) => {
+      this.missionsPageIndex = nextPageIndex;
+      this.openMissionsPanel();
     });
 
     this.missionsPanel = panel;
@@ -2200,9 +2174,14 @@ export class FarmScene extends Phaser.Scene {
     const { width: panelWidth, height: panelHeight } = this.getModalSize('upgrade-shop', 640, 560);
     const rowGap = panelWidth < 500 ? 76 : 82;
     const rowHeight = Math.min(72, rowGap - 8);
-    const viewportTop = -panelHeight / 2 + 76;
-    const viewportHeight = panelHeight - 100;
-    const contentHeight = UPGRADE_DEFINITIONS.length * rowGap + 16;
+    const firstRowY = -panelHeight / 2 + 100;
+    const bodyHeight = panelHeight - 150;
+    const rowsPerPage = this.getRowsPerPage(rowGap, bodyHeight, UPGRADE_DEFINITIONS.length, 5, 6);
+    const pageCount = this.getPageCount(UPGRADE_DEFINITIONS.length, rowsPerPage);
+    const pageIndex = Phaser.Math.Clamp(this.upgradeShopPageIndex, 0, pageCount - 1);
+    const pageUpgrades = UPGRADE_DEFINITIONS.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage);
+
+    this.upgradeShopPageIndex = pageIndex;
 
     panel.setDepth(24);
 
@@ -2236,15 +2215,13 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(closeText);
 
-    const scrollable = this.createScrollableContent(panel, panelWidth, viewportTop, viewportHeight, contentHeight);
+    pageUpgrades.forEach((upgrade, index) => {
+      this.addUpgradeRow(panel, upgrade, firstRowY + index * rowGap, panelWidth, rowHeight);
+    });
 
-    UPGRADE_DEFINITIONS.forEach((upgrade, index) => {
-      const rowY = 8 + index * rowGap + rowGap / 2;
-      const buyText = this.addUpgradeRow(scrollable.content, upgrade, rowY, panelWidth, rowHeight);
-
-      if (buyText?.input) {
-        scrollable.registerInteractive(buyText, rowY);
-      }
+    this.addPaginationControls(panel, panelWidth, panelHeight, pageIndex, pageCount, (nextPageIndex) => {
+      this.upgradeShopPageIndex = nextPageIndex;
+      this.openUpgradeShopPanel();
     });
 
     this.upgradeShopPanel = panel;
@@ -3495,16 +3472,21 @@ export class FarmScene extends Phaser.Scene {
         .filter((definition) => definition.family === family)
         .sort((first, second) => first.level - second.level),
     }));
-    const totalRows = groupedDefinitions.reduce(
-      (rowCount, group) => rowCount + 1 + group.definitions.length,
-      0,
-    );
+    const listItems = groupedDefinitions.flatMap<CompendiumListItem>((group) => [
+      { type: 'family', family: group.family },
+      ...group.definitions.map((monster) => ({ type: 'monster' as const, monster })),
+    ]);
     const { width: panelWidth, height: panelHeight } = this.getModalSize('compendium', 640, 640);
     const rowGap = panelWidth < 390 ? 34 : 38;
     const rowHeight = Math.min(34, rowGap - 3);
-    const viewportTop = -panelHeight / 2 + 68;
-    const viewportHeight = panelHeight - 92;
-    const contentHeight = totalRows * rowGap + rowGap;
+    const firstRowY = -panelHeight / 2 + 88;
+    const bodyHeight = panelHeight - 142;
+    const rowsPerPage = this.getRowsPerPage(rowGap, bodyHeight, listItems.length, 8, 12);
+    const pageCount = this.getPageCount(listItems.length, rowsPerPage);
+    const pageIndex = Phaser.Math.Clamp(this.compendiumPageIndex, 0, pageCount - 1);
+    const pageItems = listItems.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage);
+
+    this.compendiumPageIndex = pageIndex;
 
     panel.setDepth(20);
     this.addPanelBackground(panel, panelWidth, panelHeight);
@@ -3537,17 +3519,20 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(closeText);
 
-    const scrollable = this.createScrollableContent(panel, panelWidth, viewportTop, viewportHeight, contentHeight);
-    let rowIndex = 0;
+    pageItems.forEach((item, index) => {
+      const rowY = firstRowY + index * rowGap;
 
-    groupedDefinitions.forEach((group) => {
-      this.addCompendiumFamilyLabel(scrollable.content, group.family, rowIndex * rowGap + 18, panelWidth);
-      rowIndex += 1;
+      if (item.type === 'family') {
+        this.addCompendiumFamilyLabel(panel, item.family, rowY, panelWidth);
+        return;
+      }
 
-      group.definitions.forEach((definition) => {
-        this.addCompendiumRow(scrollable.content, definition, rowIndex * rowGap + rowGap / 2, panelWidth, rowHeight);
-        rowIndex += 1;
-      });
+      this.addCompendiumRow(panel, item.monster, rowY, panelWidth, rowHeight);
+    });
+
+    this.addPaginationControls(panel, panelWidth, panelHeight, pageIndex, pageCount, (nextPageIndex) => {
+      this.compendiumPageIndex = nextPageIndex;
+      this.openCompendiumPanel();
     });
 
     this.compendiumPanel = panel;

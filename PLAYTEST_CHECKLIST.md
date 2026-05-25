@@ -36,11 +36,11 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Confirm the expansion row or unlock button remains visible above the Hatch panel.
 - Open Menu and confirm it is readable, compact, and does not cover the hatch panel unnecessarily.
 - From Menu, open Upgrades, Goals, Prestige, Zone, Compendium, Help, and Settings; confirm Menu closes and each panel is readable, fits, and can close.
-- Open Compendium on mobile, scroll from Slime through Mushroom entries, and confirm every monster row is reachable.
-- Open Compendium on a desktop/wide browser, scroll through all entries, and confirm the layout is not compressed or overflowing.
-- Open Upgrade Shop on mobile and confirm the list remains readable and scroll-safe with Buy buttons usable.
+- Open Compendium on mobile, use Prev/Next through Slime and Mushroom entries, and confirm every monster row is reachable.
+- Open Compendium on a desktop/wide browser, page through all entries, and confirm the layout is not compressed or overflowing.
+- Open Upgrade Shop on mobile and confirm rows and Buy buttons are visible without clipping.
 - Open Goals on mobile and confirm the mission list remains readable and Claim buttons still work.
-- With a scrollable panel open, drag inside the panel body and confirm outside-tap close is not triggered.
+- With a paginated panel open, tap inside the panel body and confirm outside-tap close is not triggered.
 - With outside-tap close enabled, open Menu and tap outside it to confirm Menu closes.
 - With outside-tap close disabled, open Menu and tap outside it to confirm the tap is blocked and Menu remains open.
 - With a Coin Bug visible, drag a monster near it and confirm normal drag still works.
