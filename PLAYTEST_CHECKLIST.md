@@ -19,9 +19,14 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Buy Mushroom Income Boost and Mushroom Chance, then confirm Mushroom income and hatch odds text update.
 - Fill the grid, confirm the hatch panel says the farm is full, then merge a valid pair to free space.
 - Wait for a Coin Bug to appear, tap it, and confirm coins increase with a compact `+coins` popup.
+- Tap near a Coin Bug without hitting the exact visual and confirm proximity pickup collects it reliably.
 - On mobile, tap around the edge of a Coin Bug and confirm it is still easy to collect.
 - Let a Coin Bug expire without tapping and confirm it fades away safely.
 - Catch three Coin Bugs and confirm the Goals mission progresses and completes.
+- Open Orders from Menu and confirm the purpose text explains merging for rewards.
+- Own or seed a Level 2/3 Slime and confirm the matching Order becomes claimable.
+- Claim an Order and confirm the coins or Monster Essence are granted once.
+- Confirm claiming an Order does not consume or delete the required monster.
 - Confirm the 3 expansion slots start locked and reject monster drops safely.
 - Unlock the expansion row, confirm 350 coins are deducted, then hatch into an expanded slot.
 - Drag or merge monsters using expanded slots.
@@ -52,12 +57,15 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - With outside-tap close disabled, open Menu and tap outside it to confirm the tap is blocked and Menu remains open.
 - With a Coin Bug visible, drag a monster near it and confirm normal drag still works.
 - Open a panel while a Coin Bug is visible and confirm the bug cannot be tapped through the modal.
+- Open Orders on mobile and confirm rows, status labels, Claim buttons, and pagination fit at `360px`.
 
 ## Persistence
 - Reload after hatching, merging, and buying an upgrade.
 - Confirm coins, egg cost, monsters, discoveries, upgrades, expansion unlock state, and onboarding hint state persist.
 - Confirm completed and claimed Goals persist after reload.
 - Confirm claimed mission rewards cannot be claimed again after reload.
+- Confirm claimed Orders persist as Done after reload and cannot be claimed again.
+- Confirm reloading after claiming an Order does not delete the monster that completed it.
 - Reload after unlocking expansion and confirm expanded-slot monsters persist.
 - After owning a Level 6+ Slime or Level 5 Mushroom, open Prestige, confirm reset grants Monster Essence, buy Essence Power, and reload to confirm both persist.
 - After prestiging once, confirm Mushroom Forest unlocks in Zone, can be selected, changes the background, and shows the Mushroom hatch +5% bonus.

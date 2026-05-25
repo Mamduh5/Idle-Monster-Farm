@@ -26,6 +26,7 @@ const EN: TranslationTable = {
   'ui.menu': 'Menu',
   'ui.menu.upgrades': 'Upgrades',
   'ui.menu.goals': 'Goals',
+  'ui.menu.orders': 'Orders',
   'ui.menu.prestige': 'Prestige',
   'ui.menu.zone': 'Zone',
   'ui.menu.compendium': 'Compendium',
@@ -93,6 +94,14 @@ const EN: TranslationTable = {
   'ui.goals.rewardDetail': '{status} - Reward: {reward}',
   'ui.goals.done': 'Done',
   'ui.goals.claim': 'Claim',
+
+  'ui.orders.title': 'Monster Orders',
+  'ui.orders.purpose': 'Merge monsters to complete Orders and earn bigger rewards.',
+  'ui.orders.requirement': 'Own Lv {level}+ {family}',
+  'ui.orders.locked': 'Locked',
+  'ui.orders.inProgress': 'In Progress',
+  'ui.orders.claim': 'Claim',
+  'ui.orders.done': 'Done',
 
   'ui.upgrades.title': 'Upgrade Shop',
   'ui.upgrades.maxed': 'Maxed',
@@ -194,6 +203,14 @@ const EN: TranslationTable = {
   'mission.buy-upgrade-1.name': 'Buy 1 upgrade',
   'mission.unlock-expansion.name': 'Unlock expansion slots',
   'mission.prestige-once.name': 'Prestige once',
+
+  'order.own-slime-2.title': 'Own Level 2 Slime',
+  'order.own-slime-3.title': 'Own Level 3 Slime',
+  'order.own-slime-4.title': 'Own Horned Slime',
+  'order.own-mushroom-3.title': 'Own Level 3 Mushroom',
+  'order.own-slime-6.title': 'Own Crystal Slime',
+  'order.own-mushroom-6.title': 'Own Mooncap Mushroom',
+  'order.own-slime-8.title': 'Own Level 8 Slime',
 
   'zone.grass-farm.name': 'Grass Farm',
   'zone.mushroom-forest.name': 'Mushroom Forest',

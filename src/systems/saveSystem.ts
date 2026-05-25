@@ -1,5 +1,6 @@
 import { STARTING_EGG_COST } from '../data/economy';
 import { MISSION_DEFINITIONS, MISSION_IDS, type MissionId } from '../data/missions';
+import { ORDER_IDS, type OrderId } from '../data/orders';
 import { UPGRADE_DEFINITIONS, type UpgradeId } from '../data/upgrades';
 import { GRASS_FARM_ZONE_ID, ZONE_IDS, type ZoneId } from '../data/zones';
 import {
@@ -37,6 +38,7 @@ export type LocalSaveData = {
   missionProgress: Record<MissionId, number>;
   completedMissionIds: MissionId[];
   claimedMissionIds: MissionId[];
+  claimedOrderIds: OrderId[];
   unlockedZones: ZoneId[];
   currentZone: ZoneId;
   hasPrestigedOnce: boolean;
@@ -116,6 +118,7 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
     missionProgress: normalizeMissionProgress(rawData.missionProgress),
     completedMissionIds: normalizeMissionIds(rawData.completedMissionIds),
     claimedMissionIds: normalizeMissionIds(rawData.claimedMissionIds),
+    claimedOrderIds: normalizeOrderIds(rawData.claimedOrderIds),
     unlockedZones: normalizeUnlockedZones(rawData.unlockedZones),
     currentZone: normalizeCurrentZone(rawData.currentZone, rawData.unlockedZones),
     hasPrestigedOnce: rawData.hasPrestigedOnce === true,
@@ -179,6 +182,16 @@ function normalizeMissionIds(rawMissionIds: unknown): MissionId[] {
 
   return Array.from(new Set(rawMissionIds.filter((missionId): missionId is MissionId => (
     typeof missionId === 'string' && MISSION_IDS.includes(missionId as MissionId)
+  ))));
+}
+
+function normalizeOrderIds(rawOrderIds: unknown): OrderId[] {
+  if (!Array.isArray(rawOrderIds)) {
+    return [];
+  }
+
+  return Array.from(new Set(rawOrderIds.filter((orderId): orderId is OrderId => (
+    typeof orderId === 'string' && ORDER_IDS.includes(orderId as OrderId)
   ))));
 }
 

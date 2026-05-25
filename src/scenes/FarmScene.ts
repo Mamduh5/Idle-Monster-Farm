@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { EGG_COST_MULTIPLIER, EXPANSION_UNLOCK_COST, STARTING_EGG_COST } from '../data/economy';
 import { MISSION_DEFINITIONS, type MissionDefinition, type MissionId, type MissionReward } from '../data/missions';
+import { ORDER_DEFINITIONS, type OrderDefinition, type OrderId, type OrderReward } from '../data/orders';
 import {
   BABY_SLIME,
   BUTTON_MUSHROOM,
@@ -73,6 +74,8 @@ const COIN_BUG_MAX_ACTIVE = 3;
 const COIN_BUG_REWARD_SECONDS = 10;
 const COIN_BUG_MIN_REWARD = 25;
 const COIN_BUG_HITBOX_SIZE = 72;
+const COIN_BUG_PICKUP_RADIUS_DESKTOP = 52;
+const COIN_BUG_PICKUP_RADIUS_MOBILE = 64;
 const SHOW_DEBUG_PANEL = false;
 const SHOW_MONSTER_HITBOX_DEBUG = false;
 const MODAL_OVERLAY_DEPTH = 18;
@@ -139,7 +142,7 @@ type MonsterVisualIntensity = {
 type DiscoveryKey = `${MonsterFamily}:${number}`;
 type ToastVariant = 'info' | 'success' | 'warning';
 type UiLayoutMode = 'mobile' | 'desktop';
-type ModalKind = 'compendium' | 'upgrade-shop' | 'goals' | 'default';
+type ModalKind = 'compendium' | 'upgrade-shop' | 'goals' | 'orders' | 'default';
 type MenuButtonVisual = {
   text: Phaser.GameObjects.Text;
   defaultBackgroundColor: string;
@@ -241,6 +244,7 @@ export class FarmScene extends Phaser.Scene {
   private helpPanel?: Phaser.GameObjects.Container;
   private zonePanel?: Phaser.GameObjects.Container;
   private missionsPanel?: Phaser.GameObjects.Container;
+  private ordersPanel?: Phaser.GameObjects.Container;
   private upgradeShopPanel?: Phaser.GameObjects.Container;
   private prestigePanel?: Phaser.GameObjects.Container;
   private navigationMenuPanel?: Phaser.GameObjects.Container;
@@ -254,6 +258,7 @@ export class FarmScene extends Phaser.Scene {
   private missionProgress: Record<MissionId, number> = this.createInitialMissionProgress();
   private completedMissionIds = new Set<MissionId>();
   private claimedMissionIds = new Set<MissionId>();
+  private claimedOrderIds = new Set<OrderId>();
   private unlockedZones = new Set<ZoneId>([GRASS_FARM_ZONE_ID]);
   private currentZone: ZoneId = GRASS_FARM_ZONE_ID;
   private hasPrestigedOnce = false;
@@ -263,6 +268,7 @@ export class FarmScene extends Phaser.Scene {
   private compendiumPageIndex = 0;
   private upgradeShopPageIndex = 0;
   private missionsPageIndex = 0;
+  private ordersPageIndex = 0;
   private lastBlockedOutsideTapToastAt = 0;
   private lastHiddenAt: number | null = null;
   private nextCoinBugId = 1;
@@ -293,6 +299,10 @@ export class FarmScene extends Phaser.Scene {
     this.finishManualMonsterDrag(pointer);
   };
 
+  private readonly handleCoinBugProximityPointerDown = (pointer: Phaser.Input.Pointer): void => {
+    this.tryCollectNearbyCoinBug(pointer);
+  };
+
   private readonly handleScaleResize = (): void => {
     this.rebuildResponsiveFarmView();
   };
@@ -318,6 +328,7 @@ export class FarmScene extends Phaser.Scene {
     this.helpPanel = undefined;
     this.zonePanel = undefined;
     this.missionsPanel = undefined;
+    this.ordersPanel = undefined;
     this.upgradeShopPanel = undefined;
     this.prestigePanel = undefined;
     this.navigationMenuPanel = undefined;
@@ -331,6 +342,7 @@ export class FarmScene extends Phaser.Scene {
     this.missionProgress = this.createInitialMissionProgress();
     this.completedMissionIds = new Set<MissionId>();
     this.claimedMissionIds = new Set<MissionId>();
+    this.claimedOrderIds = new Set<OrderId>();
     this.unlockedZones = new Set<ZoneId>([GRASS_FARM_ZONE_ID]);
     this.currentZone = GRASS_FARM_ZONE_ID;
     this.hasPrestigedOnce = false;
@@ -341,6 +353,7 @@ export class FarmScene extends Phaser.Scene {
     this.compendiumPageIndex = 0;
     this.upgradeShopPageIndex = 0;
     this.missionsPageIndex = 0;
+    this.ordersPageIndex = 0;
     this.lastBlockedOutsideTapToastAt = 0;
     this.lastHiddenAt = null;
     this.nextCoinBugId = 1;
@@ -378,6 +391,7 @@ export class FarmScene extends Phaser.Scene {
     this.createEconomyDebugControl();
     this.registerKeyboardShortcuts();
     this.registerManualDragInput();
+    this.registerCoinBugProximityPickupInput();
     this.scale.on(Phaser.Scale.Events.RESIZE, this.handleScaleResize);
     this.loadProgress();
     this.registerPersistenceEvents();
@@ -966,6 +980,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
+    this.closeOrdersPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -975,7 +990,7 @@ export class FarmScene extends Phaser.Scene {
 
     const layout = this.getLayout();
     const preferredPanelWidth = layout.isNarrow ? 260 : 280;
-    const preferredPanelHeight = 358;
+    const preferredPanelHeight = 398;
     const { width: panelWidth, height: panelHeight } = this.getPanelSize(preferredPanelWidth, preferredPanelHeight);
     const panelX = layout.isNarrow
       ? Math.min(this.scale.width - layout.margin - panelWidth / 2, Math.max(layout.margin + panelWidth / 2, layout.menuX - panelWidth / 2))
@@ -1021,6 +1036,7 @@ export class FarmScene extends Phaser.Scene {
     const menuItems: NavigationMenuItem[] = [
       { label: this.t('ui.menu.upgrades'), openPanel: () => this.openUpgradeShopPanel() },
       { label: this.t('ui.menu.goals'), openPanel: () => this.openMissionsPanel() },
+      { label: this.t('ui.menu.orders'), openPanel: () => this.openOrdersPanel() },
       { label: this.t('ui.menu.prestige'), openPanel: () => this.openPrestigePanel() },
       { label: this.t('ui.menu.zone'), openPanel: () => this.openZonePanel() },
       { label: this.t('ui.menu.compendium'), openPanel: () => this.openCompendiumPanel() },
@@ -1164,7 +1180,7 @@ export class FarmScene extends Phaser.Scene {
 
     if (mode === 'mobile') {
       const inset = 12;
-      const isListModal = kind === 'compendium' || kind === 'upgrade-shop' || kind === 'goals';
+      const isListModal = kind === 'compendium' || kind === 'upgrade-shop' || kind === 'goals' || kind === 'orders';
       const mobileMaxWidth = isListModal ? 390 : preferredWidth;
 
       return {
@@ -1327,6 +1343,7 @@ export class FarmScene extends Phaser.Scene {
       || this.helpPanel
       || this.zonePanel
       || this.missionsPanel
+      || this.ordersPanel
       || this.upgradeShopPanel
       || this.prestigePanel
       || this.navigationMenuPanel
@@ -1370,6 +1387,11 @@ export class FarmScene extends Phaser.Scene {
 
     if (this.missionsPanel) {
       this.closeMissionsPanel();
+      return;
+    }
+
+    if (this.ordersPanel) {
+      this.closeOrdersPanel();
       return;
     }
 
@@ -1469,6 +1491,100 @@ export class FarmScene extends Phaser.Scene {
     this.input.on('pointerupoutside', this.handleManualDragPointerUp);
   }
 
+  private registerCoinBugProximityPickupInput(): void {
+    this.input.off('pointerdown', this.handleCoinBugProximityPointerDown);
+    this.input.on('pointerdown', this.handleCoinBugProximityPointerDown);
+  }
+
+  private tryCollectNearbyCoinBug(pointer: Phaser.Input.Pointer): void {
+    if (
+      this.isModalOpen()
+      || this.activeDragSlotId !== null
+      || this.isPointerOverFarmControl(pointer)
+    ) {
+      return;
+    }
+
+    const nearestBug = this.getNearestCollectableCoinBug(pointer.worldX, pointer.worldY);
+
+    if (!nearestBug) {
+      return;
+    }
+
+    pointer.event?.stopPropagation();
+    this.collectCoinBug(nearestBug);
+  }
+
+  private getNearestCollectableCoinBug(x: number, y: number): CoinBug | null {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return null;
+    }
+
+    const pickupRadius = this.getCoinBugPickupRadius();
+    let nearestBug: CoinBug | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    this.activeCoinBugs.forEach((bug) => {
+      if (bug.collected || !bug.container.active) {
+        return;
+      }
+
+      const distance = Phaser.Math.Distance.Between(x, y, bug.container.x, bug.container.y);
+
+      if (distance > pickupRadius || distance >= nearestDistance) {
+        return;
+      }
+
+      nearestBug = bug;
+      nearestDistance = distance;
+    });
+
+    return nearestBug;
+  }
+
+  private getCoinBugPickupRadius(): number {
+    return this.getUiLayoutMode() === 'mobile'
+      ? COIN_BUG_PICKUP_RADIUS_MOBILE
+      : COIN_BUG_PICKUP_RADIUS_DESKTOP;
+  }
+
+  private isPointerOverFarmControl(pointer: Phaser.Input.Pointer): boolean {
+    const x = pointer.worldX;
+    const y = pointer.worldY;
+
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return true;
+    }
+
+    const point = new Phaser.Math.Vector2(x, y);
+    const layout = this.getLayout();
+    const farmControlRects = [
+      new Phaser.Geom.Rectangle(layout.hudX, layout.hudY, layout.hudWidth, layout.hudHeight),
+      new Phaser.Geom.Rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight),
+      new Phaser.Geom.Rectangle(layout.hatchX, layout.hatchY, layout.hatchWidth, layout.hatchHeight),
+      new Phaser.Geom.Rectangle(
+        layout.expansionStartX - 8,
+        layout.expansionLabelY - 22,
+        this.cellSize * EXPANSION_COLUMNS + this.gridGap * (EXPANSION_COLUMNS - 1) + 16,
+        Math.max(44, layout.expansionStartY + this.cellSize - layout.expansionLabelY + 28),
+      ),
+    ];
+
+    if (farmControlRects.some((rect) => Phaser.Geom.Rectangle.Contains(rect, point.x, point.y))) {
+      return true;
+    }
+
+    if (this.menuButtons.some(({ text }) => text.getBounds().contains(x, y))) {
+      return true;
+    }
+
+    return this.slotCenters.some((center) => (
+      center.x > 0
+      && Math.abs(x - center.x) <= this.cellSize / 2
+      && Math.abs(y - center.y) <= this.cellSize / 2
+    ));
+  }
+
   private toggleSettingsPanel(): void {
     if (this.settingsPanel) {
       this.closeSettingsPanel();
@@ -1486,6 +1602,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
+    this.closeOrdersPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -1710,6 +1827,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeSettingsPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
+    this.closeOrdersPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -1840,6 +1958,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeSettingsPanel();
     this.closeHelpPanel();
     this.closeMissionsPanel();
+    this.closeOrdersPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -1984,6 +2103,7 @@ export class FarmScene extends Phaser.Scene {
     this.currentZone = zoneId;
     this.createFarmBackground();
     this.updateHud();
+    this.refreshOrdersPanel();
     this.skipSavingUntilProgress = false;
     this.saveProgress();
     this.openZonePanel();
@@ -2025,6 +2145,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeSettingsPanel();
     this.closeHelpPanel();
     this.closeZonePanel();
+    this.closeOrdersPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -2170,6 +2291,274 @@ export class FarmScene extends Phaser.Scene {
     }
   }
 
+  private toggleOrdersPanel(): void {
+    if (this.ordersPanel) {
+      this.closeOrdersPanel();
+      return;
+    }
+
+    this.openOrdersPanel();
+  }
+
+  private openOrdersPanel(): void {
+    this.closeOrdersPanel();
+    this.closeNavigationMenuPanel();
+    this.closeCompendiumPanel();
+    this.closeSettingsPanel();
+    this.closeHelpPanel();
+    this.closeZonePanel();
+    this.closeMissionsPanel();
+    this.closeUpgradeShopPanel();
+    this.closePrestigePanel();
+    this.closeEconomyDebugPanel();
+    this.cancelActiveDrag();
+    this.clearSelectedSlot();
+    this.showModalOverlay();
+
+    const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
+    const { width: panelWidth, height: panelHeight } = this.getModalSize('orders', 560, 540);
+    const rowGap = panelWidth < 420 ? 62 : 64;
+    const rowHeight = Math.min(58, rowGap - 6);
+    const firstRowY = -panelHeight / 2 + 126;
+    const bodyHeight = panelHeight - 178;
+    const rowsPerPage = this.getRowsPerPage(rowGap, bodyHeight, ORDER_DEFINITIONS.length, 6, 7);
+    const pageCount = this.getPageCount(ORDER_DEFINITIONS.length, rowsPerPage);
+    const pageIndex = Phaser.Math.Clamp(this.ordersPageIndex, 0, pageCount - 1);
+    const pageOrders = ORDER_DEFINITIONS.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage);
+
+    this.ordersPageIndex = pageIndex;
+
+    panel.setDepth(24);
+    this.addPanelBackground(panel, panelWidth, panelHeight);
+
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.orders.title'), {
+      color: THEME.text,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: this.getPanelTitleFontSize(panelWidth),
+      fontStyle: 'bold',
+    }));
+
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 54, this.t('ui.orders.purpose'), {
+      color: THEME.mutedText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: panelWidth < 390 ? '12px' : '13px',
+      fixedWidth: panelWidth - 48,
+      wordWrap: {
+        width: panelWidth - 48,
+        useAdvancedWrap: true,
+      },
+    }));
+
+    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, this.t('common.close'), {
+      color: THEME.text,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: '15px',
+      fontStyle: 'bold',
+      backgroundColor: '#49395d',
+      padding: {
+        x: 9,
+        y: 5,
+      },
+    }).setOrigin(1, 0);
+
+    closeText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation();
+        this.playButtonClickSound();
+        this.closeOrdersPanel();
+      });
+
+    panel.add(closeText);
+
+    pageOrders.forEach((order, index) => {
+      this.addOrderRow(panel, order, firstRowY + index * rowGap, panelWidth, rowHeight);
+    });
+
+    this.addPaginationControls(panel, panelWidth, panelHeight, pageIndex, pageCount, (nextPageIndex) => {
+      this.ordersPageIndex = nextPageIndex;
+      this.openOrdersPanel();
+    });
+
+    this.ordersPanel = panel;
+  }
+
+  private addOrderRow(
+    panel: Phaser.GameObjects.Container,
+    order: OrderDefinition,
+    rowY: number,
+    panelWidth: number,
+    rowHeight: number,
+  ): Phaser.GameObjects.Text {
+    const isCompactPanel = panelWidth < 420 || rowHeight < 56;
+    const isClaimed = this.claimedOrderIds.has(order.id);
+    const isUnlocked = this.isOrderUnlocked(order);
+    const isComplete = this.isOrderComplete(order);
+    const canClaim = isUnlocked && isComplete && !isClaimed;
+    const rowTop = rowY - rowHeight / 2;
+    const rowWidth = panelWidth - 48;
+    const leftX = -panelWidth / 2 + 42;
+    const actionLabel = this.getOrderStatusText(order);
+
+    panel.add(this.add.rectangle(0, rowY, rowWidth, rowHeight, isClaimed ? 0x29362f : THEME.panelAlt, 0.92)
+      .setStrokeStyle(2, canClaim ? THEME.slot : THEME.lockedBorder, 0.72));
+
+    panel.add(this.add.text(leftX, rowTop + 6, this.getLocalizedOrderTitle(order), {
+      color: isClaimed ? '#cdebb3' : THEME.text,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '13px' : '15px',
+      fontStyle: 'bold',
+      wordWrap: {
+        width: panelWidth - (isCompactPanel ? 160 : 186),
+      },
+    }));
+
+    panel.add(this.add.text(leftX, rowTop + (isCompactPanel ? 25 : 27), this.getOrderRequirementText(order), {
+      color: isUnlocked ? THEME.mutedText : '#b8b9af',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '11px' : '12px',
+      wordWrap: {
+        width: panelWidth - (isCompactPanel ? 160 : 186),
+      },
+    }));
+
+    panel.add(this.add.text(leftX, rowTop + (isCompactPanel ? 40 : 43), this.t('common.reward', {
+      reward: this.getOrderRewardText(order.reward),
+    }), {
+      color: canClaim ? '#fff4a8' : THEME.mutedText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '11px' : '12px',
+      wordWrap: {
+        width: panelWidth - (isCompactPanel ? 160 : 186),
+      },
+    }));
+
+    const actionText = this.add.text(panelWidth / 2 - 42, rowY, actionLabel, {
+      color: isClaimed ? '#cdebb3' : '#ffffff',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '11px' : '13px',
+      fontStyle: 'bold',
+      backgroundColor: `#${(canClaim ? THEME.buttonHover : THEME.lockedInner).toString(16).padStart(6, '0')}`,
+      padding: {
+        x: isCompactPanel ? 7 : 10,
+        y: 5,
+      },
+    }).setOrigin(1, 0.5);
+
+    if (canClaim) {
+      actionText
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+          pointer.event?.stopPropagation();
+          this.playButtonClickSound();
+          this.claimOrderReward(order.id);
+        });
+    }
+
+    panel.add(actionText);
+    return actionText;
+  }
+
+  private closeOrdersPanel(): void {
+    if (this.ordersPanel) {
+      this.ordersPanel.destroy();
+      this.ordersPanel = undefined;
+      this.hideModalOverlay();
+    }
+  }
+
+  private refreshOrdersPanel(): void {
+    if (this.ordersPanel) {
+      this.openOrdersPanel();
+    }
+  }
+
+  private getOrderDefinition(orderId: OrderId): OrderDefinition | undefined {
+    return ORDER_DEFINITIONS.find((order) => order.id === orderId);
+  }
+
+  private getLocalizedOrderTitle(order: OrderDefinition): string {
+    return this.t(`order.${order.id}.title`);
+  }
+
+  private getOrderRequirementText(order: OrderDefinition): string {
+    return this.t('ui.orders.requirement', {
+      level: order.requiredLevel,
+      family: this.getLocalizedFamilyName(order.requiredFamily),
+    });
+  }
+
+  private getOrderStatusText(order: OrderDefinition): string {
+    if (this.claimedOrderIds.has(order.id)) {
+      return this.t('ui.orders.done');
+    }
+
+    if (!this.isOrderUnlocked(order)) {
+      return this.t('ui.orders.locked');
+    }
+
+    if (this.isOrderComplete(order)) {
+      return this.t('ui.orders.claim');
+    }
+
+    return this.t('ui.orders.inProgress');
+  }
+
+  private isOrderUnlocked(order: OrderDefinition): boolean {
+    if (!order.unlockCondition) {
+      return true;
+    }
+
+    if (order.unlockCondition.type === 'discovered') {
+      return this.discoveredMonsters.has(this.getDiscoveryKey(order.unlockCondition.family, order.unlockCondition.level));
+    }
+
+    return false;
+  }
+
+  private isOrderComplete(order: OrderDefinition): boolean {
+    return this.isOrderUnlocked(order) && this.farmSlots.some((slot) => (
+      slot.monster?.family === order.requiredFamily
+      && slot.monster.level >= order.requiredLevel
+    ));
+  }
+
+  private claimOrderReward(orderId: OrderId): void {
+    const order = this.getOrderDefinition(orderId);
+
+    if (!order || this.claimedOrderIds.has(orderId) || !this.isOrderComplete(order)) {
+      return;
+    }
+
+    if (order.reward.type === 'coins') {
+      this.currency.coins = this.sanitizeCoins(this.currency.coins + order.reward.amount);
+    } else {
+      this.monsterEssence = this.sanitizePrestigeInteger(this.monsterEssence + order.reward.amount);
+      this.syncZoneUnlockFromPrestigeProgress();
+    }
+
+    this.claimedOrderIds.add(orderId);
+    this.skipSavingUntilProgress = false;
+    this.updateHud();
+    this.saveProgress();
+    this.refreshOrdersPanel();
+    this.showToast(this.t('toast.claimed', {
+      reward: this.getOrderRewardText(order.reward),
+    }), 'success');
+  }
+
+  private getOrderRewardText(reward: OrderReward): string {
+    if (reward.type === 'coins') {
+      return this.t('common.coins', {
+        amount: this.formatCoinAmount(reward.amount),
+      });
+    }
+
+    return this.t('common.essence', {
+      amount: reward.amount,
+    });
+  }
+
   private toggleEconomyDebugPanel(): void {
     if (this.economyDebugPanel) {
       this.closeEconomyDebugPanel();
@@ -2187,6 +2576,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
+    this.closeOrdersPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.clearSelectedSlot();
@@ -2297,6 +2687,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
+    this.closeOrdersPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
     this.cancelActiveDrag();
@@ -2480,6 +2871,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
+    this.closeOrdersPanel();
     this.closeUpgradeShopPanel();
     this.closeEconomyDebugPanel();
     this.cancelActiveDrag();
@@ -2931,6 +3323,7 @@ export class FarmScene extends Phaser.Scene {
     this.updateHud();
     this.incrementMissionProgress('catch-coin-bugs');
     this.showFloatingCoinReward(bug.container.x, bug.container.y - 12, reward);
+    this.showCoinBugPickupPulse(bug.container.x, bug.container.y);
 
     this.tweens.add({
       targets: bug.container,
@@ -2940,6 +3333,23 @@ export class FarmScene extends Phaser.Scene {
       ease: 'Sine.easeOut',
       onComplete: () => {
         this.removeCoinBug(bug);
+      },
+    });
+  }
+
+  private showCoinBugPickupPulse(x: number, y: number): void {
+    const pulse = this.add.circle(x, y, 18, 0xfff8c9, 0)
+      .setStrokeStyle(2, 0xfff8c9, 0.55)
+      .setDepth(83);
+
+    this.tweens.add({
+      targets: pulse,
+      alpha: 0,
+      scale: 1.75,
+      duration: 260,
+      ease: 'Sine.easeOut',
+      onComplete: () => {
+        pulse.destroy();
       },
     });
   }
@@ -3337,6 +3747,7 @@ export class FarmScene extends Phaser.Scene {
     this.updateHatchCooldownUi();
     this.updateHud();
     this.completeMission('prestige-once');
+    this.refreshOrdersPanel();
     this.saveProgress();
   }
 
@@ -3601,6 +4012,7 @@ export class FarmScene extends Phaser.Scene {
   private discoverMonster(monster: MonsterDefinition): void {
     this.discoveredMonsters.add(this.getDiscoveryKey(monster.family, monster.level));
     this.refreshCompendiumPanel();
+    this.refreshOrdersPanel();
   }
 
   private getDiscoveryKey(family: MonsterFamily, level: number): DiscoveryKey {
@@ -3627,6 +4039,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
+    this.closeOrdersPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -5162,6 +5575,7 @@ export class FarmScene extends Phaser.Scene {
     };
     this.completedMissionIds = new Set(saveData.completedMissionIds);
     this.claimedMissionIds = new Set(saveData.claimedMissionIds);
+    this.claimedOrderIds = new Set(saveData.claimedOrderIds);
     this.claimedMissionIds.forEach((missionId) => {
       this.completedMissionIds.add(missionId);
     });
@@ -5171,6 +5585,7 @@ export class FarmScene extends Phaser.Scene {
     this.hasPrestigedOnce = saveData.hasPrestigedOnce;
     this.syncZoneUnlockFromPrestigeProgress();
     this.createFarmBackground();
+    this.refreshOrdersPanel();
 
     this.applyAwayProgress(saveData.lastActiveAt, Date.now(), true);
 
@@ -5258,6 +5673,7 @@ export class FarmScene extends Phaser.Scene {
       missionProgress: this.getSanitizedMissionProgress(),
       completedMissionIds: Array.from(this.completedMissionIds),
       claimedMissionIds: Array.from(this.claimedMissionIds),
+      claimedOrderIds: Array.from(this.claimedOrderIds),
       unlockedZones: Array.from(this.unlockedZones),
       currentZone: this.currentZone,
       hasPrestigedOnce: this.hasPrestigedOnce,
@@ -5296,6 +5712,7 @@ export class FarmScene extends Phaser.Scene {
     this.missionProgress = this.createInitialMissionProgress();
     this.completedMissionIds = new Set<MissionId>();
     this.claimedMissionIds = new Set<MissionId>();
+    this.claimedOrderIds = new Set<OrderId>();
     this.unlockedZones = new Set<ZoneId>([GRASS_FARM_ZONE_ID]);
     this.currentZone = GRASS_FARM_ZONE_ID;
     this.hasPrestigedOnce = false;
@@ -5325,6 +5742,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
+    this.closeOrdersPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeNavigationMenuPanel();
@@ -5347,6 +5765,7 @@ export class FarmScene extends Phaser.Scene {
       this.input.off('pointermove', this.handleManualDragPointerMove);
       this.input.off('pointerup', this.handleManualDragPointerUp);
       this.input.off('pointerupoutside', this.handleManualDragPointerUp);
+      this.input.off('pointerdown', this.handleCoinBugProximityPointerDown);
       window.removeEventListener('pagehide', this.handlePageHide);
       window.removeEventListener('beforeunload', this.handlePageHide);
       document.removeEventListener('visibilitychange', this.handleVisibilityChange);
@@ -5365,6 +5784,7 @@ export class FarmScene extends Phaser.Scene {
       || this.unlockedZones.size > 1
       || this.completedMissionIds.size > 0
       || this.claimedMissionIds.size > 0
+      || this.claimedOrderIds.size > 0
       || Object.values(this.missionProgress).some((progress) => progress > 0)
       || this.farmSlots.some((slot) => slot.monster !== null)
     );

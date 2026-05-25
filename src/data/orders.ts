@@ -1,0 +1,130 @@
+import type { MonsterFamily } from '../types/game-state';
+
+export type OrderReward =
+  | {
+    type: 'coins';
+    amount: number;
+  }
+  | {
+    type: 'essence';
+    amount: number;
+  };
+
+export type OrderUnlockCondition = {
+  type: 'discovered';
+  family: MonsterFamily;
+  level: number;
+};
+
+export type OrderId =
+  | 'own-slime-2'
+  | 'own-slime-3'
+  | 'own-slime-4'
+  | 'own-mushroom-3'
+  | 'own-slime-6'
+  | 'own-mushroom-6'
+  | 'own-slime-8';
+
+export type OrderDefinition = {
+  id: OrderId;
+  title: string;
+  requiredFamily: MonsterFamily;
+  requiredLevel: number;
+  reward: OrderReward;
+  unlockCondition?: OrderUnlockCondition;
+};
+
+export const ORDER_DEFINITIONS: OrderDefinition[] = [
+  {
+    id: 'own-slime-2',
+    title: 'Own Level 2 Slime',
+    requiredFamily: 'Slime',
+    requiredLevel: 2,
+    reward: {
+      type: 'coins',
+      amount: 50,
+    },
+  },
+  {
+    id: 'own-slime-3',
+    title: 'Own Level 3 Slime',
+    requiredFamily: 'Slime',
+    requiredLevel: 3,
+    reward: {
+      type: 'coins',
+      amount: 150,
+    },
+  },
+  {
+    id: 'own-slime-4',
+    title: 'Own Horned Slime',
+    requiredFamily: 'Slime',
+    requiredLevel: 4,
+    reward: {
+      type: 'coins',
+      amount: 400,
+    },
+  },
+  {
+    id: 'own-mushroom-3',
+    title: 'Own Level 3 Mushroom',
+    requiredFamily: 'Mushroom',
+    requiredLevel: 3,
+    reward: {
+      type: 'coins',
+      amount: 500,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Mushroom',
+      level: 1,
+    },
+  },
+  {
+    id: 'own-slime-6',
+    title: 'Own Crystal Slime',
+    requiredFamily: 'Slime',
+    requiredLevel: 6,
+    reward: {
+      type: 'essence',
+      amount: 1,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Slime',
+      level: 4,
+    },
+  },
+  {
+    id: 'own-mushroom-6',
+    title: 'Own Mooncap Mushroom',
+    requiredFamily: 'Mushroom',
+    requiredLevel: 6,
+    reward: {
+      type: 'essence',
+      amount: 1,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Mushroom',
+      level: 3,
+    },
+  },
+  {
+    id: 'own-slime-8',
+    title: 'Own Level 8 Slime',
+    requiredFamily: 'Slime',
+    requiredLevel: 8,
+    reward: {
+      type: 'essence',
+      amount: 2,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Slime',
+      level: 6,
+    },
+  },
+];
+
+export const ORDER_IDS = ORDER_DEFINITIONS.map((order) => order.id);
