@@ -20,6 +20,9 @@ export type OrderId =
   | 'own-slime-2'
   | 'own-slime-3'
   | 'own-slime-4'
+  | 'own-spore-1'
+  | 'own-spore-3'
+  | 'own-spore-4'
   | 'own-mushroom-3'
   | 'own-slime-6'
   | 'own-mushroom-6'
@@ -63,6 +66,51 @@ export const ORDER_DEFINITIONS: OrderDefinition[] = [
     reward: {
       type: 'coins',
       amount: 400,
+    },
+  },
+  {
+    id: 'own-spore-1',
+    title: 'Own Sporeling',
+    requiredFamily: 'Spore',
+    requiredLevel: 1,
+    reward: {
+      type: 'coins',
+      amount: 150,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Spore',
+      level: 1,
+    },
+  },
+  {
+    id: 'own-spore-3',
+    title: 'Own Bloom Spore',
+    requiredFamily: 'Spore',
+    requiredLevel: 3,
+    reward: {
+      type: 'essence',
+      amount: 1,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Spore',
+      level: 1,
+    },
+  },
+  {
+    id: 'own-spore-4',
+    title: 'Own Elder Spore',
+    requiredFamily: 'Spore',
+    requiredLevel: 4,
+    reward: {
+      type: 'essence',
+      amount: 2,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Spore',
+      level: 3,
     },
   },
   {

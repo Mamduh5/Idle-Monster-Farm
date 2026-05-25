@@ -140,6 +140,48 @@ export const LEVEL_8_MUSHROOM: MonsterDefinition = {
   incomePerSecond: 3600,
 };
 
+export const SPORELING: MonsterDefinition = {
+  family: 'Spore',
+  level: 1,
+  name: 'Sporeling',
+  incomePerSecond: 5,
+};
+
+export const BOUNCY_SPORE: MonsterDefinition = {
+  family: 'Spore',
+  level: 2,
+  name: 'Bouncy Spore',
+  incomePerSecond: 15,
+};
+
+export const BLOOM_SPORE: MonsterDefinition = {
+  family: 'Spore',
+  level: 3,
+  name: 'Bloom Spore',
+  incomePerSecond: 42,
+};
+
+export const ELDER_SPORE: MonsterDefinition = {
+  family: 'Spore',
+  level: 4,
+  name: 'Elder Spore',
+  incomePerSecond: 120,
+};
+
+export const ROYAL_SPORE: MonsterDefinition = {
+  family: 'Spore',
+  level: 5,
+  name: 'Royal Spore',
+  incomePerSecond: 340,
+};
+
+export const COSMIC_SPORE: MonsterDefinition = {
+  family: 'Spore',
+  level: 6,
+  name: 'Cosmic Spore',
+  incomePerSecond: 950,
+};
+
 export const MONSTER_DEFINITIONS: MonsterDefinition[] = [
   BABY_SLIME,
   LEVEL_2_SLIME,
@@ -161,6 +203,12 @@ export const MONSTER_DEFINITIONS: MonsterDefinition[] = [
   LEVEL_6_MUSHROOM,
   LEVEL_7_MUSHROOM,
   LEVEL_8_MUSHROOM,
+  SPORELING,
+  BOUNCY_SPORE,
+  BLOOM_SPORE,
+  ELDER_SPORE,
+  ROYAL_SPORE,
+  COSMIC_SPORE,
 ];
 
 export function getNextMonsterDefinition(

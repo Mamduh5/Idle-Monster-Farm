@@ -4346,7 +4346,7 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const familyOrder: MonsterFamily[] = ['Slime', 'Mushroom'];
+    const familyOrder: MonsterFamily[] = ['Slime', 'Mushroom', 'Spore'];
     const groupedDefinitions = familyOrder.map((family) => ({
       family,
       definitions: MONSTER_DEFINITIONS
@@ -4433,7 +4433,7 @@ export class FarmScene extends Phaser.Scene {
     const discoveredCount = MONSTER_DEFINITIONS.filter((monster) => this.isMonsterDiscovered(monster)).length;
     const pageSubtitle = this.getCompendiumPageSubtitle(pageItems);
     const summaryY = -panelHeight / 2 + 54;
-    const familyProgress = (['Slime', 'Mushroom'] as MonsterFamily[])
+    const familyProgress = (['Slime', 'Mushroom', 'Spore'] as MonsterFamily[])
       .map((family) => {
         const familyMonsters = MONSTER_DEFINITIONS.filter((monster) => monster.family === family);
         const familyDiscovered = familyMonsters.filter((monster) => this.isMonsterDiscovered(monster)).length;
@@ -4583,6 +4583,11 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
+    if (monster.family === 'Spore') {
+      this.addSporeVisual(panel, monster.level, visualStyle, iconX, iconY, 0.58 * scale);
+      return;
+    }
+
     this.addSlimeVisual(panel, monster.level, visualStyle, iconX, iconY, 0.58 * scale);
   }
 
@@ -4687,6 +4692,8 @@ export class FarmScene extends Phaser.Scene {
 
     if (monster.family === 'Mushroom') {
       this.addMushroomVisual(visual, monster.level, visualStyle, 0, 0, visualScale);
+    } else if (monster.family === 'Spore') {
+      this.addSporeVisual(visual, monster.level, visualStyle, 0, 0, visualScale);
     } else {
       this.addSlimeVisual(visual, monster.level, visualStyle, 0, 0, visualScale);
     }
@@ -4825,6 +4832,42 @@ export class FarmScene extends Phaser.Scene {
     this.addVisualIntensitySparkles(container, visualStyle, x, y - 5 * scale, scale);
   }
 
+  private addSporeVisual(
+    container: Phaser.GameObjects.Container,
+    level: number,
+    visualStyle: MonsterVisualStyle,
+    x = 0,
+    y = 0,
+    scale = 1,
+  ): void {
+    this.addMonsterAura(container, visualStyle, x, y - 4 * scale, scale);
+
+    const strokeWidth = Math.max(1, Math.round(visualStyle.visualIntensity.outlineWidth * scale));
+    const bodyWidth = visualStyle.bodyWidth * scale;
+    const bodyHeight = visualStyle.bodyHeight * scale;
+    const capWidth = bodyWidth * 0.96;
+    const capHeight = bodyHeight * 0.56;
+
+    container.add(this.add.ellipse(x, y + 18 * scale, bodyWidth * 0.76, 10 * scale, 0x2f7d40, 0.24));
+    container.add(this.add.ellipse(x, y + 8 * scale, bodyWidth * 0.74, bodyHeight * 0.62, visualStyle.baseColor, 0.98)
+      .setStrokeStyle(strokeWidth, visualStyle.strokeColor, 0.95));
+    container.add(this.add.rectangle(x, y + 4 * scale, 15 * scale, 20 * scale, visualStyle.secondaryAccentColor, 0.86)
+      .setStrokeStyle(Math.max(1, Math.round(1.4 * scale)), visualStyle.strokeColor, 0.58));
+    container.add(this.add.ellipse(x, y - 9 * scale, capWidth, capHeight, visualStyle.bodyColor, 0.98)
+      .setStrokeStyle(strokeWidth, visualStyle.strokeColor, 0.95));
+    container.add(this.add.ellipse(x, y + 1 * scale, capWidth * 0.76, capHeight * 0.34, visualStyle.strokeColor, 0.18));
+    container.add(this.add.ellipse(x - 9 * scale, y - 15 * scale, capWidth * 0.3, capHeight * 0.2, visualStyle.accentColor, 0.36));
+    container.add(this.add.circle(x - 7 * scale, y + 8 * scale, 3.1 * scale, 0x10291a));
+    container.add(this.add.circle(x + 7 * scale, y + 8 * scale, 3.1 * scale, 0x10291a));
+    container.add(this.add.circle(x - 6.2 * scale, y + 7 * scale, 1.1 * scale, 0xffffff, 0.85));
+    container.add(this.add.circle(x + 7.8 * scale, y + 7 * scale, 1.1 * scale, 0xffffff, 0.85));
+    container.add(this.add.ellipse(x - 13 * scale, y + 13 * scale, 6 * scale, 4 * scale, 0xff9fb1, 0.28));
+    container.add(this.add.ellipse(x + 13 * scale, y + 13 * scale, 6 * scale, 4 * scale, 0xff9fb1, 0.28));
+
+    this.addSporeDecorations(container, level, visualStyle, x, y, scale);
+    this.addVisualIntensitySparkles(container, visualStyle, x, y - 4 * scale, scale);
+  }
+
   private addMonsterAura(
     container: Phaser.GameObjects.Container,
     visualStyle: MonsterVisualStyle,
@@ -4895,11 +4938,15 @@ export class FarmScene extends Phaser.Scene {
       return this.getMushroomVisualIdentity(monsterLevel, visualIntensity);
     }
 
+    if (family === 'Spore') {
+      return this.getSporeVisualIdentity(monsterLevel, visualIntensity);
+    }
+
     return this.getSlimeVisualIdentity(monsterLevel, visualIntensity);
   }
 
   private getMonsterVisualIntensity(family: MonsterFamily, level: number): MonsterVisualIntensity {
-    const maxLevel = family === 'Mushroom' ? 8 : 12;
+    const maxLevel = family === 'Mushroom' ? 8 : family === 'Spore' ? 6 : 12;
     const normalizedLevel = Phaser.Math.Clamp(level, 1, maxLevel);
     const progress = maxLevel <= 1 ? 0 : (normalizedLevel - 1) / (maxLevel - 1);
     const tier = Math.min(5, Math.floor(progress * 6));
@@ -5214,6 +5261,108 @@ export class FarmScene extends Phaser.Scene {
     };
   }
 
+  private getSporeVisualIdentity(level: number, visualIntensity: MonsterVisualIntensity): MonsterVisualIdentity {
+    const paletteByLevel: Record<number, Omit<MonsterVisualIdentity, 'family' | 'level' | 'visualIntensity'>> = {
+      1: {
+        bodyColor: 0xa6d86a,
+        baseColor: 0x7fdc86,
+        strokeColor: 0x3f7a42,
+        accentColor: 0xe8ffd0,
+        secondaryAccentColor: 0xf3d9ad,
+        bodyWidth: 50,
+        bodyHeight: 42,
+        silhouetteVariant: 'sporeling-cap-blob',
+        patternVariant: 'soft spots',
+        accessories: ['spore dots'],
+        auraType: 'none',
+        stemColor: 0xf3d9ad,
+        stemStrokeColor: 0x8a5a30,
+      },
+      2: {
+        bodyColor: 0x72d9c1,
+        baseColor: 0x65d8e7,
+        strokeColor: 0x267a70,
+        accentColor: 0xd7fff0,
+        secondaryAccentColor: 0xffd48f,
+        bodyWidth: 55,
+        bodyHeight: 46,
+        silhouetteVariant: 'bouncy-spore',
+        patternVariant: 'bounce rings',
+        accessories: ['spring spores'],
+        auraType: 'dew',
+        stemColor: 0xf2dfb6,
+        stemStrokeColor: 0x8a6a35,
+      },
+      3: {
+        bodyColor: 0xd49ae8,
+        baseColor: 0x94df72,
+        strokeColor: 0x6a4384,
+        accentColor: 0xfff0a8,
+        secondaryAccentColor: 0xbff7a2,
+        bodyWidth: 59,
+        bodyHeight: 49,
+        silhouetteVariant: 'bloom-spore',
+        patternVariant: 'petal bloom',
+        accessories: ['bloom petals'],
+        auraType: 'spore',
+        stemColor: 0xf0e6c4,
+        stemStrokeColor: 0x927846,
+      },
+      4: {
+        bodyColor: 0x9f7edb,
+        baseColor: 0x7fc875,
+        strokeColor: 0x4d347d,
+        accentColor: 0xf0df9a,
+        secondaryAccentColor: 0xdcc7ff,
+        bodyWidth: 62,
+        bodyHeight: 51,
+        silhouetteVariant: 'elder-spore',
+        patternVariant: 'elder gills',
+        accessories: ['side gills', 'vine band'],
+        auraType: 'mystic',
+        stemColor: 0xf0e6c4,
+        stemStrokeColor: 0x927846,
+      },
+      5: {
+        bodyColor: 0xe0b453,
+        baseColor: 0x79c45f,
+        strokeColor: 0x835d1f,
+        accentColor: 0xfff2a8,
+        secondaryAccentColor: 0xe94c74,
+        bodyWidth: 65,
+        bodyHeight: 53,
+        silhouetteVariant: 'royal-spore',
+        patternVariant: 'crowned cap',
+        accessories: ['cap crown'],
+        auraType: 'gold',
+        stemColor: 0xf0e6c4,
+        stemStrokeColor: 0x927846,
+      },
+      6: {
+        bodyColor: 0x5967d8,
+        baseColor: 0x4fd0c4,
+        strokeColor: 0x24205f,
+        accentColor: 0xd8fbff,
+        secondaryAccentColor: 0xfff19a,
+        bodyWidth: 68,
+        bodyHeight: 55,
+        silhouetteVariant: 'cosmic-spore',
+        patternVariant: 'cosmic spores',
+        accessories: ['orbit spores', 'star cap'],
+        auraType: 'cosmic',
+        stemColor: 0xe9e2ff,
+        stemStrokeColor: 0x5a4a8f,
+      },
+    };
+
+    return {
+      family: 'Spore',
+      level,
+      visualIntensity,
+      ...(paletteByLevel[level] ?? paletteByLevel[6]),
+    };
+  }
+
   private validateMonsterVisualIdentities(): void {
     const isLocalDebug = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
@@ -5247,6 +5396,112 @@ export class FarmScene extends Phaser.Scene {
       }
 
       signatures.set(signature, monster);
+    });
+  }
+
+  private addSporeDecorations(
+    container: Phaser.GameObjects.Container,
+    level: number,
+    visualStyle: MonsterVisualStyle,
+    x = 0,
+    y = 0,
+    scale = 1,
+  ): void {
+    const strokeWidth = Math.max(1, Math.round(2 * scale));
+
+    [
+      [-13, -10, 3.2],
+      [10, -15, 4],
+      [0, -5, 2.6],
+    ].forEach(([spotX, spotY, radius]) => {
+      container.add(this.add.circle(
+        x + spotX * scale,
+        y + spotY * scale,
+        radius * scale,
+        visualStyle.accentColor,
+        0.82,
+      ));
+    });
+
+    if (level === 1) {
+      container.add(this.add.circle(x + 18 * scale, y - 2 * scale, 2.4 * scale, visualStyle.secondaryAccentColor, 0.76));
+      return;
+    }
+
+    if (level === 2) {
+      container.add(this.add.ellipse(x, y + 10 * scale, 38 * scale, 19 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, visualStyle.accentColor, 0.55));
+      container.add(this.add.ellipse(x, y + 12 * scale, 48 * scale, 23 * scale, 0xffffff, 0)
+        .setStrokeStyle(Math.max(1, Math.round(1.4 * scale)), visualStyle.secondaryAccentColor, 0.38));
+      return;
+    }
+
+    if (level === 3) {
+      [
+        [-18, -18, -20],
+        [0, -24, 0],
+        [18, -18, 20],
+      ].forEach(([petalX, petalY, angle]) => {
+        const petal = this.add.ellipse(
+          x + petalX * scale,
+          y + petalY * scale,
+          10 * scale,
+          16 * scale,
+          visualStyle.accentColor,
+          0.84,
+        );
+        petal.setAngle(angle);
+        container.add(petal);
+      });
+      return;
+    }
+
+    if (level === 4) {
+      container.add(this.add.ellipse(x - 20 * scale, y - 7 * scale, 8 * scale, 18 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, visualStyle.secondaryAccentColor, 0.74));
+      container.add(this.add.ellipse(x + 20 * scale, y - 7 * scale, 8 * scale, 18 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, visualStyle.secondaryAccentColor, 0.74));
+      container.add(this.add.ellipse(x, y + 4 * scale, 42 * scale, 8 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, visualStyle.accentColor, 0.52));
+      return;
+    }
+
+    if (level === 5) {
+      container.add(this.add.rectangle(x, y - 25 * scale, 28 * scale, 6 * scale, visualStyle.accentColor, 0.9)
+        .setStrokeStyle(strokeWidth, visualStyle.strokeColor, 0.75));
+      [-11, 0, 11].forEach((crownX, index) => {
+        container.add(this.add.triangle(
+          x + crownX * scale,
+          y - 31 * scale,
+          0,
+          -8 * scale,
+          -5 * scale,
+          5 * scale,
+          5 * scale,
+          5 * scale,
+          index === 1 ? visualStyle.secondaryAccentColor : visualStyle.accentColor,
+          0.92,
+        ).setStrokeStyle(Math.max(1, Math.round(1.2 * scale)), visualStyle.strokeColor, 0.54));
+      });
+      return;
+    }
+
+    container.add(this.add.ellipse(x, y - 5 * scale, 62 * scale, 30 * scale, 0xffffff, 0)
+      .setStrokeStyle(strokeWidth, visualStyle.accentColor, 0.48));
+    [
+      [-24, -3, 3.2],
+      [24, -7, 3.4],
+      [0, -27, 3.8],
+    ].forEach(([sporeX, sporeY, radius], index) => {
+      container.add(this.add.star(
+        x + sporeX * scale,
+        y + sporeY * scale,
+        5,
+        Math.max(1.4, radius * 0.46 * scale),
+        radius * scale,
+        index === 1 ? visualStyle.secondaryAccentColor : visualStyle.accentColor,
+        0.92,
+      ));
     });
   }
 
@@ -5751,7 +6006,7 @@ export class FarmScene extends Phaser.Scene {
     this.clearMonsterVisual(sourceSlotId);
     this.renderMonsterInSlot(this.farmSlots[targetSlotId]);
     audioSystem.playMerge();
-    this.showMergeFeedback(targetSlotId);
+    this.showMergeFeedback(targetSlotId, nextMonsterDefinition.family === 'Spore' ? this.t('toast.fusion') : this.t('toast.merge'));
     this.incrementMissionProgress('merge-1');
     this.evaluateMonsterMissions(nextMonsterDefinition);
     this.updateHud();
@@ -5778,9 +6033,9 @@ export class FarmScene extends Phaser.Scene {
     });
   }
 
-  private showMergeFeedback(slotId: number): void {
+  private showMergeFeedback(slotId: number, message = this.t('toast.merge')): void {
     const center = this.slotCenters[slotId];
-    const popup = this.add.text(center.x, center.y - 42, this.t('toast.merge'), {
+    const popup = this.add.text(center.x, center.y - 42, message, {
       color: '#ffffff',
       fontFamily: UI_FONT_FAMILY,
       fontSize: '18px',

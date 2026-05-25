@@ -7,7 +7,7 @@ export type PrestigeState = {
   essencePowerLevel: number;
 };
 
-export const MONSTER_FAMILIES = ['Slime', 'Mushroom'] as const;
+export const MONSTER_FAMILIES = ['Slime', 'Mushroom', 'Spore'] as const;
 
 export type MonsterFamily = typeof MONSTER_FAMILIES[number];
 

@@ -12,7 +12,11 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Hatch multiple Slimes, merge two matching Slimes, and confirm the merged monster remains selected.
 - Merge one valid pair and confirm the merge mission completes.
 - Merge two matching Mushrooms, confirm Slime + Mushroom drops return safely, and confirm Level 5 Mushroom + Level 5 Mushroom does not merge.
+- Merge Slime + Mushroom of the same level, and Mushroom + Slime of the same level, and confirm both create the matching-level Spore.
+- Try Slime + Mushroom at different levels and confirm the invalid fusion rejects safely.
+- Merge two same-level Spores and confirm they create the next Spore level; confirm max-level Spore + max-level Spore rejects safely.
 - Confirm Mushroom Level 5 and Mushroom Level 6 look visually distinct on the farm and in the Compendium.
+- Open Compendium after discovering a Spore and confirm the Spore family appears with locked/visible rows as expected.
 - Confirm Mushroom Levels 5-8 and high-level Slimes look visually distinguishable and more impressive at higher levels.
 - Buy at least one upgrade and confirm coins, income/cooldown text, and upgrade level update.
 - Claim a completed coin mission, confirm coins increase, and confirm the mission cannot be claimed again.
@@ -29,6 +33,7 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Let a Coin Bug expire without tapping and confirm it fades away safely.
 - Catch three Coin Bugs and confirm the Goals mission progresses and completes.
 - Open Orders from Menu and confirm the purpose text explains merging for rewards.
+- Claim a Spore Order and confirm the reward is granted once and the required Spore remains on the farm.
 - Own or seed a Level 2/3 Slime and confirm the matching Order becomes claimable.
 - Claim an Order and confirm the coins or Monster Essence are granted once.
 - Confirm claiming an Order does not consume or delete the required monster.

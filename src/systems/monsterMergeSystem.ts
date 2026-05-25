@@ -1,4 +1,4 @@
-import { getNextMonsterDefinition } from '../data/monsters';
+import { getMonsterDefinition, getNextMonsterDefinition } from '../data/monsters';
 import type { MonsterDefinition } from '../types/game-state';
 
 // Pure monster merge rules. Keep this module free of Phaser, storage, and scene state.
@@ -31,7 +31,8 @@ export function getMonsterMergeResult(
   sourceMonster: MergeableMonster | null | undefined,
   targetMonster: MergeableMonster | null | undefined,
 ): MonsterDefinition | undefined {
-  return getSameFamilyNextMonsterDefinition(sourceMonster, targetMonster);
+  return getSameFamilyNextMonsterDefinition(sourceMonster, targetMonster)
+    ?? getCrossFamilySporeFusionResult(sourceMonster, targetMonster);
 }
 
 export function canMergeMonsters(
@@ -39,4 +40,22 @@ export function canMergeMonsters(
   targetMonster: MergeableMonster | null | undefined,
 ): boolean {
   return Boolean(getMonsterMergeResult(sourceMonster, targetMonster));
+}
+
+function getCrossFamilySporeFusionResult(
+  sourceMonster: MergeableMonster | null | undefined,
+  targetMonster: MergeableMonster | null | undefined,
+): MonsterDefinition | undefined {
+  if (!sourceMonster || !targetMonster || sourceMonster.level !== targetMonster.level) {
+    return undefined;
+  }
+
+  const isSlimeMushroomPair = (sourceMonster.family === 'Slime' && targetMonster.family === 'Mushroom')
+    || (sourceMonster.family === 'Mushroom' && targetMonster.family === 'Slime');
+
+  if (!isSlimeMushroomPair) {
+    return undefined;
+  }
+
+  return getMonsterDefinition('Spore', sourceMonster.level);
 }

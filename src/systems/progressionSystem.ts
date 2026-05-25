@@ -57,7 +57,11 @@ export function getFamilyIncomeMultiplier(
     return 1 + sanitizeProgressionLevel(mushroomIncomeBoostLevel) * MUSHROOM_INCOME_BOOST_PER_LEVEL;
   }
 
-  return 1 + sanitizeProgressionLevel(slimeIncomeBoostLevel) * SLIME_INCOME_BOOST_PER_LEVEL;
+  if (family === 'Slime') {
+    return 1 + sanitizeProgressionLevel(slimeIncomeBoostLevel) * SLIME_INCOME_BOOST_PER_LEVEL;
+  }
+
+  return 1;
 }
 
 export function getPrestigeIncomeMultiplier(essencePowerLevel: number): number {
