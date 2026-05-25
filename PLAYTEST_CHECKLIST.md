@@ -13,6 +13,7 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Merge one valid pair and confirm the merge mission completes.
 - Merge two matching Mushrooms, confirm Slime + Mushroom drops return safely, and confirm Level 5 Mushroom + Level 5 Mushroom does not merge.
 - Confirm Mushroom Level 5 and Mushroom Level 6 look visually distinct on the farm and in the Compendium.
+- Confirm Mushroom Levels 5-8 and high-level Slimes look visually distinguishable and more impressive at higher levels.
 - Buy at least one upgrade and confirm coins, income/cooldown text, and upgrade level update.
 - Claim a completed coin mission, confirm coins increase, and confirm the mission cannot be claimed again.
 - Buy Mushroom Income Boost and Mushroom Chance, then confirm Mushroom income and hatch odds text update.
@@ -37,6 +38,8 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Open Menu and confirm it is readable, compact, and does not cover the hatch panel unnecessarily.
 - From Menu, open Upgrades, Goals, Prestige, Zone, Compendium, Help, and Settings; confirm Menu closes and each panel is readable, fits, and can close.
 - Open Compendium on mobile, use Prev/Next through Slime and Mushroom entries, and confirm every monster row is reachable.
+- Page through the Compendium on mobile and confirm short pages use empty space acceptably without hiding Close, Prev, Next, or the page label.
+- Confirm farm-grid monsters and Compendium icons remain readable at mobile size.
 - Open Compendium on a desktop/wide browser, page through all entries, and confirm the layout is not compressed or overflowing.
 - Open Upgrade Shop on mobile and confirm rows and Buy buttons are visible without clipping.
 - Open Goals on mobile and confirm the mission list remains readable and Claim buttons still work.

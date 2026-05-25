@@ -107,9 +107,31 @@ type MonsterVisual = Phaser.GameObjects.Container;
 type MonsterDragZone = Phaser.GameObjects.Zone;
 type MonsterVisualStyle = {
   bodyColor: number;
+  baseColor: number;
   strokeColor: number;
+  accentColor: number;
+  secondaryAccentColor: number;
   bodyWidth: number;
   bodyHeight: number;
+  silhouetteVariant: string;
+  patternVariant: string;
+  accessories: string[];
+  auraType: string;
+  visualIntensity: MonsterVisualIntensity;
+  stemColor?: number;
+  stemStrokeColor?: number;
+};
+type MonsterVisualIdentity = MonsterVisualStyle & {
+  family: MonsterFamily;
+  level: number;
+};
+type MonsterVisualIntensity = {
+  tier: number;
+  glowAlpha: number;
+  glowScale: number;
+  outlineWidth: number;
+  detailScale: number;
+  sparkleCount: number;
 };
 type DiscoveryKey = `${MonsterFamily}:${number}`;
 type ToastVariant = 'info' | 'success' | 'warning';
@@ -321,6 +343,7 @@ export class FarmScene extends Phaser.Scene {
     this.nextCoinBugId = 1;
     this.coinBugSpawnAccumulatorMs = 0;
     this.nextCoinBugSpawnMs = this.getNextCoinBugSpawnDelayMs();
+    this.validateMonsterVisualIdentities();
     this.clearCoinBugs();
     this.hatchCooldownMs = HATCH_COOLDOWN_MS;
     this.hatchLabelText = undefined;
@@ -3479,12 +3502,15 @@ export class FarmScene extends Phaser.Scene {
     const { width: panelWidth, height: panelHeight } = this.getModalSize('compendium', 640, 640);
     const rowGap = panelWidth < 390 ? 34 : 38;
     const rowHeight = Math.min(34, rowGap - 3);
-    const firstRowY = -panelHeight / 2 + 88;
-    const bodyHeight = panelHeight - 142;
+    const bodyTopY = -panelHeight / 2 + (panelWidth < 390 ? 122 : 118);
+    const bodyBottomY = panelHeight / 2 - 72;
+    const bodyHeight = Math.max(rowGap, bodyBottomY - bodyTopY);
     const rowsPerPage = this.getRowsPerPage(rowGap, bodyHeight, listItems.length, 8, 12);
     const pageCount = this.getPageCount(listItems.length, rowsPerPage);
     const pageIndex = Phaser.Math.Clamp(this.compendiumPageIndex, 0, pageCount - 1);
     const pageItems = listItems.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage);
+    const visibleRowsHeight = Math.max(rowHeight, (pageItems.length - 1) * rowGap + rowHeight);
+    const firstRowY = bodyTopY + Math.max(0, (bodyHeight - visibleRowsHeight) / 2);
 
     this.compendiumPageIndex = pageIndex;
 
@@ -3519,6 +3545,8 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(closeText);
 
+    this.addCompendiumSummary(panel, panelWidth, panelHeight, pageItems);
+
     pageItems.forEach((item, index) => {
       const rowY = firstRowY + index * rowGap;
 
@@ -3536,6 +3564,52 @@ export class FarmScene extends Phaser.Scene {
     });
 
     this.compendiumPanel = panel;
+  }
+
+  private addCompendiumSummary(
+    panel: Phaser.GameObjects.Container,
+    panelWidth: number,
+    panelHeight: number,
+    pageItems: CompendiumListItem[],
+  ): void {
+    const discoveredCount = MONSTER_DEFINITIONS.filter((monster) => this.isMonsterDiscovered(monster)).length;
+    const pageSubtitle = this.getCompendiumPageSubtitle(pageItems);
+    const summaryY = -panelHeight / 2 + 54;
+    const familyProgress = (['Slime', 'Mushroom'] as MonsterFamily[])
+      .map((family) => {
+        const familyMonsters = MONSTER_DEFINITIONS.filter((monster) => monster.family === family);
+        const familyDiscovered = familyMonsters.filter((monster) => this.isMonsterDiscovered(monster)).length;
+
+        return `${family} ${familyDiscovered}/${familyMonsters.length}`;
+      })
+      .join('  |  ');
+
+    panel.add(this.add.text(-panelWidth / 2 + 24, summaryY, pageSubtitle, {
+      color: THEME.goldText,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: panelWidth < 390 ? '12px' : '14px',
+      fontStyle: 'bold',
+    }));
+
+    panel.add(this.add.text(-panelWidth / 2 + 24, summaryY + 18, `Discovered ${discoveredCount}/${MONSTER_DEFINITIONS.length}  |  ${familyProgress}`, {
+      color: THEME.mutedText,
+      fontFamily: 'Arial, sans-serif',
+      fontSize: panelWidth < 390 ? '10px' : '12px',
+      wordWrap: {
+        width: panelWidth - 48,
+      },
+    }));
+  }
+
+  private getCompendiumPageSubtitle(pageItems: CompendiumListItem[]): string {
+    const visibleFamilies = Array.from(new Set(pageItems
+      .map((item) => (item.type === 'family' ? item.family : item.monster.family))));
+
+    if (visibleFamilies.length === 1) {
+      return `${visibleFamilies[0]} Collection`;
+    }
+
+    return 'Monster Family Collection';
   }
 
   private closeCompendiumPanel(): void {
@@ -3812,6 +3886,8 @@ export class FarmScene extends Phaser.Scene {
     y = 0,
     scale = 1,
   ): void {
+    this.addMonsterAura(container, visualStyle, x, y, scale);
+
     container.add(this.add.ellipse(
       x,
       y + 8 * scale,
@@ -3826,7 +3902,15 @@ export class FarmScene extends Phaser.Scene {
       visualStyle.bodyWidth * scale,
       visualStyle.bodyHeight * scale,
       visualStyle.bodyColor,
-    ).setStrokeStyle(Math.max(1, Math.round(3 * scale)), visualStyle.strokeColor, 0.95));
+    ).setStrokeStyle(Math.max(1, Math.round(visualStyle.visualIntensity.outlineWidth * scale)), visualStyle.strokeColor, 0.95));
+    container.add(this.add.ellipse(
+      x + 3 * scale,
+      y - 2 * scale,
+      visualStyle.bodyWidth * 0.72 * scale,
+      visualStyle.bodyHeight * 0.52 * scale,
+      visualStyle.accentColor,
+      0.12 + visualStyle.visualIntensity.tier * 0.018,
+    ));
     container.add(this.add.ellipse(x - 12 * scale, y - 12 * scale, 14 * scale, 9 * scale, 0xffffff, 0.28));
     container.add(this.add.circle(x - 11 * scale, y - 4 * scale, 4 * scale, 0x10291a));
     container.add(this.add.circle(x + 11 * scale, y - 4 * scale, 4 * scale, 0x10291a));
@@ -3836,6 +3920,7 @@ export class FarmScene extends Phaser.Scene {
     container.add(this.add.ellipse(x + 17 * scale, y + 4 * scale, 6 * scale, 4 * scale, 0xff9fb1, 0.35));
 
     this.addSlimeDecorations(container, level, visualStyle, x, y, scale);
+    this.addVisualIntensitySparkles(container, visualStyle, x, y, scale);
   }
 
   private addMushroomVisual(
@@ -3846,9 +3931,11 @@ export class FarmScene extends Phaser.Scene {
     y = 0,
     scale = 1,
   ): void {
-    const strokeWidth = Math.max(1, Math.round(3 * scale));
-    const stemColor = level >= 4 ? 0xf0e6c4 : 0xf3d9ad;
-    const stemStroke = level >= 4 ? 0x927846 : 0x8a5a30;
+    this.addMonsterAura(container, visualStyle, x, y - 5 * scale, scale);
+
+    const strokeWidth = Math.max(1, Math.round(visualStyle.visualIntensity.outlineWidth * scale));
+    const stemColor = visualStyle.stemColor ?? (level >= 4 ? 0xf0e6c4 : 0xf3d9ad);
+    const stemStroke = visualStyle.stemStrokeColor ?? (level >= 4 ? 0x927846 : 0x8a5a30);
     const capWidth = visualStyle.bodyWidth * scale;
     const capHeight = visualStyle.bodyHeight * scale;
 
@@ -3858,138 +3945,439 @@ export class FarmScene extends Phaser.Scene {
     container.add(this.add.ellipse(x, y - 7 * scale, capWidth, capHeight, visualStyle.bodyColor, 0.98)
       .setStrokeStyle(strokeWidth, visualStyle.strokeColor, 0.95));
     container.add(this.add.ellipse(x, y + 2 * scale, capWidth * 0.78, capHeight * 0.34, visualStyle.strokeColor, 0.18));
+    container.add(this.add.ellipse(x - 8 * scale, y - 15 * scale, capWidth * 0.34, capHeight * 0.18, visualStyle.accentColor, 0.22));
     container.add(this.add.circle(x - 6 * scale, y + 8 * scale, 3.2 * scale, 0x10291a));
     container.add(this.add.circle(x + 6 * scale, y + 8 * scale, 3.2 * scale, 0x10291a));
     container.add(this.add.circle(x - 5.2 * scale, y + 7.2 * scale, 1.1 * scale, 0xffffff, 0.85));
     container.add(this.add.circle(x + 6.8 * scale, y + 7.2 * scale, 1.1 * scale, 0xffffff, 0.85));
 
     this.addMushroomDecorations(container, level, visualStyle, x, y, scale);
+    this.addVisualIntensitySparkles(container, visualStyle, x, y - 5 * scale, scale);
+  }
+
+  private addMonsterAura(
+    container: Phaser.GameObjects.Container,
+    visualStyle: MonsterVisualStyle,
+    x: number,
+    y: number,
+    scale: number,
+  ): void {
+    const { visualIntensity } = visualStyle;
+
+    if (visualIntensity.glowAlpha <= 0) {
+      return;
+    }
+
+    const glowWidth = visualStyle.bodyWidth * visualIntensity.glowScale * scale;
+    const glowHeight = visualStyle.bodyHeight * visualIntensity.glowScale * scale;
+
+    container.add(this.add.ellipse(x, y, glowWidth, glowHeight, visualStyle.accentColor, visualIntensity.glowAlpha));
+
+    if (visualIntensity.tier >= 3) {
+      container.add(this.add.ellipse(x, y, glowWidth * 1.13, glowHeight * 1.16, visualStyle.secondaryAccentColor, 0)
+        .setStrokeStyle(Math.max(1, Math.round(1.4 * scale)), visualStyle.secondaryAccentColor, 0.28));
+    }
+  }
+
+  private addVisualIntensitySparkles(
+    container: Phaser.GameObjects.Container,
+    visualStyle: MonsterVisualStyle,
+    x: number,
+    y: number,
+    scale: number,
+  ): void {
+    const sparkleCount = Math.min(scale < 0.55 ? 2 : 4, visualStyle.visualIntensity.sparkleCount);
+
+    if (sparkleCount <= 0) {
+      return;
+    }
+
+    const sparklePositions = [
+      [-25, -16],
+      [24, -11],
+      [-21, 11],
+      [22, 9],
+    ];
+
+    sparklePositions.slice(0, sparkleCount).forEach(([sparkleX, sparkleY], index) => {
+      container.add(this.add.star(
+        x + sparkleX * scale,
+        y + sparkleY * scale,
+        4,
+        Math.max(1.2, 2.2 * scale),
+        Math.max(2.2, 4.4 * scale),
+        index % 2 === 0 ? visualStyle.accentColor : visualStyle.secondaryAccentColor,
+        0.86,
+      ));
+    });
   }
 
   private getMonsterVisualStyle(family: MonsterFamily, level: number): MonsterVisualStyle {
+    return this.getMonsterVisualIdentity(family, level);
+  }
+
+  private getMonsterVisualIdentity(monsterOrFamily: MonsterDefinition | MonsterFamily, level?: number): MonsterVisualIdentity {
+    const family = typeof monsterOrFamily === 'string' ? monsterOrFamily : monsterOrFamily.family;
+    const monsterLevel = typeof monsterOrFamily === 'string' ? level ?? 1 : monsterOrFamily.level;
+    const visualIntensity = this.getMonsterVisualIntensity(family, monsterLevel);
+
     if (family === 'Mushroom') {
-      if (level >= 6) {
-        return {
-          bodyColor: 0x5f8ed8,
-          strokeColor: 0x28507f,
-          bodyWidth: 66,
-          bodyHeight: 44,
-        };
-      }
-
-      if (level === 5) {
-        return {
-          bodyColor: 0x5d7f3f,
-          strokeColor: 0x2d4c25,
-          bodyWidth: 64,
-          bodyHeight: 42,
-        };
-      }
-
-      if (level === 4) {
-        return {
-          bodyColor: 0x8f65d8,
-          strokeColor: 0x4d347d,
-          bodyWidth: 60,
-          bodyHeight: 40,
-        };
-      }
-
-      if (level === 3) {
-        return {
-          bodyColor: 0xbe8f55,
-          strokeColor: 0x6b4c28,
-          bodyWidth: 56,
-          bodyHeight: 38,
-        };
-      }
-
-      if (level === 2) {
-        return {
-          bodyColor: 0xc9534a,
-          strokeColor: 0x742922,
-          bodyWidth: 52,
-          bodyHeight: 36,
-        };
-      }
-
-      return {
-        bodyColor: 0xd8a15e,
-        strokeColor: 0x754523,
-        bodyWidth: 46,
-        bodyHeight: 32,
-      };
+      return this.getMushroomVisualIdentity(monsterLevel, visualIntensity);
     }
 
-    if (level >= 8) {
-      return {
-        bodyColor: 0x4f4bb8,
-        strokeColor: 0x24205f,
-        bodyWidth: 64,
-        bodyHeight: 52,
-      };
-    }
+    return this.getSlimeVisualIdentity(monsterLevel, visualIntensity);
+  }
 
-    if (level === 7) {
-      return {
-        bodyColor: 0x7bb36a,
-        strokeColor: 0x395e32,
-        bodyWidth: 62,
-        bodyHeight: 52,
-      };
-    }
-
-    if (level === 6) {
-      return {
-        bodyColor: 0x8ae8f2,
-        strokeColor: 0x267c94,
-        bodyWidth: 60,
-        bodyHeight: 50,
-      };
-    }
-
-    if (level === 5) {
-      return {
-        bodyColor: 0xf0a45d,
-        strokeColor: 0x945024,
-        bodyWidth: 62,
-        bodyHeight: 50,
-      };
-    }
-
-    if (level === 4) {
-      return {
-        bodyColor: 0x9ee45d,
-        strokeColor: 0x4b8732,
-        bodyWidth: 58,
-        bodyHeight: 48,
-      };
-    }
-
-    if (level === 3) {
-      return {
-        bodyColor: 0xb28df0,
-        strokeColor: 0x6543a1,
-        bodyWidth: 60,
-        bodyHeight: 50,
-      };
-    }
-
-    if (level === 2) {
-      return {
-        bodyColor: 0x66d8e7,
-        strokeColor: 0x247a8d,
-        bodyWidth: 54,
-        bodyHeight: 46,
-      };
-    }
+  private getMonsterVisualIntensity(family: MonsterFamily, level: number): MonsterVisualIntensity {
+    const maxLevel = family === 'Mushroom' ? 8 : 12;
+    const normalizedLevel = Phaser.Math.Clamp(level, 1, maxLevel);
+    const progress = maxLevel <= 1 ? 0 : (normalizedLevel - 1) / (maxLevel - 1);
+    const tier = Math.min(5, Math.floor(progress * 6));
 
     return {
-      bodyColor: 0x80e278,
-      strokeColor: 0x2e7a35,
-      bodyWidth: 46,
-      bodyHeight: 38,
+      tier,
+      glowAlpha: tier === 0 ? 0 : 0.08 + tier * 0.035,
+      glowScale: 1.08 + tier * 0.055,
+      outlineWidth: 2 + Math.min(3, Math.floor(tier / 2)),
+      detailScale: 1 + tier * 0.055,
+      sparkleCount: Math.max(0, tier - 1),
     };
+  }
+
+  private getSlimeVisualIdentity(level: number, visualIntensity: MonsterVisualIntensity): MonsterVisualIdentity {
+    const paletteByLevel: Record<number, Omit<MonsterVisualIdentity, 'family' | 'level' | 'visualIntensity'>> = {
+      1: {
+        bodyColor: 0x80e278,
+        baseColor: 0x80e278,
+        strokeColor: 0x2e7a35,
+        accentColor: 0xbaf7a0,
+        secondaryAccentColor: 0xff9fb1,
+        bodyWidth: 46,
+        bodyHeight: 38,
+        silhouetteVariant: 'round-drop',
+        patternVariant: 'plain',
+        accessories: [],
+        auraType: 'none',
+      },
+      2: {
+        bodyColor: 0x66d8e7,
+        baseColor: 0x66d8e7,
+        strokeColor: 0x247a8d,
+        accentColor: 0xd7f5ff,
+        secondaryAccentColor: 0x8df0ff,
+        bodyWidth: 54,
+        bodyHeight: 46,
+        silhouetteVariant: 'tall-drop',
+        patternVariant: 'bubble',
+        accessories: ['bubble crest'],
+        auraType: 'dew',
+      },
+      3: {
+        bodyColor: 0xb28df0,
+        baseColor: 0xb28df0,
+        strokeColor: 0x6543a1,
+        accentColor: 0xf7e27c,
+        secondaryAccentColor: 0xd8bdff,
+        bodyWidth: 60,
+        bodyHeight: 50,
+        silhouetteVariant: 'wide-drop',
+        patternVariant: 'star core',
+        accessories: ['star core'],
+        auraType: 'spark',
+      },
+      4: {
+        bodyColor: 0x9ee45d,
+        baseColor: 0x9ee45d,
+        strokeColor: 0x4b8732,
+        accentColor: 0xffdf9c,
+        secondaryAccentColor: 0xf6ffbf,
+        bodyWidth: 58,
+        bodyHeight: 48,
+        silhouetteVariant: 'horned',
+        patternVariant: 'leaf glint',
+        accessories: ['horns'],
+        auraType: 'leaf',
+      },
+      5: {
+        bodyColor: 0xf0a45d,
+        baseColor: 0xf0a45d,
+        strokeColor: 0x945024,
+        accentColor: 0xf7d35f,
+        secondaryAccentColor: 0xe94c74,
+        bodyWidth: 62,
+        bodyHeight: 50,
+        silhouetteVariant: 'royal',
+        patternVariant: 'gem crown',
+        accessories: ['crown'],
+        auraType: 'gold',
+      },
+      6: {
+        bodyColor: 0x8ae8f2,
+        baseColor: 0x8ae8f2,
+        strokeColor: 0x267c94,
+        accentColor: 0xd7fbff,
+        secondaryAccentColor: 0x5dc3e6,
+        bodyWidth: 60,
+        bodyHeight: 50,
+        silhouetteVariant: 'crystal',
+        patternVariant: 'triple crystal',
+        accessories: ['crystals'],
+        auraType: 'frost',
+      },
+      7: {
+        bodyColor: 0x7bb36a,
+        baseColor: 0x7bb36a,
+        strokeColor: 0x395e32,
+        accentColor: 0xf0dca4,
+        secondaryAccentColor: 0xc5f0a0,
+        bodyWidth: 62,
+        bodyHeight: 52,
+        silhouetteVariant: 'ancient',
+        patternVariant: 'rune halo',
+        accessories: ['runes'],
+        auraType: 'rune',
+      },
+      8: {
+        bodyColor: 0x4f4bb8,
+        baseColor: 0x4f4bb8,
+        strokeColor: 0x24205f,
+        accentColor: 0xb9d9ff,
+        secondaryAccentColor: 0xfff4a8,
+        bodyWidth: 64,
+        bodyHeight: 52,
+        silhouetteVariant: 'galaxy',
+        patternVariant: 'two star orbit',
+        accessories: ['orbit stars'],
+        auraType: 'galaxy',
+      },
+      9: {
+        bodyColor: 0x7c4fd6,
+        baseColor: 0x7c4fd6,
+        strokeColor: 0x37216f,
+        accentColor: 0xff8bc8,
+        secondaryAccentColor: 0xbad7ff,
+        bodyWidth: 66,
+        bodyHeight: 53,
+        silhouetteVariant: 'nebula',
+        patternVariant: 'nebula beads',
+        accessories: ['orbit beads'],
+        auraType: 'nebula',
+      },
+      10: {
+        bodyColor: 0xf2b84f,
+        baseColor: 0xf2b84f,
+        strokeColor: 0x8f5c18,
+        accentColor: 0xfff0a8,
+        secondaryAccentColor: 0xff7659,
+        bodyWidth: 67,
+        bodyHeight: 54,
+        silhouetteVariant: 'solar',
+        patternVariant: 'solar crown',
+        accessories: ['sun rays'],
+        auraType: 'solar',
+      },
+      11: {
+        bodyColor: 0x38356f,
+        baseColor: 0x38356f,
+        strokeColor: 0x171530,
+        accentColor: 0xf0e6ff,
+        secondaryAccentColor: 0xffb85f,
+        bodyWidth: 68,
+        bodyHeight: 55,
+        silhouetteVariant: 'eclipse',
+        patternVariant: 'eclipse ring',
+        accessories: ['eclipse ring'],
+        auraType: 'eclipse',
+      },
+      12: {
+        bodyColor: 0x2f6fc2,
+        baseColor: 0x2f6fc2,
+        strokeColor: 0x15315d,
+        accentColor: 0xd8fbff,
+        secondaryAccentColor: 0xfff19a,
+        bodyWidth: 70,
+        bodyHeight: 56,
+        silhouetteVariant: 'cosmic',
+        patternVariant: 'cosmic crown',
+        accessories: ['crown ring', 'stars'],
+        auraType: 'cosmic',
+      },
+    };
+
+    return {
+      family: 'Slime',
+      level,
+      visualIntensity,
+      ...(paletteByLevel[level] ?? paletteByLevel[12]),
+    };
+  }
+
+  private getMushroomVisualIdentity(level: number, visualIntensity: MonsterVisualIntensity): MonsterVisualIdentity {
+    const paletteByLevel: Record<number, Omit<MonsterVisualIdentity, 'family' | 'level' | 'visualIntensity'>> = {
+      1: {
+        bodyColor: 0xd8a15e,
+        baseColor: 0xd8a15e,
+        strokeColor: 0x754523,
+        accentColor: 0xffe7bd,
+        secondaryAccentColor: 0xf3d9ad,
+        bodyWidth: 46,
+        bodyHeight: 32,
+        silhouetteVariant: 'button-cap',
+        patternVariant: 'single spot',
+        accessories: ['small spot'],
+        auraType: 'none',
+        stemColor: 0xf3d9ad,
+        stemStrokeColor: 0x8a5a30,
+      },
+      2: {
+        bodyColor: 0xc9534a,
+        baseColor: 0xc9534a,
+        strokeColor: 0x742922,
+        accentColor: 0xffefd2,
+        secondaryAccentColor: 0xf7b0a0,
+        bodyWidth: 52,
+        bodyHeight: 36,
+        silhouetteVariant: 'spotted-cap',
+        patternVariant: 'four spots',
+        accessories: ['spots'],
+        auraType: 'none',
+        stemColor: 0xf3d9ad,
+        stemStrokeColor: 0x8a5a30,
+      },
+      3: {
+        bodyColor: 0xbe8f55,
+        baseColor: 0xbe8f55,
+        strokeColor: 0x6b4c28,
+        accentColor: 0xe6d0a0,
+        secondaryAccentColor: 0xd9c08a,
+        bodyWidth: 56,
+        bodyHeight: 38,
+        silhouetteVariant: 'elder-cap',
+        patternVariant: 'side gills',
+        accessories: ['gills'],
+        auraType: 'spore',
+        stemColor: 0xf0e6c4,
+        stemStrokeColor: 0x927846,
+      },
+      4: {
+        bodyColor: 0x8f65d8,
+        baseColor: 0x8f65d8,
+        strokeColor: 0x4d347d,
+        accentColor: 0xdcc7ff,
+        secondaryAccentColor: 0xfff1a8,
+        bodyWidth: 60,
+        bodyHeight: 40,
+        silhouetteVariant: 'mystic-cap',
+        patternVariant: 'star veil',
+        accessories: ['mystic stars'],
+        auraType: 'mystic',
+        stemColor: 0xf0e6c4,
+        stemStrokeColor: 0x927846,
+      },
+      5: {
+        bodyColor: 0x5d7f3f,
+        baseColor: 0x5d7f3f,
+        strokeColor: 0x2d4c25,
+        accentColor: 0xf2e08f,
+        secondaryAccentColor: 0x9fcb73,
+        bodyWidth: 64,
+        bodyHeight: 42,
+        silhouetteVariant: 'giant-cap',
+        patternVariant: 'golden nodes',
+        accessories: ['gold nodes', 'base band'],
+        auraType: 'forest',
+        stemColor: 0xf0e6c4,
+        stemStrokeColor: 0x927846,
+      },
+      6: {
+        bodyColor: 0x5f8ed8,
+        baseColor: 0x5f8ed8,
+        strokeColor: 0x28507f,
+        accentColor: 0xd8fbff,
+        secondaryAccentColor: 0x9bd6ec,
+        bodyWidth: 66,
+        bodyHeight: 44,
+        silhouetteVariant: 'mooncap',
+        patternVariant: 'lunar crystals',
+        accessories: ['moon crystals', 'silver band'],
+        auraType: 'lunar',
+        stemColor: 0xf0e6c4,
+        stemStrokeColor: 0x927846,
+      },
+      7: {
+        bodyColor: 0x5844b8,
+        baseColor: 0x5844b8,
+        strokeColor: 0x281d63,
+        accentColor: 0xfff1a8,
+        secondaryAccentColor: 0xbad7ff,
+        bodyWidth: 68,
+        bodyHeight: 45,
+        silhouetteVariant: 'starlit-cap',
+        patternVariant: 'constellation',
+        accessories: ['star trail', 'blue band'],
+        auraType: 'starlit',
+        stemColor: 0xf0e6c4,
+        stemStrokeColor: 0x927846,
+      },
+      8: {
+        bodyColor: 0x26796d,
+        baseColor: 0x26796d,
+        strokeColor: 0x12443f,
+        accentColor: 0xffd978,
+        secondaryAccentColor: 0x9df5d7,
+        bodyWidth: 72,
+        bodyHeight: 48,
+        silhouetteVariant: 'worldcap',
+        patternVariant: 'world crown',
+        accessories: ['canopy crown', 'root ring'],
+        auraType: 'world',
+        stemColor: 0xf0e6c4,
+        stemStrokeColor: 0x927846,
+      },
+    };
+
+    return {
+      family: 'Mushroom',
+      level,
+      visualIntensity,
+      ...(paletteByLevel[level] ?? paletteByLevel[8]),
+    };
+  }
+
+  private validateMonsterVisualIdentities(): void {
+    const isLocalDebug = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+    if (!SHOW_DEBUG_PANEL && !isLocalDebug) {
+      return;
+    }
+
+    const signatures = new Map<string, MonsterDefinition>();
+
+    MONSTER_DEFINITIONS.forEach((monster) => {
+      const identity = this.getMonsterVisualIdentity(monster);
+      const signature = [
+        identity.family,
+        identity.bodyColor.toString(16),
+        identity.strokeColor.toString(16),
+        identity.accentColor.toString(16),
+        identity.secondaryAccentColor.toString(16),
+        identity.silhouetteVariant,
+        identity.patternVariant,
+        identity.accessories.join(','),
+        identity.auraType,
+        identity.visualIntensity.tier,
+      ].join('|');
+      const matchingMonster = signatures.get(signature);
+
+      if (matchingMonster) {
+        console.warn(
+          `[Compendium] Visual identity overlap: ${matchingMonster.family} Lv ${matchingMonster.level} and ${monster.family} Lv ${monster.level}`,
+        );
+        return;
+      }
+
+      signatures.set(signature, monster);
+    });
   }
 
   private addMushroomDecorations(
@@ -4042,10 +4430,11 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    if (level >= 6) {
+    if (level === 6) {
       container.add(this.add.ellipse(x, y - 9 * scale, 58 * scale, 22 * scale, 0xffffff, 0)
-        .setStrokeStyle(strokeWidth, 0xa7e8ff, 0.84));
-      container.add(this.add.ellipse(x, y - 7 * scale, 42 * scale, 13 * scale, 0xbeeaff, 0.18));
+        .setStrokeStyle(strokeWidth, visualStyle.accentColor, 0.84));
+      container.add(this.add.ellipse(x - 7 * scale, y - 12 * scale, 25 * scale, 9 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, visualStyle.secondaryAccentColor, 0.7));
       [
         [-18, -10, -8],
         [0, -20, 0],
@@ -4060,16 +4449,72 @@ export class FarmScene extends Phaser.Scene {
           6 * scale,
           5 * scale,
           6 * scale,
-          0xd8fbff,
+          visualStyle.accentColor,
           0.95,
-        ).setStrokeStyle(1, 0x4d91bd, 0.78);
+        ).setStrokeStyle(1, visualStyle.strokeColor, 0.78);
 
         crystal.setAngle(angle);
         container.add(crystal);
       });
-      container.add(this.add.rectangle(x, y + 25 * scale, 22 * scale, 5 * scale, 0x9bd6ec, 0.84)
-        .setStrokeStyle(1, 0x28507f, 0.62));
-      container.add(this.add.circle(x + 10 * scale, y + 10 * scale, 2.2 * scale, 0x5f8ed8, 0.5));
+      container.add(this.add.rectangle(x, y + 25 * scale, 22 * scale, 5 * scale, visualStyle.secondaryAccentColor, 0.84)
+        .setStrokeStyle(1, visualStyle.strokeColor, 0.62));
+      container.add(this.add.circle(x + 10 * scale, y + 10 * scale, 2.2 * scale, visualStyle.bodyColor, 0.5));
+      return;
+    }
+
+    if (level === 7) {
+      container.add(this.add.ellipse(x, y - 9 * scale, 60 * scale, 23 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, visualStyle.accentColor, 0.86));
+      [
+        [-18, -12],
+        [-5, -20],
+        [10, -14],
+        [21, -6],
+      ].forEach(([starX, starY], index) => {
+        container.add(this.add.star(
+          x + starX * scale,
+          y + starY * scale,
+          5,
+          (2.2 + index * 0.15) * scale,
+          (4.7 + index * 0.22) * scale,
+          index % 2 === 0 ? visualStyle.accentColor : visualStyle.secondaryAccentColor,
+          0.95,
+        ));
+      });
+      container.add(this.add.ellipse(x, y - 7 * scale, 38 * scale, 12 * scale, visualStyle.secondaryAccentColor, 0.16));
+      container.add(this.add.rectangle(x, y + 25 * scale, 24 * scale, 5 * scale, visualStyle.secondaryAccentColor, 0.86)
+        .setStrokeStyle(1, visualStyle.strokeColor, 0.62));
+      container.add(this.add.circle(x - 11 * scale, y + 10 * scale, 2 * scale, visualStyle.accentColor, 0.64));
+      container.add(this.add.circle(x + 11 * scale, y + 10 * scale, 2 * scale, visualStyle.accentColor, 0.64));
+      return;
+    }
+
+    if (level >= 8) {
+      container.add(this.add.ellipse(x, y - 9 * scale, 66 * scale, 25 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, visualStyle.accentColor, 0.9));
+      container.add(this.add.ellipse(x, y - 8 * scale, 46 * scale, 14 * scale, visualStyle.secondaryAccentColor, 0.18));
+      container.add(this.add.rectangle(x, y - 29 * scale, 28 * scale, 6 * scale, visualStyle.accentColor, 0.94)
+        .setStrokeStyle(1, visualStyle.strokeColor, 0.72));
+      [-13, 0, 13].forEach((crownX, index) => {
+        container.add(this.add.triangle(
+          x + crownX * scale,
+          y - 34 * scale,
+          0,
+          8 * scale,
+          5 * scale,
+          -6 * scale,
+          10 * scale,
+          8 * scale,
+          index === 1 ? visualStyle.secondaryAccentColor : visualStyle.accentColor,
+          0.95,
+        ).setStrokeStyle(1, visualStyle.strokeColor, 0.65));
+      });
+      container.add(this.add.ellipse(x, y + 25 * scale, 34 * scale, 7 * scale, visualStyle.secondaryAccentColor, 0.9)
+        .setStrokeStyle(1, visualStyle.strokeColor, 0.62));
+      container.add(this.add.ellipse(x - 17 * scale, y + 12 * scale, 5 * scale, 15 * scale, visualStyle.accentColor, 0)
+        .setStrokeStyle(1, visualStyle.accentColor, 0.66));
+      container.add(this.add.ellipse(x + 17 * scale, y + 12 * scale, 5 * scale, 15 * scale, visualStyle.accentColor, 0)
+        .setStrokeStyle(1, visualStyle.accentColor, 0.66));
       return;
     }
 
@@ -4151,13 +4596,79 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    if (level >= 8) {
+    if (level === 8) {
       container.add(this.add.ellipse(x, y - 3 * scale, 52 * scale, 18 * scale, 0xffffff, 0)
-        .setStrokeStyle(strokeWidth, 0xb9d9ff, 0.78));
-      container.add(this.add.star(x - 12 * scale, y - 13 * scale, 5, 3 * scale, 6 * scale, 0xfff4a8, 0.95));
-      container.add(this.add.star(x + 14 * scale, y + 3 * scale, 5, 3 * scale, 6 * scale, 0xd7f5ff, 0.95));
-      container.add(this.add.circle(x + 22 * scale, y - 7 * scale, 3.5 * scale, 0xff8bc8, 0.95)
-        .setStrokeStyle(1, 0xffffff, 0.65));
+        .setStrokeStyle(strokeWidth, visualStyle.accentColor, 0.78));
+      container.add(this.add.star(x - 12 * scale, y - 13 * scale, 5, 3 * scale, 6 * scale, visualStyle.secondaryAccentColor, 0.95));
+      container.add(this.add.star(x + 14 * scale, y + 3 * scale, 5, 3 * scale, 6 * scale, visualStyle.accentColor, 0.95));
+      return;
+    }
+
+    if (level === 9) {
+      container.add(this.add.ellipse(x, y - 3 * scale, 54 * scale, 19 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, visualStyle.accentColor, 0.8));
+      [
+        [-21, -8, 3.4],
+        [-6, -15, 2.7],
+        [15, -4, 3.8],
+        [23, -14, 2.5],
+      ].forEach(([orbX, orbY, radius]) => {
+        container.add(this.add.circle(
+          x + orbX * scale,
+          y + orbY * scale,
+          radius * scale,
+          visualStyle.accentColor,
+          0.94,
+        ).setStrokeStyle(1, visualStyle.secondaryAccentColor, 0.62));
+      });
+      container.add(this.add.ellipse(x, y + 5 * scale, 30 * scale, 8 * scale, visualStyle.secondaryAccentColor, 0.2));
+      return;
+    }
+
+    if (level === 10) {
+      container.add(this.add.star(x, y - 5 * scale, 12, 23 * scale, 30 * scale, visualStyle.secondaryAccentColor, 0.24));
+      container.add(this.add.ellipse(x, y - 4 * scale, 52 * scale, 18 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, visualStyle.accentColor, 0.86));
+      container.add(this.add.circle(x, y - 18 * scale, 6 * scale, visualStyle.accentColor, 0.96)
+        .setStrokeStyle(1, visualStyle.strokeColor, 0.62));
+      container.add(this.add.rectangle(x, y - 25 * scale, 30 * scale, 5 * scale, visualStyle.accentColor, 0.88)
+        .setStrokeStyle(1, visualStyle.strokeColor, 0.55));
+      return;
+    }
+
+    if (level === 11) {
+      container.add(this.add.ellipse(x, y - 3 * scale, 56 * scale, 21 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, visualStyle.accentColor, 0.84));
+      container.add(this.add.ellipse(x, y - 4 * scale, 34 * scale, 13 * scale, visualStyle.secondaryAccentColor, 0.25));
+      container.add(this.add.circle(x - 18 * scale, y - 15 * scale, 3.2 * scale, visualStyle.accentColor, 0.95));
+      container.add(this.add.circle(x + 20 * scale, y + 2 * scale, 3.2 * scale, visualStyle.secondaryAccentColor, 0.95));
+      container.add(this.add.rectangle(x, y - 23 * scale, 28 * scale, 5 * scale, visualStyle.accentColor, 0.82)
+        .setStrokeStyle(1, visualStyle.strokeColor, 0.6));
+      return;
+    }
+
+    if (level >= 12) {
+      container.add(this.add.ellipse(x, y - 4 * scale, 60 * scale, 22 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, visualStyle.accentColor, 0.9));
+      container.add(this.add.ellipse(x, y - 5 * scale, 44 * scale, 13 * scale, visualStyle.secondaryAccentColor, 0.2));
+      container.add(this.add.rectangle(x, y - 25 * scale, 32 * scale, 6 * scale, visualStyle.accentColor, 0.9)
+        .setStrokeStyle(1, visualStyle.strokeColor, 0.68));
+      [-12, 0, 12].forEach((crownX, index) => {
+        container.add(this.add.triangle(
+          x + crownX * scale,
+          y - 31 * scale,
+          0,
+          10 * scale,
+          5 * scale,
+          -7 * scale,
+          10 * scale,
+          10 * scale,
+          index === 1 ? visualStyle.secondaryAccentColor : visualStyle.accentColor,
+          0.94,
+        ).setStrokeStyle(1, visualStyle.strokeColor, 0.65));
+      });
+      container.add(this.add.star(x - 20 * scale, y - 12 * scale, 5, 2.8 * scale, 5.8 * scale, visualStyle.secondaryAccentColor, 0.95));
+      container.add(this.add.star(x + 23 * scale, y - 2 * scale, 5, 2.8 * scale, 5.8 * scale, visualStyle.accentColor, 0.95));
     }
   }
 
