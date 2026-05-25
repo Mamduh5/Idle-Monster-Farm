@@ -16,6 +16,7 @@ Idle Monster Farm is a browser alpha idle merge game. Hatch monsters, merge matc
 - Local save/load
 - Offline earnings
 - Mobile-friendly browser layout
+- English and Thai UI language setting
 - Debug UI hidden from normal play
 
 ## Tech Stack

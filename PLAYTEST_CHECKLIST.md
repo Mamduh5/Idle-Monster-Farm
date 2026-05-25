@@ -36,6 +36,10 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Confirm coin values use clean whole or compact text with no long decimal strings.
 - Confirm the expansion row or unlock button remains visible above the Hatch panel.
 - Open Menu and confirm it is readable, compact, and does not cover the hatch panel unnecessarily.
+- Open Settings, switch English to Thai, and confirm Menu labels immediately show Thai.
+- Reload and confirm the selected Thai language persists, then switch back to English and confirm English returns.
+- In Thai, open Upgrade Shop, Goals, Compendium, Prestige, Zone, Help, and Settings on mobile and confirm text is readable without obvious clipping.
+- Confirm no raw translation keys such as `ui.menu.upgrades` are visible to players.
 - From Menu, open Upgrades, Goals, Prestige, Zone, Compendium, Help, and Settings; confirm Menu closes and each panel is readable, fits, and can close.
 - Open Compendium on mobile, use Prev/Next through Slime and Mushroom entries, and confirm every monster row is reachable.
 - Page through the Compendium on mobile and confirm short pages use empty space acceptably without hiding Close, Prev, Next, or the page label.

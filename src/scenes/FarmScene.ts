@@ -29,6 +29,7 @@ import {
   writeSaveData,
 } from '../systems/saveSystem';
 import { audioSystem } from '../systems/audioSystem';
+import { getText, type LanguageCode } from '../i18n/translations';
 import { loadSettings, writeSettings, type GameSettings } from '../systems/settingsSystem';
 import type {
   CurrencyState,
@@ -75,6 +76,8 @@ const COIN_BUG_HITBOX_SIZE = 64;
 const SHOW_DEBUG_PANEL = false;
 const SHOW_MONSTER_HITBOX_DEBUG = false;
 const MODAL_OVERLAY_DEPTH = 18;
+const UI_FONT_FAMILY = 'Arial, Tahoma, "Noto Sans Thai", sans-serif';
+const MONO_FONT_FAMILY = 'Consolas, monospace';
 const THEME = {
   sky: 0x9bd7f2,
   grass: 0x6fbd64,
@@ -593,16 +596,18 @@ export class FarmScene extends Phaser.Scene {
     const expansionContainer = this.add.container(0, 0);
 
     if (this.expansionUnlocked) {
-      expansionContainer.add(this.add.text(this.scale.width / 2, labelY, 'Expansion Slots', {
+      expansionContainer.add(this.add.text(this.scale.width / 2, labelY, this.t('ui.expansion.slots'), {
         color: '#d9d6ec',
-        fontFamily: 'Arial, sans-serif',
+        fontFamily: UI_FONT_FAMILY,
         fontSize: layout.isNarrow ? '14px' : '16px',
         fontStyle: 'bold',
       }).setOrigin(0.5));
     } else {
-      const unlockText = this.add.text(this.scale.width / 2, labelY, `Unlock +3 slots - ${this.formatCoinAmount(EXPANSION_UNLOCK_COST)}`, {
+      const unlockText = this.add.text(this.scale.width / 2, labelY, this.t('ui.expansion.unlock', {
+        amount: this.formatCoinAmount(EXPANSION_UNLOCK_COST),
+      }), {
         color: THEME.text,
-        fontFamily: 'Arial, sans-serif',
+        fontFamily: UI_FONT_FAMILY,
         fontSize: layout.isNarrow ? '13px' : '15px',
         fontStyle: 'bold',
         backgroundColor: `#${THEME.buttonWarm.toString(16).padStart(6, '0')}`,
@@ -709,16 +714,16 @@ export class FarmScene extends Phaser.Scene {
     container.add(this.add.rectangle(x + 8, y + 8, this.cellSize - 16, this.cellSize - 16, THEME.lockedInner, 0.22)
       .setOrigin(0));
 
-    container.add(this.add.text(x + this.cellSize / 2, y + this.cellSize / 2 - 8, 'LOCK', {
+    container.add(this.add.text(x + this.cellSize / 2, y + this.cellSize / 2 - 8, this.t('ui.expansion.lock'), {
       color: '#d1d9d2',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: isNarrow ? '12px' : '14px',
       fontStyle: 'bold',
     }).setOrigin(0.5));
 
     container.add(this.add.text(x + this.cellSize / 2, y + this.cellSize / 2 + 13, this.formatCoinAmount(EXPANSION_UNLOCK_COST), {
       color: '#fff4a8',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '12px',
       fontStyle: 'bold',
     }).setOrigin(0.5));
@@ -741,18 +746,20 @@ export class FarmScene extends Phaser.Scene {
       .setOrigin(0)
       .setStrokeStyle(2, THEME.panelBorder, 0.72));
 
-    this.coinText = this.add.text(layout.hudX + 18, layout.hudY + 10, `Coins: ${this.currency.coins}`, {
+    this.coinText = this.add.text(layout.hudX + 18, layout.hudY + 10, this.t('ui.hud.coins', {
+      amount: this.formatCoinAmount(this.currency.coins),
+    }), {
       color: THEME.goldText,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: coinFontSize,
       fontStyle: 'bold',
       fixedWidth: layout.hudWidth - 30,
     });
     hudContainer.add(this.coinText);
 
-    this.incomeText = this.add.text(layout.hudX + 18, layout.hudY + (layout.isNarrow ? 36 : 39), '+0/sec', {
+    this.incomeText = this.add.text(layout.hudX + 18, layout.hudY + (layout.isNarrow ? 36 : 39), this.t('common.perSecond', { amount: '+0' }), {
       color: '#d9f6ba',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: layout.isNarrow ? '13px' : '15px',
       fontStyle: 'bold',
       fixedWidth: layout.hudWidth - 30,
@@ -766,16 +773,16 @@ export class FarmScene extends Phaser.Scene {
       .setOrigin(0)
       .setStrokeStyle(2, THEME.slot, 0.62));
 
-    hudContainer.add(this.add.text(layout.statsX + 18, layout.statsY + 9, 'Production', {
+    hudContainer.add(this.add.text(layout.statsX + 18, layout.statsY + 9, this.t('ui.hud.production'), {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: productionTitleFontSize,
       fontStyle: 'bold',
     }));
 
     this.productionStatsText = this.add.text(layout.statsX + 18, layout.statsY + 32, '', {
       color: THEME.mutedText,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: productionTextFontSize,
       lineSpacing: productionLineSpacing,
       fixedWidth: layout.statsWidth - 30,
@@ -836,18 +843,18 @@ export class FarmScene extends Phaser.Scene {
       .setStrokeStyle(3, 0x9f6a2a, 0.95));
     hatchContainer.add(this.add.ellipse(eggX - 8, y + 29, 12, 18, 0xffffff, 0.35));
 
-    this.hatchLabelText = this.add.text(textX, y + 16, 'Hatch Egg', {
+    this.hatchLabelText = this.add.text(textX, y + 16, this.t('ui.hatch.label'), {
       color: '#ffffff',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: layout.isNarrow ? '21px' : '24px',
       fontStyle: 'bold',
       fixedWidth: panelWidth - (textX - x) - 16,
     });
     hatchContainer.add(this.hatchLabelText);
 
-    this.hatchStatusText = this.add.text(textX, y + 44, 'Ready', {
+    this.hatchStatusText = this.add.text(textX, y + 44, this.t('ui.hatch.ready'), {
       color: '#d9d6ec',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: layout.isNarrow ? '12px' : '14px',
       fixedWidth: panelWidth - (textX - x) - 16,
       wordWrap: {
@@ -876,7 +883,7 @@ export class FarmScene extends Phaser.Scene {
     this.menuControlsContainer = this.add.container(0, 0);
     this.menuButtons = [];
 
-    this.createMenuButton('Menu', 0, () => {
+    this.createMenuButton(this.t('ui.menu'), 0, () => {
       this.toggleNavigationMenuPanel();
     });
   }
@@ -900,7 +907,7 @@ export class FarmScene extends Phaser.Scene {
     const layout = this.getLayout();
     const button = this.add.text(layout.menuX, layout.menuY + index * layout.menuGap, label, {
       color: '#f7ffe8',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: layout.menuFontSize,
       fontStyle: 'bold',
       backgroundColor,
@@ -982,16 +989,16 @@ export class FarmScene extends Phaser.Scene {
     panel.setDepth(26);
     this.addPanelBackground(panel, panelWidth, panelHeight);
 
-    panel.add(this.add.text(-panelWidth / 2 + 22, -panelHeight / 2 + 18, 'Menu', {
+    panel.add(this.add.text(-panelWidth / 2 + 22, -panelHeight / 2 + 18, this.t('ui.menu'), {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: this.getPanelTitleFontSize(panelWidth, 23),
       fontStyle: 'bold',
     }));
 
-    const closeText = this.add.text(panelWidth / 2 - 20, -panelHeight / 2 + 20, 'Close', {
+    const closeText = this.add.text(panelWidth / 2 - 20, -panelHeight / 2 + 20, this.t('common.close'), {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '14px',
       fontStyle: 'bold',
       backgroundColor: '#49395d',
@@ -1012,13 +1019,13 @@ export class FarmScene extends Phaser.Scene {
     panel.add(closeText);
 
     const menuItems: NavigationMenuItem[] = [
-      { label: 'Upgrades', openPanel: () => this.openUpgradeShopPanel() },
-      { label: 'Goals', openPanel: () => this.openMissionsPanel() },
-      { label: 'Prestige', openPanel: () => this.openPrestigePanel() },
-      { label: 'Zone', openPanel: () => this.openZonePanel() },
-      { label: 'Compendium', openPanel: () => this.openCompendiumPanel() },
-      { label: 'Help', openPanel: () => this.openHelpPanel() },
-      { label: 'Settings', openPanel: () => this.openSettingsPanel() },
+      { label: this.t('ui.menu.upgrades'), openPanel: () => this.openUpgradeShopPanel() },
+      { label: this.t('ui.menu.goals'), openPanel: () => this.openMissionsPanel() },
+      { label: this.t('ui.menu.prestige'), openPanel: () => this.openPrestigePanel() },
+      { label: this.t('ui.menu.zone'), openPanel: () => this.openZonePanel() },
+      { label: this.t('ui.menu.compendium'), openPanel: () => this.openCompendiumPanel() },
+      { label: this.t('ui.menu.help'), openPanel: () => this.openHelpPanel() },
+      { label: this.t('ui.menu.settings'), openPanel: () => this.openSettingsPanel() },
     ];
 
     const itemWidth = panelWidth - 42;
@@ -1054,7 +1061,7 @@ export class FarmScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
     const itemLabel = this.add.text(x + 14, y + height / 2, item.label, {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '15px',
       fontStyle: 'bold',
     }).setOrigin(0, 0.5);
@@ -1092,6 +1099,50 @@ export class FarmScene extends Phaser.Scene {
   private playButtonClickSound(): void {
     audioSystem.resume();
     audioSystem.playButtonClick();
+  }
+
+  private t(key: string, params?: Record<string, string | number>): string {
+    return getText(this.settings.language, key, params);
+  }
+
+  private getLocalizedFamilyName(family: MonsterFamily): string {
+    return this.t(`family.${family}`);
+  }
+
+  private getLocalizedMonsterName(monster: MonsterDefinition): string {
+    return this.t(`monster.${monster.family}.${monster.level}`);
+  }
+
+  private getLocalizedUpgradeName(upgrade: UpgradeDefinition): string {
+    return this.t(`upgrade.${upgrade.id}.name`);
+  }
+
+  private getLocalizedUpgradeEffect(upgrade: UpgradeDefinition): string {
+    return this.t(`upgrade.${upgrade.id}.effect`);
+  }
+
+  private getLocalizedMissionName(mission: MissionDefinition): string {
+    return this.t(`mission.${mission.id}.name`);
+  }
+
+  private getLocalizedZoneName(zone: ZoneDefinition): string {
+    return this.t(`zone.${zone.id}.name`);
+  }
+
+  private setLanguage(language: LanguageCode): void {
+    if (this.settings.language === language) {
+      return;
+    }
+
+    this.settings.language = language;
+    writeSettings(this.settings);
+    this.createExpansionPlaceholder();
+    this.createHud();
+    this.createHatchArea();
+    this.createNavigationControl();
+    this.updateHud();
+    this.openSettingsPanel();
+    this.showToast(this.t('toast.languageChanged'), 'success');
   }
 
   private getPanelSize(preferredWidth: number, preferredHeight: number): { width: number; height: number } {
@@ -1183,9 +1234,9 @@ export class FarmScene extends Phaser.Scene {
     }
 
     const y = panelHeight / 2 - 32;
-    const previousText = this.add.text(-panelWidth / 2 + 24, y, 'Prev', {
+    const previousText = this.add.text(-panelWidth / 2 + 24, y, this.t('common.prev'), {
       color: pageIndex > 0 ? THEME.text : '#9ca79f',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: panelWidth < 390 ? '14px' : '15px',
       fontStyle: 'bold',
       backgroundColor: `#${(pageIndex > 0 ? THEME.button : THEME.lockedInner).toString(16).padStart(6, '0')}`,
@@ -1205,9 +1256,9 @@ export class FarmScene extends Phaser.Scene {
         });
     }
 
-    const nextText = this.add.text(panelWidth / 2 - 24, y, 'Next', {
+    const nextText = this.add.text(panelWidth / 2 - 24, y, this.t('common.next'), {
       color: pageIndex < pageCount - 1 ? THEME.text : '#9ca79f',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: panelWidth < 390 ? '14px' : '15px',
       fontStyle: 'bold',
       backgroundColor: `#${(pageIndex < pageCount - 1 ? THEME.button : THEME.lockedInner).toString(16).padStart(6, '0')}`,
@@ -1229,7 +1280,7 @@ export class FarmScene extends Phaser.Scene {
 
     const pageLabel = this.add.text(0, y, `${pageIndex + 1}/${pageCount}`, {
       color: THEME.mutedText,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: panelWidth < 390 ? '13px' : '14px',
       fontStyle: 'bold',
     }).setOrigin(0.5);
@@ -1343,7 +1394,7 @@ export class FarmScene extends Phaser.Scene {
     }
 
     this.lastBlockedOutsideTapToastAt = this.time.now;
-    this.showToast('Use Close or confirm', 'warning');
+    this.showToast(this.t('toast.useClose'), 'warning');
   }
 
   private setModalOpenVisualState(isOpen: boolean): void {
@@ -1443,22 +1494,22 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = this.getPanelSize(360, 320);
+    const { width: panelWidth, height: panelHeight } = this.getPanelSize(360, 360);
 
     panel.setDepth(25);
 
     this.addPanelBackground(panel, panelWidth, panelHeight);
 
-    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Settings', {
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.settings.title'), {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: this.getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
-    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, 'Close', {
+    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, this.t('common.close'), {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '15px',
       fontStyle: 'bold',
       backgroundColor: '#49395d',
@@ -1477,41 +1528,43 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(closeText);
 
-    this.addSettingsToggle(panel, 'Music', this.settings.musicEnabled, -70, () => {
+    this.addSettingsToggle(panel, this.t('ui.settings.music'), this.settings.musicEnabled, -86, () => {
       this.settings.musicEnabled = !this.settings.musicEnabled;
       writeSettings(this.settings);
       this.syncAudioSettings();
       this.openSettingsPanel();
-      this.showToast(this.settings.musicEnabled ? 'Music on' : 'Music off', this.settings.musicEnabled ? 'success' : 'info');
+      this.showToast(this.settings.musicEnabled ? this.t('toast.musicOn') : this.t('toast.musicOff'), this.settings.musicEnabled ? 'success' : 'info');
     });
 
-    this.addSettingsToggle(panel, 'Sound', this.settings.soundEnabled, -18, () => {
+    this.addSettingsToggle(panel, this.t('ui.settings.sound'), this.settings.soundEnabled, -38, () => {
       this.settings.soundEnabled = !this.settings.soundEnabled;
       writeSettings(this.settings);
       this.syncAudioSettings();
       this.openSettingsPanel();
-      this.showToast(this.settings.soundEnabled ? 'Sound on' : 'Sound off', this.settings.soundEnabled ? 'success' : 'info');
+      this.showToast(this.settings.soundEnabled ? this.t('toast.soundOn') : this.t('toast.soundOff'), this.settings.soundEnabled ? 'success' : 'info');
     });
 
-    this.addSettingsToggle(panel, 'Outside tap', this.settings.outsideTapClosesPanels, 34, () => {
+    this.addSettingsToggle(panel, this.t('ui.settings.outsideTap'), this.settings.outsideTapClosesPanels, 10, () => {
       this.settings.outsideTapClosesPanels = !this.settings.outsideTapClosesPanels;
       writeSettings(this.settings);
       this.openSettingsPanel();
       this.showToast(
-        this.settings.outsideTapClosesPanels ? 'Outside tap close on' : 'Outside tap close off',
+        this.settings.outsideTapClosesPanels ? this.t('toast.outsideTapOn') : this.t('toast.outsideTapOff'),
         this.settings.outsideTapClosesPanels ? 'success' : 'info',
       );
     });
 
-    panel.add(this.add.text(-132, 52, 'closes panels', {
+    panel.add(this.add.text(-132, 28, this.t('ui.settings.closesPanels'), {
       color: THEME.mutedText,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '12px',
     }));
 
-    const resetText = this.add.text(0, 116, this.resetConfirmationArmed ? 'Click again to confirm reset' : 'Reset Save', {
+    this.addLanguageSetting(panel, 70);
+
+    const resetText = this.add.text(0, 136, this.resetConfirmationArmed ? this.t('ui.settings.resetConfirm') : this.t('ui.settings.resetSave'), {
       color: this.resetConfirmationArmed ? '#fff4a8' : '#ffffff',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '17px',
       fontStyle: 'bold',
       backgroundColor: this.resetConfirmationArmed ? '#8a6426' : `#${THEME.danger.toString(16).padStart(6, '0')}`,
@@ -1533,11 +1586,63 @@ export class FarmScene extends Phaser.Scene {
 
         this.resetProgress();
         this.openSettingsPanel();
-        this.showToast('Progress reset', 'success');
+        this.showToast(this.t('toast.progressReset'), 'success');
       });
 
     panel.add(resetText);
     this.settingsPanel = panel;
+  }
+
+  private addLanguageSetting(
+    panel: Phaser.GameObjects.Container,
+    y: number,
+  ): void {
+    panel.add(this.add.text(-132, y - 11, this.t('ui.settings.language'), {
+      color: '#f7ffe8',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: '18px',
+      fontStyle: 'bold',
+    }));
+
+    const englishText = this.add.text(32, y - 14, this.t('ui.settings.english'), {
+      color: '#ffffff',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: '14px',
+      fontStyle: 'bold',
+      backgroundColor: `#${(this.settings.language === 'en' ? THEME.buttonHover : THEME.lockedInner).toString(16).padStart(6, '0')}`,
+      padding: {
+        x: 10,
+        y: 7,
+      },
+    }).setOrigin(1, 0);
+
+    const thaiText = this.add.text(132, y - 14, this.t('ui.settings.thai'), {
+      color: '#ffffff',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: '14px',
+      fontStyle: 'bold',
+      backgroundColor: `#${(this.settings.language === 'th' ? THEME.buttonHover : THEME.lockedInner).toString(16).padStart(6, '0')}`,
+      padding: {
+        x: 14,
+        y: 7,
+      },
+    }).setOrigin(1, 0);
+
+    englishText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.playButtonClickSound();
+        this.setLanguage('en');
+      });
+
+    thaiText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.playButtonClickSound();
+        this.setLanguage('th');
+      });
+
+    panel.add([englishText, thaiText]);
   }
 
   private addSettingsToggle(
@@ -1549,15 +1654,15 @@ export class FarmScene extends Phaser.Scene {
   ): void {
     panel.add(this.add.text(-132, y - 11, label, {
       color: '#f7ffe8',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '18px',
       fontStyle: 'bold',
     }));
 
     const toggleColor = isEnabled ? THEME.buttonHover : THEME.danger;
-    const toggleText = this.add.text(132, y - 14, isEnabled ? 'ON' : 'OFF', {
+    const toggleText = this.add.text(132, y - 14, isEnabled ? this.t('common.on') : this.t('common.off'), {
       color: '#ffffff',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '16px',
       fontStyle: 'bold',
       backgroundColor: `#${toggleColor.toString(16).padStart(6, '0')}`,
@@ -1619,16 +1724,16 @@ export class FarmScene extends Phaser.Scene {
 
     this.addPanelBackground(panel, panelWidth, panelHeight);
 
-    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Help', {
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.help.title'), {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: this.getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
-    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, 'Close', {
+    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, this.t('common.close'), {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '15px',
       fontStyle: 'bold',
       backgroundColor: '#49395d',
@@ -1648,11 +1753,11 @@ export class FarmScene extends Phaser.Scene {
     panel.add(closeText);
 
     const helpLines = [
-      ['Hatch Egg', 'Click/tap Hatch Egg when ready.'],
-      ['Drag-to-merge', 'Drag matching same-family, same-level monsters onto each other.'],
-      ['Monster info', 'Click/tap a monster to show its tooltip.'],
-      ['Compendium', 'Open Menu or press C.'],
-      ['Settings', 'Open Menu or press S.'],
+      [this.t('ui.help.hatch.label'), this.t('ui.help.hatch.description')],
+      [this.t('ui.help.merge.label'), this.t('ui.help.merge.description')],
+      [this.t('ui.help.info.label'), this.t('ui.help.info.description')],
+      [this.t('ui.help.compendium.label'), this.t('ui.help.compendium.description')],
+      [this.t('ui.help.settings.label'), this.t('ui.help.settings.description')],
     ];
 
     const lineGap = panelWidth < 420 ? 52 : 44;
@@ -1661,9 +1766,9 @@ export class FarmScene extends Phaser.Scene {
       this.addHelpLine(panel, label, description, -panelHeight / 2 + 82 + index * lineGap, panelWidth);
     });
 
-    const resetHintsText = this.add.text(0, panelHeight / 2 - 30, 'Reset hints', {
+    const resetHintsText = this.add.text(0, panelHeight / 2 - 30, this.t('ui.help.resetHints'), {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '15px',
       fontStyle: 'bold',
       backgroundColor: `#${THEME.buttonWarm.toString(16).padStart(6, '0')}`,
@@ -1696,14 +1801,14 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(this.add.text(labelX, y, label, {
       color: '#fff4a8',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '16px',
       fontStyle: 'bold',
     }).setOrigin(0, 0.5));
 
     panel.add(this.add.text(descriptionX, y, description, {
       color: '#f7ffe8',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '15px',
       wordWrap: {
         width: Math.max(150, panelWidth - 166),
@@ -1751,16 +1856,16 @@ export class FarmScene extends Phaser.Scene {
     panel.setDepth(24);
     this.addPanelBackground(panel, panelWidth, panelHeight);
 
-    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Zone', {
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.zone.title'), {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: this.getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
-    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, 'Close', {
+    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, this.t('common.close'), {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '15px',
       fontStyle: 'bold',
       backgroundColor: '#49395d',
@@ -1799,27 +1904,27 @@ export class FarmScene extends Phaser.Scene {
     const canSelect = isUnlocked && !isCurrent;
     const rowTop = rowY - rowHeight / 2;
     const statusText = isCurrent
-      ? 'Selected'
+      ? this.t('ui.zone.selected')
       : isUnlocked
-        ? 'Unlocked'
-        : 'Locked - Prestige once';
+        ? this.t('ui.zone.unlocked')
+        : this.t('ui.zone.lockedPrestige');
     const bonusText = zone.id === MUSHROOM_FOREST_ZONE_ID
-      ? `Mushroom hatch +${Math.round(MUSHROOM_FOREST_HATCH_CHANCE_BONUS * 100)}%`
-      : 'Default farm';
+      ? this.t('ui.zone.mushroomBonus', { percent: Math.round(MUSHROOM_FOREST_HATCH_CHANCE_BONUS * 100) })
+      : this.t('ui.zone.defaultFarm');
 
     panel.add(this.add.rectangle(0, rowY, panelWidth - 48, rowHeight, isUnlocked ? THEME.panelAlt : 0x29362f, 0.92)
       .setStrokeStyle(2, isCurrent ? THEME.panelBorder : canSelect ? THEME.slot : THEME.lockedBorder, 0.78));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 9, zone.name, {
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 9, this.getLocalizedZoneName(zone), {
       color: isUnlocked ? THEME.text : '#9ca79f',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '15px' : '17px',
       fontStyle: 'bold',
     }));
 
     panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 33, statusText, {
       color: isUnlocked ? '#cdebb3' : THEME.mutedText,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '12px' : '13px',
       wordWrap: {
         width: panelWidth - 170,
@@ -1828,16 +1933,16 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 51, bonusText, {
       color: zone.id === MUSHROOM_FOREST_ZONE_ID ? '#fff4a8' : THEME.mutedText,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '11px' : '12px',
       wordWrap: {
         width: panelWidth - 170,
       },
     }));
 
-    const actionText = this.add.text(panelWidth / 2 - 42, rowY, isCurrent ? 'Current' : isUnlocked ? 'Switch' : 'Locked', {
+    const actionText = this.add.text(panelWidth / 2 - 42, rowY, isCurrent ? this.t('ui.zone.current') : isUnlocked ? this.t('ui.zone.switch') : this.t('ui.zone.locked'), {
       color: isUnlocked ? '#ffffff' : '#9ca79f',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '13px' : '14px',
       fontStyle: 'bold',
       backgroundColor: `#${(canSelect ? THEME.buttonHover : THEME.lockedInner).toString(16).padStart(6, '0')}`,
@@ -1882,7 +1987,9 @@ export class FarmScene extends Phaser.Scene {
     this.skipSavingUntilProgress = false;
     this.saveProgress();
     this.openZonePanel();
-    this.showToast(`${this.getCurrentZoneDefinition().name} selected`, 'success');
+    this.showToast(this.t('ui.zone.selectedToast', {
+      zone: this.getLocalizedZoneName(this.getCurrentZoneDefinition()),
+    }), 'success');
   }
 
   private syncZoneUnlockFromPrestigeProgress(): void {
@@ -1941,16 +2048,16 @@ export class FarmScene extends Phaser.Scene {
     panel.setDepth(24);
     this.addPanelBackground(panel, panelWidth, panelHeight);
 
-    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Goals', {
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.goals.title'), {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: this.getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
-    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, 'Close', {
+    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, this.t('common.close'), {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '15px',
       fontStyle: 'bold',
       backgroundColor: '#49395d',
@@ -1995,15 +2102,18 @@ export class FarmScene extends Phaser.Scene {
     const progress = this.getMissionProgress(mission);
     const rowTop = rowY - rowHeight / 2;
     const rowWidth = panelWidth - 48;
-    const statusText = isClaimed ? 'Claimed' : isCompleted ? 'Complete' : `${progress}/${mission.goal}`;
-    const detailText = `${statusText} - Reward: ${this.getMissionRewardText(mission.reward)}`;
+    const statusText = isClaimed ? this.t('ui.goals.claimed') : isCompleted ? this.t('ui.goals.complete') : `${progress}/${mission.goal}`;
+    const detailText = this.t('ui.goals.rewardDetail', {
+      status: statusText,
+      reward: this.getMissionRewardText(mission.reward),
+    });
 
     panel.add(this.add.rectangle(0, rowY, rowWidth, rowHeight, isClaimed ? 0x29362f : THEME.panelAlt, 0.92)
       .setStrokeStyle(2, canClaim ? THEME.slot : THEME.lockedBorder, 0.72));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 7, mission.name, {
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 7, this.getLocalizedMissionName(mission), {
       color: isClaimed ? '#cdebb3' : THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '14px' : '16px',
       fontStyle: 'bold',
       wordWrap: {
@@ -2013,16 +2123,16 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + (isCompactPanel ? 28 : 30), detailText, {
       color: canClaim ? '#fff4a8' : THEME.mutedText,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '12px' : '13px',
       wordWrap: {
         width: panelWidth - (isCompactPanel ? 150 : 176),
       },
     }));
 
-    const actionText = this.add.text(panelWidth / 2 - 42, rowY, isClaimed ? 'Done' : canClaim ? 'Claim' : `${progress}/${mission.goal}`, {
+    const actionText = this.add.text(panelWidth / 2 - 42, rowY, isClaimed ? this.t('ui.goals.done') : canClaim ? this.t('ui.goals.claim') : `${progress}/${mission.goal}`, {
       color: isClaimed ? '#cdebb3' : '#ffffff',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '13px' : '14px',
       fontStyle: 'bold',
       backgroundColor: `#${(canClaim ? THEME.buttonHover : THEME.lockedInner).toString(16).padStart(6, '0')}`,
@@ -2090,20 +2200,20 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(this.add.text(-panelWidth / 2 + 20, -panelHeight / 2 + 18, 'Economy Debug', {
       color: '#fff4a8',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: this.getPanelTitleFontSize(panelWidth, 22),
       fontStyle: 'bold',
     }));
 
     panel.add(this.add.text(-panelWidth / 2 + 20, -panelHeight / 2 + 45, 'Development only', {
       color: '#d9d6ec',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '12px',
     }));
 
     const closeText = this.add.text(panelWidth / 2 - 20, -panelHeight / 2 + 20, 'Close', {
       color: '#f7ffe8',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '15px',
       fontStyle: 'bold',
       backgroundColor: '#49395d',
@@ -2124,7 +2234,7 @@ export class FarmScene extends Phaser.Scene {
 
     this.economyDebugText = this.add.text(-panelWidth / 2 + 20, -panelHeight / 2 + 78, '', {
       color: '#f7ffe8',
-      fontFamily: 'Consolas, monospace',
+      fontFamily: MONO_FONT_FAMILY,
       fontSize: '14px',
       lineSpacing: 5,
     });
@@ -2210,16 +2320,16 @@ export class FarmScene extends Phaser.Scene {
 
     this.addPanelBackground(panel, panelWidth, panelHeight);
 
-    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Upgrade Shop', {
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.upgrades.title'), {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: this.getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
-    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, 'Close', {
+    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, this.t('common.close'), {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '15px',
       fontStyle: 'bold',
       backgroundColor: '#49395d',
@@ -2248,7 +2358,7 @@ export class FarmScene extends Phaser.Scene {
     });
 
     this.upgradeShopPanel = panel;
-    this.showOnboardingHint('upgrades', 'Upgrade Shop boosts your farm production.');
+    this.showOnboardingHint('upgrades', this.t('hint.upgrades'));
   }
 
   private addUpgradeRow(
@@ -2268,9 +2378,9 @@ export class FarmScene extends Phaser.Scene {
     panel.add(this.add.rectangle(0, rowY, panelWidth - 48, rowHeight, THEME.panelAlt, 0.92)
       .setStrokeStyle(2, canAfford ? THEME.slot : THEME.lockedBorder, 0.78));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 8, upgrade.name, {
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 8, this.getLocalizedUpgradeName(upgrade), {
       color: '#f7ffe8',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '15px' : '17px',
       fontStyle: 'bold',
       wordWrap: {
@@ -2278,9 +2388,12 @@ export class FarmScene extends Phaser.Scene {
       },
     }));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + (isCompactPanel ? 29 : 31), `Level ${level}/${upgrade.maxLevel}`, {
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + (isCompactPanel ? 29 : 31), this.t('common.levelProgress', {
+      level,
+      max: upgrade.maxLevel,
+    }), {
       color: '#cdebb3',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '13px' : '14px',
       fontStyle: 'bold',
     }));
@@ -2288,10 +2401,13 @@ export class FarmScene extends Phaser.Scene {
     panel.add(this.add.text(
       -panelWidth / 2 + 42,
       rowTop + (isCompactPanel ? 49 : 52),
-      isCompactPanel ? this.getUpgradeCurrentEffectText(upgrade.id) : `${upgrade.effect} - ${this.getUpgradeCurrentEffectText(upgrade.id)}`,
+      isCompactPanel ? this.getUpgradeCurrentEffectText(upgrade.id) : this.t('ui.upgrades.effectDetail', {
+        effect: this.getLocalizedUpgradeEffect(upgrade),
+        current: this.getUpgradeCurrentEffectText(upgrade.id),
+      }),
       {
       color: '#d9d6ec',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '12px' : '13px',
       wordWrap: {
         width: isCompactPanel ? panelWidth - 160 : Math.max(170, panelWidth - 240),
@@ -2299,16 +2415,18 @@ export class FarmScene extends Phaser.Scene {
       },
     ));
 
-    panel.add(this.add.text(panelWidth / 2 - 42, rowTop + 6, isMaxLevel ? 'Maxed' : `Cost: ${this.formatCoinAmount(cost)}`, {
+    panel.add(this.add.text(panelWidth / 2 - 42, rowTop + 6, isMaxLevel ? this.t('ui.upgrades.maxed') : this.t('common.cost', {
+      amount: this.formatCoinAmount(cost),
+    }), {
       color: isMaxLevel ? '#cdebb3' : '#fff4a8',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '13px' : '15px',
       fontStyle: 'bold',
     }).setOrigin(1, 0));
 
-    const buyText = this.add.text(panelWidth / 2 - 42, rowTop + (isCompactPanel ? 30 : 32), isMaxLevel ? 'MAX' : 'Buy', {
+    const buyText = this.add.text(panelWidth / 2 - 42, rowTop + (isCompactPanel ? 30 : 32), isMaxLevel ? this.t('ui.upgrades.max') : this.t('common.buy'), {
       color: '#ffffff',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '15px' : '16px',
       fontStyle: 'bold',
       backgroundColor: isMaxLevel
@@ -2377,16 +2495,16 @@ export class FarmScene extends Phaser.Scene {
     panel.setDepth(24);
     this.addPanelBackground(panel, panelWidth, panelHeight);
 
-    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Prestige', {
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.prestige.title'), {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: this.getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
-    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, 'Close', {
+    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, this.t('common.close'), {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '15px',
       fontStyle: 'bold',
       backgroundColor: '#49395d',
@@ -2408,19 +2526,21 @@ export class FarmScene extends Phaser.Scene {
     const contentX = -panelWidth / 2 + 26;
     const contentWidth = panelWidth - 52;
     const statusText = canPrestige
-      ? 'Prestige ready: reset farm for +1 Monster Essence.'
-      : 'Reach Lv 6 Slime or Lv 5 Mushroom to Prestige.';
+      ? this.t('ui.prestige.ready')
+      : this.t('ui.prestige.notReady');
 
-    panel.add(this.add.text(contentX, -panelHeight / 2 + 78, `Monster Essence: ${this.monsterEssence}`, {
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 78, this.t('ui.prestige.monsterEssence', {
+      amount: this.monsterEssence,
+    }), {
       color: '#fff4a8',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '18px',
       fontStyle: 'bold',
     }));
 
     panel.add(this.add.text(contentX, -panelHeight / 2 + 108, statusText, {
       color: canPrestige ? '#cdebb3' : THEME.mutedText,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: panelWidth < 390 ? '13px' : '14px',
       fixedWidth: contentWidth,
       wordWrap: {
@@ -2428,17 +2548,19 @@ export class FarmScene extends Phaser.Scene {
       },
     }));
 
-    panel.add(this.add.text(contentX, -panelHeight / 2 + 134, `Reward: ${reward} Monster Essence`, {
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 134, this.t('ui.prestige.reward', {
+      amount: reward,
+    }), {
       color: canPrestige ? '#fff4a8' : '#9ca79f',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: panelWidth < 390 ? '13px' : '14px',
       fontStyle: 'bold',
       fixedWidth: contentWidth,
     }));
 
-    panel.add(this.add.text(contentX, -panelHeight / 2 + 160, 'Reset farm progress for permanent power.', {
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 160, this.t('ui.prestige.permanentPower'), {
       color: THEME.mutedText,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '13px',
       wordWrap: {
         width: contentWidth,
@@ -2463,36 +2585,42 @@ export class FarmScene extends Phaser.Scene {
     panel.add(this.add.rectangle(0, y, rowWidth, 74, THEME.panelAlt, 0.92)
       .setStrokeStyle(2, canBuyEssencePower ? THEME.slot : THEME.lockedBorder, 0.78));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, y - 27, 'Essence Power', {
+    panel.add(this.add.text(-panelWidth / 2 + 42, y - 27, this.t('ui.prestige.essencePower'), {
       color: '#f7ffe8',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: panelWidth < 390 ? '15px' : '17px',
       fontStyle: 'bold',
     }));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, y - 4, `Level ${this.essencePowerLevel}`, {
+    panel.add(this.add.text(-panelWidth / 2 + 42, y - 4, this.t('common.level', {
+      level: this.essencePowerLevel,
+    }), {
       color: '#cdebb3',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '13px',
       fontStyle: 'bold',
     }));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, y + 18, `Global income x${this.getPrestigeIncomeMultiplier().toFixed(2)}`, {
+    panel.add(this.add.text(-panelWidth / 2 + 42, y + 18, this.t('ui.prestige.globalIncome', {
+      multiplier: this.getPrestigeIncomeMultiplier().toFixed(2),
+    }), {
       color: THEME.mutedText,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '12px',
     }));
 
-    panel.add(this.add.text(panelWidth / 2 - 42, y - 30, `Cost: ${this.formatCoinAmount(ESSENCE_POWER_COST)}`, {
+    panel.add(this.add.text(panelWidth / 2 - 42, y - 30, this.t('common.cost', {
+      amount: this.formatCoinAmount(ESSENCE_POWER_COST),
+    }), {
       color: '#fff4a8',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '13px',
       fontStyle: 'bold',
     }).setOrigin(1, 0));
 
-    const buyText = this.add.text(panelWidth / 2 - 42, y - 6, 'Buy', {
+    const buyText = this.add.text(panelWidth / 2 - 42, y - 6, this.t('common.buy'), {
       color: '#ffffff',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '15px',
       fontStyle: 'bold',
       backgroundColor: `#${(canBuyEssencePower ? THEME.buttonHover : THEME.danger).toString(16).padStart(6, '0')}`,
@@ -2518,8 +2646,8 @@ export class FarmScene extends Phaser.Scene {
     canPrestige: boolean,
   ): void {
     const label = this.prestigeConfirmationArmed
-      ? 'Click again to confirm prestige'
-      : 'Prestige Reset';
+      ? this.t('ui.prestige.confirm')
+      : this.t('ui.prestige.reset');
     const backgroundColor = !canPrestige
       ? THEME.lockedInner
       : this.prestigeConfirmationArmed
@@ -2528,7 +2656,7 @@ export class FarmScene extends Phaser.Scene {
 
     const prestigeText = this.add.text(0, panelHeight / 2 - 38, label, {
       color: canPrestige ? '#ffffff' : '#9ca79f',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: this.scale.width < 390 ? '14px' : '16px',
       fontStyle: 'bold',
       backgroundColor: `#${backgroundColor.toString(16).padStart(6, '0')}`,
@@ -2826,7 +2954,7 @@ export class FarmScene extends Phaser.Scene {
   private showFloatingCoinReward(x: number, y: number, amount: number): void {
     const text = this.add.text(x, y, this.formatSignedCoinAmount(amount), {
       color: '#fff4a8',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: this.scale.width < 380 ? '15px' : '17px',
       fontStyle: 'bold',
       stroke: '#10291a',
@@ -2955,7 +3083,7 @@ export class FarmScene extends Phaser.Scene {
     this.refreshMissionsPanel();
 
     if (showCompletionToast) {
-      this.showToast('Mission complete', 'success');
+      this.showToast(this.t('toast.missionComplete'), 'success');
     }
   }
 
@@ -3018,15 +3146,21 @@ export class FarmScene extends Phaser.Scene {
     this.updateHud();
     this.saveProgress();
     this.refreshMissionsPanel();
-    this.showToast(`Claimed ${this.getMissionRewardText(mission.reward)}`, 'success');
+    this.showToast(this.t('toast.claimed', {
+      reward: this.getMissionRewardText(mission.reward),
+    }), 'success');
   }
 
   private getMissionRewardText(reward: MissionReward): string {
     if (reward.type === 'coins') {
-      return `${this.formatCoinAmount(reward.amount)} coins`;
+      return this.t('common.coins', {
+        amount: this.formatCoinAmount(reward.amount),
+      });
     }
 
-    return `${reward.amount} Essence`;
+    return this.t('common.essence', {
+      amount: reward.amount,
+    });
   }
 
   private isSlotUnlocked(slotId: number): boolean {
@@ -3055,7 +3189,7 @@ export class FarmScene extends Phaser.Scene {
     this.hideFarmMessage();
     this.updateHud();
     this.saveProgress();
-    this.showToast('Expansion unlocked', 'success');
+    this.showToast(this.t('toast.expansionUnlocked'), 'success');
   }
 
   private createInitialUpgradeLevels(): Record<UpgradeId, number> {
@@ -3121,12 +3255,12 @@ export class FarmScene extends Phaser.Scene {
     this.updateHud();
     this.saveProgress();
     this.openUpgradeShopPanel();
-    this.showToast('Upgrade purchased', 'success');
+    this.showToast(this.t('toast.upgradePurchased'), 'success');
   }
 
   private buyEssencePower(): void {
     if (this.monsterEssence < ESSENCE_POWER_COST) {
-      this.showToast('Not enough Essence', 'warning');
+      this.showToast(this.t('toast.notEnoughEssence'), 'warning');
       return;
     }
 
@@ -3138,14 +3272,14 @@ export class FarmScene extends Phaser.Scene {
     this.updateHud();
     this.saveProgress();
     this.openPrestigePanel();
-    this.showToast('Essence Power upgraded', 'success');
+    this.showToast(this.t('toast.essencePowerUpgraded'), 'success');
   }
 
   private tryPrestige(): void {
     const reward = this.getPrestigeEssenceReward();
 
     if (reward <= 0) {
-      this.showToast('Reach Lv 6 Slime or Lv 5 Mushroom', 'warning');
+      this.showToast(this.t('toast.prestigeRequirement'), 'warning');
       return;
     }
 
@@ -3157,7 +3291,7 @@ export class FarmScene extends Phaser.Scene {
 
     this.performPrestigeReset(reward);
     this.openPrestigePanel();
-    this.showToast(`Prestige complete: +${reward} Essence`, 'success');
+    this.showToast(this.t('toast.prestigeComplete', { amount: reward }), 'success');
   }
 
   private getPrestigeEssenceReward(): number {
@@ -3209,16 +3343,16 @@ export class FarmScene extends Phaser.Scene {
   private scheduleInitialOnboardingHints(): void {
     this.time.delayedCall(450, () => {
       if (this.getUnlockedFarmSlots().some((slot) => slot.monster)) {
-        this.showOnboardingHint('income', 'Monsters earn coins every second.');
+        this.showOnboardingHint('income', this.t('hint.income'));
         this.checkMergeOnboardingHint();
         return;
       }
 
-      this.showOnboardingHint('welcome', 'Welcome! Build a monster farm.');
+      this.showOnboardingHint('welcome', this.t('hint.welcome'));
 
       this.time.delayedCall(1500, () => {
         if (this.getUnlockedFarmSlots().every((slot) => slot.monster === null)) {
-          this.showOnboardingHint('hatch', 'Tap Hatch Egg to create monsters.');
+          this.showOnboardingHint('hatch', this.t('hint.hatch'));
         }
       });
     });
@@ -3232,13 +3366,13 @@ export class FarmScene extends Phaser.Scene {
         && this.currency.coins >= this.getUpgradeCostForLevel(upgrade, this.getUpgradeLevel(upgrade.id))
       ))
     ) {
-      this.showOnboardingHint('upgrades', 'Upgrade Shop boosts your farm production.');
+      this.showOnboardingHint('upgrades', this.t('hint.upgrades'));
     }
   }
 
   private checkMergeOnboardingHint(): void {
     if (this.hasMergeableMonsterPair()) {
-      this.showOnboardingHint('merge', 'Drag same-family matching monsters together to merge.');
+      this.showOnboardingHint('merge', this.t('hint.merge'));
     }
   }
 
@@ -3270,28 +3404,38 @@ export class FarmScene extends Phaser.Scene {
   private resetOnboardingHints(): void {
     this.onboardingHintsSeen.clear();
     this.saveProgress();
-    this.showToast('Hints reset', 'success');
+    this.showToast(this.t('toast.hintsReset'), 'success');
     this.scheduleInitialOnboardingHints();
   }
 
   private getUpgradeCurrentEffectText(upgradeId: UpgradeId): string {
     if (upgradeId === 'slime-income-boost') {
-      return `Slime income x${this.getFamilyIncomeMultiplier('Slime').toFixed(2)}`;
+      return this.t('upgrade.current.slime-income-boost', {
+        value: this.getFamilyIncomeMultiplier('Slime').toFixed(2),
+      });
     }
 
     if (upgradeId === 'mushroom-income-boost') {
-      return `Mushroom income x${this.getFamilyIncomeMultiplier('Mushroom').toFixed(2)}`;
+      return this.t('upgrade.current.mushroom-income-boost', {
+        value: this.getFamilyIncomeMultiplier('Mushroom').toFixed(2),
+      });
     }
 
     if (upgradeId === 'hatch-speed') {
-      return `cooldown ${(this.getHatchCooldownMs() / MILLISECONDS_PER_SECOND).toFixed(1)}s`;
+      return this.t('upgrade.current.hatch-speed', {
+        seconds: (this.getHatchCooldownMs() / MILLISECONDS_PER_SECOND).toFixed(1),
+      });
     }
 
     if (upgradeId === 'mushroom-chance') {
-      return `Mushroom hatch ${Math.round(this.getMushroomHatchChance() * 100)}%`;
+      return this.t('upgrade.current.mushroom-chance', {
+        percent: Math.round(this.getMushroomHatchChance() * 100),
+      });
     }
 
-    return `offline cap ${this.formatDuration(this.getOfflineCapSeconds())}`;
+    return this.t('upgrade.current.offline-storage', {
+      duration: this.formatDuration(this.getOfflineCapSeconds()),
+    });
   }
 
   private getFamilyIncomeMultiplier(family: MonsterFamily): number {
@@ -3331,14 +3475,14 @@ export class FarmScene extends Phaser.Scene {
     const minutes = Math.floor((safeSeconds % 3600) / 60);
 
     if (hours > 0 && minutes > 0) {
-      return `${hours}h ${minutes}m`;
+      return this.t('duration.hoursMinutes', { hours, minutes });
     }
 
     if (hours > 0) {
-      return `${hours}h`;
+      return this.t('duration.hours', { hours });
     }
 
-    return `${minutes}m`;
+    return this.t('duration.minutes', { minutes });
   }
 
   private hatchMonster(): void {
@@ -3350,7 +3494,7 @@ export class FarmScene extends Phaser.Scene {
     }
 
     if (!this.isHatchReady()) {
-      this.showToast('Hatching...', 'info');
+      this.showToast(this.t('ui.hatch.hatching'), 'info');
       return;
     }
 
@@ -3371,7 +3515,7 @@ export class FarmScene extends Phaser.Scene {
     this.hideFarmMessage();
     this.renderMonsterInSlot(emptySlot);
     this.updateHud();
-    this.showOnboardingHint('income', 'Monsters earn coins every second.');
+    this.showOnboardingHint('income', this.t('hint.income'));
     this.checkMergeOnboardingHint();
     this.hatchCooldownMs = 0;
     this.updateHatchCooldownUi();
@@ -3433,17 +3577,20 @@ export class FarmScene extends Phaser.Scene {
     const formattedEggCost = this.formatCoinAmount(this.currentEggCost);
 
     if (!isReady) {
-      this.hatchLabelText?.setText('Hatching...');
-      this.hatchStatusText?.setText(`${Math.ceil((cooldownMs - this.hatchCooldownMs) / 1000)}s - Cost: ${formattedEggCost} coins`);
+      this.hatchLabelText?.setText(this.t('ui.hatch.hatching'));
+      this.hatchStatusText?.setText(this.t('ui.hatch.hatchingStatus', {
+        seconds: Math.ceil((cooldownMs - this.hatchCooldownMs) / 1000),
+        amount: formattedEggCost,
+      }));
     } else if (isFull) {
-      this.hatchLabelText?.setText('Farm Full');
-      this.hatchStatusText?.setText(this.expansionUnlocked ? 'Merge to free a slot' : 'Unlock +3 slots');
+      this.hatchLabelText?.setText(this.t('ui.hatch.farmFull'));
+      this.hatchStatusText?.setText(this.expansionUnlocked ? this.t('ui.hatch.mergeFreeSlot') : this.t('ui.hatch.unlockSlots'));
     } else if (!canAfford) {
-      this.hatchLabelText?.setText('Need Coins');
-      this.hatchStatusText?.setText(`Cost: ${formattedEggCost} coins`);
+      this.hatchLabelText?.setText(this.t('ui.hatch.needCoins'));
+      this.hatchStatusText?.setText(this.t('ui.hatch.cost', { amount: formattedEggCost }));
     } else {
-      this.hatchLabelText?.setText('Hatch Egg');
-      this.hatchStatusText?.setText(`Cost: ${formattedEggCost} coins`);
+      this.hatchLabelText?.setText(this.t('ui.hatch.label'));
+      this.hatchStatusText?.setText(this.t('ui.hatch.cost', { amount: formattedEggCost }));
     }
 
     this.hatchStatusText?.setColor(statusColor);
@@ -3517,16 +3664,16 @@ export class FarmScene extends Phaser.Scene {
     panel.setDepth(20);
     this.addPanelBackground(panel, panelWidth, panelHeight);
 
-    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, 'Monster Compendium', {
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.compendium.title'), {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: this.getPanelTitleFontSize(panelWidth, 22),
       fontStyle: 'bold',
     }));
 
-    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 20, 'Close', {
+    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 20, this.t('common.close'), {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '15px',
       fontStyle: 'bold',
       backgroundColor: '#49395d',
@@ -3580,20 +3727,28 @@ export class FarmScene extends Phaser.Scene {
         const familyMonsters = MONSTER_DEFINITIONS.filter((monster) => monster.family === family);
         const familyDiscovered = familyMonsters.filter((monster) => this.isMonsterDiscovered(monster)).length;
 
-        return `${family} ${familyDiscovered}/${familyMonsters.length}`;
+        return this.t('ui.compendium.familyProgress', {
+          family: this.getLocalizedFamilyName(family),
+          discovered: familyDiscovered,
+          total: familyMonsters.length,
+        });
       })
       .join('  |  ');
 
     panel.add(this.add.text(-panelWidth / 2 + 24, summaryY, pageSubtitle, {
       color: THEME.goldText,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: panelWidth < 390 ? '12px' : '14px',
       fontStyle: 'bold',
     }));
 
-    panel.add(this.add.text(-panelWidth / 2 + 24, summaryY + 18, `Discovered ${discoveredCount}/${MONSTER_DEFINITIONS.length}  |  ${familyProgress}`, {
+    panel.add(this.add.text(-panelWidth / 2 + 24, summaryY + 18, this.t('ui.compendium.summary', {
+      discovered: discoveredCount,
+      total: MONSTER_DEFINITIONS.length,
+      familyProgress,
+    }), {
       color: THEME.mutedText,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: panelWidth < 390 ? '10px' : '12px',
       wordWrap: {
         width: panelWidth - 48,
@@ -3606,10 +3761,12 @@ export class FarmScene extends Phaser.Scene {
       .map((item) => (item.type === 'family' ? item.family : item.monster.family))));
 
     if (visibleFamilies.length === 1) {
-      return `${visibleFamilies[0]} Collection`;
+      return this.t('ui.compendium.familyCollection', {
+        family: this.getLocalizedFamilyName(visibleFamilies[0]),
+      });
     }
 
-    return 'Monster Family Collection';
+    return this.t('ui.compendium.mixedCollection');
   }
 
   private closeCompendiumPanel(): void {
@@ -3632,9 +3789,9 @@ export class FarmScene extends Phaser.Scene {
     rowY: number,
     panelWidth: number,
   ): void {
-    panel.add(this.add.text(-panelWidth / 2 + 28, rowY - 8, family, {
+    panel.add(this.add.text(-panelWidth / 2 + 28, rowY - 8, this.getLocalizedFamilyName(family), {
       color: '#fff4a8',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: panelWidth < 390 ? '13px' : '14px',
       fontStyle: 'bold',
     }));
@@ -3662,9 +3819,9 @@ export class FarmScene extends Phaser.Scene {
 
     this.addCompendiumIcon(panel, monster, isDiscovered, iconX, rowY, iconScale);
 
-    panel.add(this.add.text(textX, nameY, isDiscovered ? monster.name : '???', {
+    panel.add(this.add.text(textX, nameY, isDiscovered ? this.getLocalizedMonsterName(monster) : '???', {
       color: textColor,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '13px' : '16px',
       fontStyle: 'bold',
       wordWrap: {
@@ -3672,15 +3829,17 @@ export class FarmScene extends Phaser.Scene {
       },
     }));
 
-    panel.add(this.add.text(textX, detailY, `Level ${monster.level}`, {
+    panel.add(this.add.text(textX, detailY, this.t('common.level', { level: monster.level }), {
       color: textColor,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '11px' : '13px',
     }));
 
-    panel.add(this.add.text(panelWidth / 2 - 42, rowY - (isCompactPanel ? 7 : 8), isDiscovered ? `${this.formatSignedCoinAmount(monster.incomePerSecond)}/sec` : 'Unknown', {
+    panel.add(this.add.text(panelWidth / 2 - 42, rowY - (isCompactPanel ? 7 : 8), isDiscovered ? this.t('common.perSecond', {
+      amount: this.formatSignedCoinAmount(monster.incomePerSecond),
+    }) : this.t('common.unknown'), {
       color: isDiscovered ? '#fff4a8' : '#9ca79f',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '12px' : '14px',
       fontStyle: 'bold',
     }).setOrigin(1, 0));
@@ -3699,7 +3858,7 @@ export class FarmScene extends Phaser.Scene {
         .setStrokeStyle(2, 0x707a73, 0.85));
       panel.add(this.add.text(iconX, iconY - 11 * scale, '?', {
         color: '#d9d6ec',
-        fontFamily: 'Arial, sans-serif',
+        fontFamily: UI_FONT_FAMILY,
         fontSize: `${Math.round(22 * scale)}px`,
         fontStyle: 'bold',
       }).setOrigin(0.5, 0));
@@ -3821,9 +3980,9 @@ export class FarmScene extends Phaser.Scene {
       this.addSlimeVisual(visual, monster.level, visualStyle, 0, 0, visualScale);
     }
 
-    visual.add(this.add.text(0, 27 * visualScale, `Lv ${monster.level}`, {
+    visual.add(this.add.text(0, 27 * visualScale, this.t('common.levelShort', { level: monster.level }), {
       color: '#f7ffe8',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: visualScale < 0.9 ? '12px' : '13px',
       fontStyle: 'bold',
     }).setOrigin(0.5));
@@ -4677,11 +4836,11 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private showFullFarmMessage(): void {
-    this.showFarmMessage(this.expansionUnlocked ? 'Farm is full' : 'Farm full - unlock slots', 'warning');
+    this.showFarmMessage(this.expansionUnlocked ? this.t('toast.farmFull') : this.t('toast.farmFullUnlock'), 'warning');
   }
 
   private showNotEnoughCoinsMessage(): void {
-    this.showFarmMessage('Not enough coins', 'warning');
+    this.showFarmMessage(this.t('toast.notEnoughCoins'), 'warning');
   }
 
   private showFarmMessage(message: string, variant: ToastVariant = 'info'): void {
@@ -4711,7 +4870,7 @@ export class FarmScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: false });
     const text = this.add.text(0, 0, message, {
       color: THEME.text,
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: this.scale.width < 380 ? '13px' : '15px',
       fontStyle: 'bold',
       align: 'center',
@@ -4885,7 +5044,7 @@ export class FarmScene extends Phaser.Scene {
     this.incrementMissionProgress('merge-1');
     this.evaluateMonsterMissions(nextMonsterDefinition);
     this.updateHud();
-    this.showOnboardingHint('upgrades', 'Upgrade Shop boosts your farm production.');
+    this.showOnboardingHint('upgrades', this.t('hint.upgrades'));
     this.skipSavingUntilProgress = false;
     this.saveProgress();
   }
@@ -4925,9 +5084,9 @@ export class FarmScene extends Phaser.Scene {
 
   private showMergeFeedback(slotId: number): void {
     const center = this.slotCenters[slotId];
-    const popup = this.add.text(center.x, center.y - 42, 'Merge!', {
+    const popup = this.add.text(center.x, center.y - 42, this.t('toast.merge'), {
       color: '#ffffff',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '18px',
       fontStyle: 'bold',
       backgroundColor: '#5f8fca',
@@ -5046,7 +5205,7 @@ export class FarmScene extends Phaser.Scene {
       if (showMessage && offlineCoins >= 1) {
         this.showOfflineEarningsMessage(offlineCoins);
         this.time.delayedCall(1800, () => {
-          this.showOnboardingHint('offline', 'Your monsters can earn while you are away.');
+          this.showOnboardingHint('offline', this.t('hint.offline'));
         });
       }
     }
@@ -5251,10 +5410,12 @@ export class FarmScene extends Phaser.Scene {
     const popup = this.add.text(
       this.scale.width / 2,
       popupY,
-      `Welcome back! ${this.formatSignedCoinAmount(offlineCoins)} coins`,
+      this.t('toast.welcomeBack', {
+        amount: this.formatSignedCoinAmount(offlineCoins),
+      }),
       {
         color: '#fff4a8',
-        fontFamily: 'Arial, sans-serif',
+        fontFamily: UI_FONT_FAMILY,
         fontSize: layout.isNarrow ? '16px' : '19px',
         fontStyle: 'bold',
         align: 'center',
@@ -5325,7 +5486,7 @@ export class FarmScene extends Phaser.Scene {
     const center = this.slotCenters[slotId];
     const indicator = this.add.text(center.x, center.y - 34, this.formatSignedCoinAmount(amount), {
       color: '#fff4a8',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: UI_FONT_FAMILY,
       fontSize: '18px',
       fontStyle: 'bold',
       stroke: '#10291a',
@@ -5429,17 +5590,27 @@ export class FarmScene extends Phaser.Scene {
 
   private updateHud(): void {
     this.currency.coins = this.sanitizeCoins(this.currency.coins);
-    this.coinText?.setText(`Coins: ${this.formatCoinAmount(this.currency.coins)}`);
-    this.incomeText?.setText(`+${this.formatCoinAmount(this.getTotalIncomePerSecond())}/sec`);
+    this.coinText?.setText(this.t('ui.hud.coins', {
+      amount: this.formatCoinAmount(this.currency.coins),
+    }));
+    this.incomeText?.setText(this.t('common.perSecond', {
+      amount: `+${this.formatCoinAmount(this.getTotalIncomePerSecond())}`,
+    }));
     this.updateProductionStatsUi();
     this.updateHatchCooldownUi();
   }
 
   private updateProductionStatsUi(): void {
     this.productionStatsText?.setText([
-      `Income/sec: ${this.formatCoinAmount(this.getTotalIncomePerSecond())}`,
-      `Next Egg: ${this.formatCoinAmount(this.currentEggCost)} coins`,
-      `Offline Cap: ${this.formatDuration(this.getOfflineCapSeconds())}`,
+      this.t('ui.hud.incomePerSecond', {
+        amount: this.formatCoinAmount(this.getTotalIncomePerSecond()),
+      }),
+      this.t('ui.hud.nextEgg', {
+        amount: this.formatCoinAmount(this.currentEggCost),
+      }),
+      this.t('ui.hud.offlineCap', {
+        duration: this.formatDuration(this.getOfflineCapSeconds()),
+      }),
     ].join('\n'));
   }
 }
