@@ -71,6 +71,7 @@ const COIN_BUG_MAX_LIFETIME_MS = 12_000;
 const COIN_BUG_MAX_ACTIVE = 3;
 const COIN_BUG_REWARD_SECONDS = 10;
 const COIN_BUG_MIN_REWARD = 25;
+const COIN_BUG_HITBOX_SIZE = 56;
 const SHOW_DEBUG_PANEL = false;
 const SHOW_MONSTER_HITBOX_DEBUG = false;
 const MODAL_OVERLAY_DEPTH = 18;
@@ -127,6 +128,7 @@ type CoinBug = {
   collected: boolean;
   bobTween?: Phaser.Tweens.Tween;
   sparkleTween?: Phaser.Tweens.Tween;
+  ringTween?: Phaser.Tweens.Tween;
 };
 type FarmSceneLayout = {
   isNarrow: boolean;
@@ -2471,6 +2473,20 @@ export class FarmScene extends Phaser.Scene {
       });
     }
 
+    const ring = container.getByName('tap-ring') as Phaser.GameObjects.Shape | null;
+
+    if (ring) {
+      bug.ringTween = this.tweens.add({
+        targets: ring,
+        alpha: 0.12,
+        scale: 1.14,
+        yoyo: true,
+        repeat: -1,
+        duration: 920,
+        ease: 'Sine.easeInOut',
+      });
+    }
+
     container.on(
       'pointerdown',
       (
@@ -2495,7 +2511,10 @@ export class FarmScene extends Phaser.Scene {
 
   private createCoinBugVisual(x: number, y: number): Phaser.GameObjects.Container {
     const container = this.add.container(x, y).setDepth(8).setAlpha(0);
-    const glow = this.add.circle(0, 0, 19, 0xfff1a6, 0.18);
+    const glow = this.add.circle(0, 0, 21, 0xfff1a6, 0.22);
+    const tapRing = this.add.circle(0, 0, 25, 0xfff8c9, 0)
+      .setStrokeStyle(2, 0xfff8c9, 0.28)
+      .setName('tap-ring');
     const leftWing = this.add.ellipse(-8, -5, 14, 10, 0xd6ffe4, 0.55)
       .setStrokeStyle(1, 0xf7ffe8, 0.42);
     const rightWing = this.add.ellipse(8, -5, 14, 10, 0xd6ffe4, 0.55)
@@ -2507,9 +2526,12 @@ export class FarmScene extends Phaser.Scene {
     const eyeRight = this.add.circle(4, -3, 1.6, 0x173c27, 1);
     const sparkle = this.add.circle(13, -14, 3, 0xfff8c9, 0.86).setName('sparkle');
 
-    container.add([glow, leftWing, rightWing, body, shine, eyeLeft, eyeRight, sparkle]);
-    container.setSize(40, 40);
-    container.setInteractive(new Phaser.Geom.Rectangle(-20, -20, 40, 40), Phaser.Geom.Rectangle.Contains);
+    container.add([glow, tapRing, leftWing, rightWing, body, shine, eyeLeft, eyeRight, sparkle]);
+    container.setSize(COIN_BUG_HITBOX_SIZE, COIN_BUG_HITBOX_SIZE);
+    container.setInteractive(
+      new Phaser.Geom.Rectangle(-COIN_BUG_HITBOX_SIZE / 2, -COIN_BUG_HITBOX_SIZE / 2, COIN_BUG_HITBOX_SIZE, COIN_BUG_HITBOX_SIZE),
+      Phaser.Geom.Rectangle.Contains,
+    );
 
     this.tweens.add({
       targets: container,
@@ -2547,7 +2569,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private isCoinBugSpawnPointSafe(point: Phaser.Math.Vector2, layout: FarmSceneLayout): boolean {
-    const padding = 20;
+    const padding = Math.ceil(COIN_BUG_HITBOX_SIZE / 2);
     const criticalRects = [
       new Phaser.Geom.Rectangle(layout.hudX, layout.hudY, layout.hudWidth, layout.hudHeight),
       new Phaser.Geom.Rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight),
@@ -2560,7 +2582,7 @@ export class FarmScene extends Phaser.Scene {
       return false;
     }
 
-    const slotBuffer = Math.max(42, this.cellSize * 0.74);
+    const slotBuffer = Math.max(52, this.cellSize * 0.84);
 
     if (this.slotCenters.some((center) => center.x > 0 && Phaser.Math.Distance.Between(point.x, point.y, center.x, center.y) < slotBuffer)) {
       return false;
@@ -2592,6 +2614,7 @@ export class FarmScene extends Phaser.Scene {
     bug.container.disableInteractive();
     bug.bobTween?.stop();
     bug.sparkleTween?.stop();
+    bug.ringTween?.stop();
 
     const reward = this.getCoinBugReward();
     this.currency.coins = this.sanitizeCoins(this.currency.coins + reward);
@@ -2653,6 +2676,7 @@ export class FarmScene extends Phaser.Scene {
     bug.container.disableInteractive();
     bug.bobTween?.stop();
     bug.sparkleTween?.stop();
+    bug.ringTween?.stop();
 
     this.tweens.add({
       targets: bug.container,
@@ -2669,6 +2693,7 @@ export class FarmScene extends Phaser.Scene {
   private removeCoinBug(bug: CoinBug): void {
     bug.bobTween?.stop();
     bug.sparkleTween?.stop();
+    bug.ringTween?.stop();
     bug.container.destroy();
     this.activeCoinBugs = this.activeCoinBugs.filter((activeBug) => activeBug.id !== bug.id);
   }
@@ -2677,6 +2702,7 @@ export class FarmScene extends Phaser.Scene {
     this.activeCoinBugs.forEach((bug) => {
       bug.bobTween?.stop();
       bug.sparkleTween?.stop();
+      bug.ringTween?.stop();
       bug.container.destroy();
     });
     this.activeCoinBugs = [];
@@ -3676,7 +3702,16 @@ export class FarmScene extends Phaser.Scene {
 
   private getMonsterVisualStyle(family: MonsterFamily, level: number): MonsterVisualStyle {
     if (family === 'Mushroom') {
-      if (level >= 5) {
+      if (level >= 6) {
+        return {
+          bodyColor: 0x5f8ed8,
+          strokeColor: 0x28507f,
+          bodyWidth: 66,
+          bodyHeight: 44,
+        };
+      }
+
+      if (level === 5) {
         return {
           bodyColor: 0x5d7f3f,
           strokeColor: 0x2d4c25,
@@ -3841,7 +3876,38 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    if (level >= 5) {
+    if (level >= 6) {
+      container.add(this.add.ellipse(x, y - 9 * scale, 58 * scale, 22 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, 0xa7e8ff, 0.84));
+      container.add(this.add.ellipse(x, y - 7 * scale, 42 * scale, 13 * scale, 0xbeeaff, 0.18));
+      [
+        [-18, -10, -8],
+        [0, -20, 0],
+        [17, -8, 8],
+      ].forEach(([crystalX, crystalY, angle]) => {
+        const crystal = this.add.triangle(
+          x + crystalX * scale,
+          y + crystalY * scale,
+          0,
+          -8 * scale,
+          -5 * scale,
+          6 * scale,
+          5 * scale,
+          6 * scale,
+          0xd8fbff,
+          0.95,
+        ).setStrokeStyle(1, 0x4d91bd, 0.78);
+
+        crystal.setAngle(angle);
+        container.add(crystal);
+      });
+      container.add(this.add.rectangle(x, y + 25 * scale, 22 * scale, 5 * scale, 0x9bd6ec, 0.84)
+        .setStrokeStyle(1, 0x28507f, 0.62));
+      container.add(this.add.circle(x + 10 * scale, y + 10 * scale, 2.2 * scale, 0x5f8ed8, 0.5));
+      return;
+    }
+
+    if (level === 5) {
       container.add(this.add.ellipse(x, y - 9 * scale, 55 * scale, 20 * scale, 0xffffff, 0)
         .setStrokeStyle(strokeWidth, 0xf2e08f, 0.8));
       container.add(this.add.circle(x - 16 * scale, y - 11 * scale, 4.2 * scale, 0xf6dc85, 0.95)

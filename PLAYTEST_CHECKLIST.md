@@ -12,11 +12,13 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Hatch multiple Slimes, merge two matching Slimes, and confirm the merged monster remains selected.
 - Merge one valid pair and confirm the merge mission completes.
 - Merge two matching Mushrooms, confirm Slime + Mushroom drops return safely, and confirm Level 5 Mushroom + Level 5 Mushroom does not merge.
+- Confirm Mushroom Level 5 and Mushroom Level 6 look visually distinct on the farm and in the Compendium.
 - Buy at least one upgrade and confirm coins, income/cooldown text, and upgrade level update.
 - Claim a completed coin mission, confirm coins increase, and confirm the mission cannot be claimed again.
 - Buy Mushroom Income Boost and Mushroom Chance, then confirm Mushroom income and hatch odds text update.
 - Fill the grid, confirm the hatch panel says the farm is full, then merge a valid pair to free space.
 - Wait for a Coin Bug to appear, tap it, and confirm coins increase with a compact `+coins` popup.
+- On mobile, tap around the edge of a Coin Bug and confirm it is still easy to collect.
 - Let a Coin Bug expire without tapping and confirm it fades away safely.
 - Catch three Coin Bugs and confirm the Goals mission progresses and completes.
 - Confirm the 3 expansion slots start locked and reject monster drops safely.
