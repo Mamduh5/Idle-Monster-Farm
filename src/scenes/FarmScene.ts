@@ -113,6 +113,8 @@ type MonsterVisualStyle = {
 };
 type DiscoveryKey = `${MonsterFamily}:${number}`;
 type ToastVariant = 'info' | 'success' | 'warning';
+type UiLayoutMode = 'mobile' | 'desktop';
+type ModalKind = 'compendium' | 'upgrade-shop' | 'goals' | 'default';
 type MenuButtonVisual = {
   text: Phaser.GameObjects.Text;
   defaultBackgroundColor: string;
@@ -1065,6 +1067,37 @@ export class FarmScene extends Phaser.Scene {
     };
   }
 
+  private getUiLayoutMode(): UiLayoutMode {
+    const { width, height } = this.scale;
+    const touchConstrained = navigator.maxTouchPoints > 0 && (width < 900 || height < 760);
+
+    return width < 700 || height < 680 || touchConstrained ? 'mobile' : 'desktop';
+  }
+
+  private getModalSize(kind: ModalKind, preferredWidth: number, preferredHeight: number): { width: number; height: number } {
+    const mode = this.getUiLayoutMode();
+
+    if (mode === 'mobile') {
+      const inset = 12;
+      const isListModal = kind === 'compendium' || kind === 'upgrade-shop' || kind === 'goals';
+      const mobileMaxWidth = isListModal ? 390 : preferredWidth;
+
+      return {
+        width: Math.min(mobileMaxWidth, this.scale.width - inset * 2),
+        height: isListModal
+          ? this.scale.height - inset * 2
+          : Math.min(preferredHeight, this.scale.height - inset * 2),
+      };
+    }
+
+    const inset = 36;
+
+    return {
+      width: Math.min(preferredWidth, this.scale.width - inset * 2),
+      height: Math.min(preferredHeight, this.scale.height - inset * 2),
+    };
+  }
+
   private getPanelTitleFontSize(panelWidth: number, desktopSize = 24): string {
     return `${panelWidth < 390 ? Math.min(desktopSize, 21) : desktopSize}px`;
   }
@@ -1899,10 +1932,12 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = this.getPanelSize(500, 500);
-    const rowGap = Math.min(56, Math.max(42, (panelHeight - 108) / MISSION_DEFINITIONS.length));
+    const { width: panelWidth, height: panelHeight } = this.getModalSize('goals', 540, 520);
+    const rowGap = panelWidth < 420 ? 50 : 56;
     const rowHeight = Math.min(50, rowGap - 6);
-    const firstRowY = -panelHeight / 2 + 86;
+    const viewportTop = -panelHeight / 2 + 76;
+    const viewportHeight = panelHeight - 100;
+    const contentHeight = MISSION_DEFINITIONS.length * rowGap + 16;
 
     panel.setDepth(24);
     this.addPanelBackground(panel, panelWidth, panelHeight);
@@ -1935,8 +1970,15 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(closeText);
 
+    const scrollable = this.createScrollableContent(panel, panelWidth, viewportTop, viewportHeight, contentHeight);
+
     MISSION_DEFINITIONS.forEach((mission, index) => {
-      this.addMissionRow(panel, mission, firstRowY + index * rowGap, panelWidth, rowHeight);
+      const rowY = 8 + index * rowGap + rowGap / 2;
+      const actionText = this.addMissionRow(scrollable.content, mission, rowY, panelWidth, rowHeight);
+
+      if (actionText?.input) {
+        scrollable.registerInteractive(actionText, rowY);
+      }
     });
 
     this.missionsPanel = panel;
@@ -1948,7 +1990,7 @@ export class FarmScene extends Phaser.Scene {
     rowY: number,
     panelWidth: number,
     rowHeight: number,
-  ): void {
+  ): Phaser.GameObjects.Text | undefined {
     const isCompactPanel = panelWidth < 420 || rowHeight < 48;
     const isCompleted = this.completedMissionIds.has(mission.id);
     const isClaimed = this.claimedMissionIds.has(mission.id);
@@ -1996,13 +2038,15 @@ export class FarmScene extends Phaser.Scene {
     if (canClaim) {
       actionText
         .setInteractive({ useHandCursor: true })
-        .on('pointerdown', () => {
+        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+          pointer.event?.stopPropagation();
           this.playButtonClickSound();
           this.claimMissionReward(mission.id);
         });
     }
 
     panel.add(actionText);
+    return actionText;
   }
 
   private closeMissionsPanel(): void {
@@ -2153,7 +2197,7 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = this.getPanelSize(580, 520);
+    const { width: panelWidth, height: panelHeight } = this.getModalSize('upgrade-shop', 640, 560);
     const rowGap = panelWidth < 500 ? 76 : 82;
     const rowHeight = Math.min(72, rowGap - 8);
     const viewportTop = -panelHeight / 2 + 76;
@@ -2281,7 +2325,8 @@ export class FarmScene extends Phaser.Scene {
     if (!isMaxLevel) {
       buyText
         .setInteractive({ useHandCursor: true })
-        .on('pointerdown', () => {
+        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+          pointer.event?.stopPropagation();
           this.playButtonClickSound();
           this.buyUpgrade(upgrade.id);
         });
@@ -3454,7 +3499,7 @@ export class FarmScene extends Phaser.Scene {
       (rowCount, group) => rowCount + 1 + group.definitions.length,
       0,
     );
-    const { width: panelWidth, height: panelHeight } = this.getPanelSize(460, 560);
+    const { width: panelWidth, height: panelHeight } = this.getModalSize('compendium', 640, 640);
     const rowGap = panelWidth < 390 ? 34 : 38;
     const rowHeight = Math.min(34, rowGap - 3);
     const viewportTop = -panelHeight / 2 + 68;
