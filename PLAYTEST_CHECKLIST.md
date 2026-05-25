@@ -16,6 +16,9 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Claim a completed coin mission, confirm coins increase, and confirm the mission cannot be claimed again.
 - Buy Mushroom Income Boost and Mushroom Chance, then confirm Mushroom income and hatch odds text update.
 - Fill the grid, confirm the hatch panel says the farm is full, then merge a valid pair to free space.
+- Wait for a Coin Bug to appear, tap it, and confirm coins increase with a compact `+coins` popup.
+- Let a Coin Bug expire without tapping and confirm it fades away safely.
+- Catch three Coin Bugs and confirm the Goals mission progresses and completes.
 - Confirm the 3 expansion slots start locked and reject monster drops safely.
 - Unlock the expansion row, confirm 350 coins are deducted, then hatch into an expanded slot.
 - Drag or merge monsters using expanded slots.
@@ -33,6 +36,8 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - From Menu, open Upgrades, Goals, Prestige, Zone, Compendium, Help, and Settings; confirm Menu closes and each panel is readable, fits, and can close.
 - With outside-tap close enabled, open Menu and tap outside it to confirm Menu closes.
 - With outside-tap close disabled, open Menu and tap outside it to confirm the tap is blocked and Menu remains open.
+- With a Coin Bug visible, drag a monster near it and confirm normal drag still works.
+- Open a panel while a Coin Bug is visible and confirm the bug cannot be tapped through the modal.
 
 ## Persistence
 - Reload after hatching, merging, and buying an upgrade.

@@ -64,6 +64,13 @@ const ESSENCE_POWER_INCOME_BOOST_PER_LEVEL = 0.15;
 const ESSENCE_POWER_COST = 1;
 const HATCH_SPEED_REDUCTION_PER_LEVEL = 0.07;
 const OFFLINE_STORAGE_SECONDS_PER_LEVEL = 1800;
+const COIN_BUG_SPAWN_MIN_MS = 20_000;
+const COIN_BUG_SPAWN_MAX_MS = 35_000;
+const COIN_BUG_MIN_LIFETIME_MS = 8_000;
+const COIN_BUG_MAX_LIFETIME_MS = 12_000;
+const COIN_BUG_MAX_ACTIVE = 3;
+const COIN_BUG_REWARD_SECONDS = 10;
+const COIN_BUG_MIN_REWARD = 25;
 const SHOW_DEBUG_PANEL = false;
 const SHOW_MONSTER_HITBOX_DEBUG = false;
 const MODAL_OVERLAY_DEPTH = 18;
@@ -113,6 +120,14 @@ type NavigationMenuItem = {
   label: string;
   openPanel: () => void;
 };
+type CoinBug = {
+  id: number;
+  container: Phaser.GameObjects.Container;
+  lifetimeMs: number;
+  collected: boolean;
+  bobTween?: Phaser.Tweens.Tween;
+  sparkleTween?: Phaser.Tweens.Tween;
+};
 type FarmSceneLayout = {
   isNarrow: boolean;
   margin: number;
@@ -158,6 +173,7 @@ export class FarmScene extends Phaser.Scene {
   private menuControlsContainer?: Phaser.GameObjects.Container;
   private toastContainer?: Phaser.GameObjects.Container;
   private toastTween?: Phaser.Tweens.Tween;
+  private activeCoinBugs: CoinBug[] = [];
   private farmSlots: FarmSlotState[] = [];
   private slotCenters: Phaser.Math.Vector2[] = [];
   private monsterVisuals: Array<MonsterVisual | null> = [];
@@ -208,6 +224,9 @@ export class FarmScene extends Phaser.Scene {
   private prestigeConfirmationArmed = false;
   private lastBlockedOutsideTapToastAt = 0;
   private lastHiddenAt: number | null = null;
+  private nextCoinBugId = 1;
+  private coinBugSpawnAccumulatorMs = 0;
+  private nextCoinBugSpawnMs = 0;
 
   private readonly handlePageHide = (): void => {
     this.saveProgress();
@@ -280,6 +299,10 @@ export class FarmScene extends Phaser.Scene {
     this.prestigeConfirmationArmed = false;
     this.lastBlockedOutsideTapToastAt = 0;
     this.lastHiddenAt = null;
+    this.nextCoinBugId = 1;
+    this.coinBugSpawnAccumulatorMs = 0;
+    this.nextCoinBugSpawnMs = this.getNextCoinBugSpawnDelayMs();
+    this.clearCoinBugs();
     this.hatchCooldownMs = HATCH_COOLDOWN_MS;
     this.hatchLabelText = undefined;
     this.hatchStatusText = undefined;
@@ -320,6 +343,7 @@ export class FarmScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     this.updateHatchCooldown(delta);
     this.addPassiveIncome(delta);
+    this.updateCoinBugs(delta);
     this.updateOnboardingHints();
     this.saveProgressWhenReady(delta);
     this.refreshEconomyDebugPanel();
@@ -336,6 +360,7 @@ export class FarmScene extends Phaser.Scene {
     this.monsterDragZones.forEach((zone) => {
       zone?.destroy();
     });
+    this.clearCoinBugs();
     this.monsterVisuals = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
     this.monsterDragZones = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
 
@@ -2355,6 +2380,308 @@ export class FarmScene extends Phaser.Scene {
     }
   }
 
+  private updateCoinBugs(deltaMs: number): void {
+    if (!Number.isFinite(deltaMs) || deltaMs <= 0) {
+      return;
+    }
+
+    this.activeCoinBugs.forEach((bug) => {
+      if (bug.collected) {
+        return;
+      }
+
+      bug.lifetimeMs -= deltaMs;
+
+      if (bug.lifetimeMs <= 0) {
+        this.expireCoinBug(bug);
+      }
+    });
+
+    this.activeCoinBugs = this.activeCoinBugs.filter((bug) => bug.container.active);
+    this.coinBugSpawnAccumulatorMs += deltaMs;
+
+    if (
+      this.coinBugSpawnAccumulatorMs < this.nextCoinBugSpawnMs
+      || this.getActiveCoinBugCount() >= COIN_BUG_MAX_ACTIVE
+      || this.isModalOpen()
+      || this.activeDragSlotId !== null
+    ) {
+      return;
+    }
+
+    if (this.spawnCoinBug()) {
+      this.scheduleNextCoinBugSpawn();
+      return;
+    }
+
+    this.coinBugSpawnAccumulatorMs = 0;
+    this.nextCoinBugSpawnMs = 3_000;
+  }
+
+  private getActiveCoinBugCount(): number {
+    return this.activeCoinBugs.filter((bug) => !bug.collected && bug.container.active).length;
+  }
+
+  private scheduleNextCoinBugSpawn(): void {
+    this.coinBugSpawnAccumulatorMs = 0;
+    this.nextCoinBugSpawnMs = this.getNextCoinBugSpawnDelayMs();
+  }
+
+  private getNextCoinBugSpawnDelayMs(): number {
+    return Phaser.Math.Between(COIN_BUG_SPAWN_MIN_MS, COIN_BUG_SPAWN_MAX_MS);
+  }
+
+  private spawnCoinBug(): boolean {
+    const position = this.getCoinBugSpawnPosition();
+
+    if (!position) {
+      return false;
+    }
+
+    const container = this.createCoinBugVisual(position.x, position.y);
+    const bug: CoinBug = {
+      id: this.nextCoinBugId,
+      container,
+      lifetimeMs: Phaser.Math.Between(COIN_BUG_MIN_LIFETIME_MS, COIN_BUG_MAX_LIFETIME_MS),
+      collected: false,
+    };
+
+    this.nextCoinBugId += 1;
+
+    bug.bobTween = this.tweens.add({
+      targets: container,
+      y: container.y - 4,
+      yoyo: true,
+      repeat: -1,
+      duration: 820,
+      ease: 'Sine.easeInOut',
+    });
+
+    const sparkle = container.getByName('sparkle') as Phaser.GameObjects.Shape | null;
+
+    if (sparkle) {
+      bug.sparkleTween = this.tweens.add({
+        targets: sparkle,
+        alpha: 0.18,
+        scale: 0.75,
+        yoyo: true,
+        repeat: -1,
+        duration: 520,
+        ease: 'Sine.easeInOut',
+      });
+    }
+
+    container.on(
+      'pointerdown',
+      (
+        pointer: Phaser.Input.Pointer,
+        _localX: number,
+        _localY: number,
+        event: Phaser.Types.Input.EventData,
+      ) => {
+        if (this.isModalOpen() || this.activeDragSlotId !== null) {
+          return;
+        }
+
+        event.stopPropagation();
+        pointer.event?.stopPropagation();
+        this.collectCoinBug(bug);
+      },
+    );
+
+    this.activeCoinBugs.push(bug);
+    return true;
+  }
+
+  private createCoinBugVisual(x: number, y: number): Phaser.GameObjects.Container {
+    const container = this.add.container(x, y).setDepth(8).setAlpha(0);
+    const glow = this.add.circle(0, 0, 19, 0xfff1a6, 0.18);
+    const leftWing = this.add.ellipse(-8, -5, 14, 10, 0xd6ffe4, 0.55)
+      .setStrokeStyle(1, 0xf7ffe8, 0.42);
+    const rightWing = this.add.ellipse(8, -5, 14, 10, 0xd6ffe4, 0.55)
+      .setStrokeStyle(1, 0xf7ffe8, 0.42);
+    const body = this.add.ellipse(0, 2, 20, 16, 0xf3d06b, 0.96)
+      .setStrokeStyle(2, 0x7b5628, 0.9);
+    const shine = this.add.ellipse(-5, -1, 7, 4, 0xffffff, 0.38);
+    const eyeLeft = this.add.circle(-4, -3, 1.6, 0x173c27, 1);
+    const eyeRight = this.add.circle(4, -3, 1.6, 0x173c27, 1);
+    const sparkle = this.add.circle(13, -14, 3, 0xfff8c9, 0.86).setName('sparkle');
+
+    container.add([glow, leftWing, rightWing, body, shine, eyeLeft, eyeRight, sparkle]);
+    container.setSize(40, 40);
+    container.setInteractive(new Phaser.Geom.Rectangle(-20, -20, 40, 40), Phaser.Geom.Rectangle.Contains);
+
+    this.tweens.add({
+      targets: container,
+      alpha: 1,
+      scale: { from: 0.84, to: 1 },
+      duration: 180,
+      ease: 'Back.easeOut',
+    });
+
+    return container;
+  }
+
+  private getCoinBugSpawnPosition(): Phaser.Math.Vector2 | null {
+    const layout = this.getLayout();
+    const margin = layout.isNarrow ? 28 : 34;
+    const minY = Math.max(layout.statsY + layout.statsHeight + 18, layout.gridStartY - 42, 96);
+    const maxY = layout.hatchY - 34;
+
+    if (maxY <= minY) {
+      return null;
+    }
+
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      const point = new Phaser.Math.Vector2(
+        Phaser.Math.Between(margin, Math.max(margin, this.scale.width - margin)),
+        Phaser.Math.Between(minY, maxY),
+      );
+
+      if (this.isCoinBugSpawnPointSafe(point, layout)) {
+        return point;
+      }
+    }
+
+    return null;
+  }
+
+  private isCoinBugSpawnPointSafe(point: Phaser.Math.Vector2, layout: FarmSceneLayout): boolean {
+    const padding = 20;
+    const criticalRects = [
+      new Phaser.Geom.Rectangle(layout.hudX, layout.hudY, layout.hudWidth, layout.hudHeight),
+      new Phaser.Geom.Rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight),
+      new Phaser.Geom.Rectangle(layout.hatchX, layout.hatchY, layout.hatchWidth, layout.hatchHeight),
+      new Phaser.Geom.Rectangle(layout.menuX - 82, layout.menuY - 6, 92, 42),
+      new Phaser.Geom.Rectangle(this.scale.width / 2 - 120, layout.expansionLabelY - 18, 240, 36),
+    ];
+
+    if (criticalRects.some((rect) => this.isPointInsideRectWithPadding(point, rect, padding))) {
+      return false;
+    }
+
+    const slotBuffer = Math.max(42, this.cellSize * 0.74);
+
+    if (this.slotCenters.some((center) => center.x > 0 && Phaser.Math.Distance.Between(point.x, point.y, center.x, center.y) < slotBuffer)) {
+      return false;
+    }
+
+    return this.activeCoinBugs.every((bug) => (
+      bug.collected
+      || Phaser.Math.Distance.Between(point.x, point.y, bug.container.x, bug.container.y) >= 58
+    ));
+  }
+
+  private isPointInsideRectWithPadding(
+    point: Phaser.Math.Vector2,
+    rect: Phaser.Geom.Rectangle,
+    padding: number,
+  ): boolean {
+    return point.x >= rect.x - padding
+      && point.x <= rect.right + padding
+      && point.y >= rect.y - padding
+      && point.y <= rect.bottom + padding;
+  }
+
+  private collectCoinBug(bug: CoinBug): void {
+    if (bug.collected) {
+      return;
+    }
+
+    bug.collected = true;
+    bug.container.disableInteractive();
+    bug.bobTween?.stop();
+    bug.sparkleTween?.stop();
+
+    const reward = this.getCoinBugReward();
+    this.currency.coins = this.sanitizeCoins(this.currency.coins + reward);
+    this.hasUnsavedProgress = true;
+    this.skipSavingUntilProgress = false;
+    audioSystem.resume();
+    audioSystem.playCoinTick();
+    this.updateHud();
+    this.incrementMissionProgress('catch-coin-bugs');
+    this.showFloatingCoinReward(bug.container.x, bug.container.y - 12, reward);
+
+    this.tweens.add({
+      targets: bug.container,
+      alpha: 0,
+      scale: 1.28,
+      duration: 220,
+      ease: 'Sine.easeOut',
+      onComplete: () => {
+        this.removeCoinBug(bug);
+      },
+    });
+  }
+
+  private getCoinBugReward(): number {
+    return this.sanitizeCoins(Math.max(
+      COIN_BUG_MIN_REWARD,
+      this.getTotalIncomePerSecond() * COIN_BUG_REWARD_SECONDS,
+    ));
+  }
+
+  private showFloatingCoinReward(x: number, y: number, amount: number): void {
+    const text = this.add.text(x, y, this.formatSignedCoinAmount(amount), {
+      color: '#fff4a8',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: this.scale.width < 380 ? '15px' : '17px',
+      fontStyle: 'bold',
+      stroke: '#10291a',
+      strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(84);
+
+    this.tweens.add({
+      targets: text,
+      y: text.y - 22,
+      alpha: 0,
+      duration: 720,
+      ease: 'Sine.easeOut',
+      onComplete: () => {
+        text.destroy();
+      },
+    });
+  }
+
+  private expireCoinBug(bug: CoinBug): void {
+    if (bug.collected) {
+      return;
+    }
+
+    bug.collected = true;
+    bug.container.disableInteractive();
+    bug.bobTween?.stop();
+    bug.sparkleTween?.stop();
+
+    this.tweens.add({
+      targets: bug.container,
+      alpha: 0,
+      scale: 0.72,
+      duration: 360,
+      ease: 'Sine.easeIn',
+      onComplete: () => {
+        this.removeCoinBug(bug);
+      },
+    });
+  }
+
+  private removeCoinBug(bug: CoinBug): void {
+    bug.bobTween?.stop();
+    bug.sparkleTween?.stop();
+    bug.container.destroy();
+    this.activeCoinBugs = this.activeCoinBugs.filter((activeBug) => activeBug.id !== bug.id);
+  }
+
+  private clearCoinBugs(): void {
+    this.activeCoinBugs.forEach((bug) => {
+      bug.bobTween?.stop();
+      bug.sparkleTween?.stop();
+      bug.container.destroy();
+    });
+    this.activeCoinBugs = [];
+  }
+
   private createInitialFarmSlots(): FarmSlotState[] {
     return Array.from({ length: TOTAL_SLOT_COUNT }, (_, index) => ({
       id: index,
@@ -4082,8 +4409,11 @@ export class FarmScene extends Phaser.Scene {
     this.monsterDragZones.forEach((zone) => {
       zone?.destroy();
     });
+    this.clearCoinBugs();
     this.monsterVisuals = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
     this.monsterDragZones = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
+    this.nextCoinBugId = 1;
+    this.scheduleNextCoinBugSpawn();
     this.createExpansionPlaceholder();
     this.createFarmBackground();
 
@@ -4109,6 +4439,7 @@ export class FarmScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.saveProgress();
       this.cancelActiveDrag();
+      this.clearCoinBugs();
       this.clearToast();
       this.scale.off(Phaser.Scale.Events.RESIZE, this.handleScaleResize);
       this.input.off('pointermove', this.handleManualDragPointerMove);

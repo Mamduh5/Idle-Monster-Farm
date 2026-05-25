@@ -11,6 +11,7 @@ export type MissionReward =
 export type MissionId =
   | 'hatch-3'
   | 'merge-1'
+  | 'catch-coin-bugs'
   | 'own-level-3-slime'
   | 'discover-mushroom'
   | 'buy-upgrade-1'
@@ -41,6 +42,15 @@ export const MISSION_DEFINITIONS: MissionDefinition[] = [
     reward: {
       type: 'coins',
       amount: 40,
+    },
+  },
+  {
+    id: 'catch-coin-bugs',
+    name: 'Catch 3 Coin Bugs',
+    goal: 3,
+    reward: {
+      type: 'coins',
+      amount: 75,
     },
   },
   {
