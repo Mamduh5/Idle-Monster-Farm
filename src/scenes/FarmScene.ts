@@ -121,6 +121,10 @@ type NavigationMenuItem = {
   label: string;
   openPanel: () => void;
 };
+type ScrollableContent = {
+  content: Phaser.GameObjects.Container;
+  registerInteractive: (target: Phaser.GameObjects.GameObject, localY: number, margin?: number) => void;
+};
 type CoinBug = {
   id: number;
   container: Phaser.GameObjects.Container;
@@ -1087,6 +1091,125 @@ export class FarmScene extends Phaser.Scene {
     return panelBackground;
   }
 
+  private createScrollableContent(
+    panel: Phaser.GameObjects.Container,
+    panelWidth: number,
+    viewportTop: number,
+    viewportHeight: number,
+    contentHeight: number,
+  ): ScrollableContent {
+    const viewportWidth = panelWidth - 44;
+    const maxScroll = Math.max(0, contentHeight - viewportHeight);
+    const content = this.add.container(0, viewportTop);
+    const maskGraphics = this.add.graphics();
+    const viewportHitArea = this.add.rectangle(0, viewportTop + viewportHeight / 2, viewportWidth, viewportHeight, 0x000000, 0.001)
+      .setInteractive({ useHandCursor: false });
+    const interactiveTargets: Array<{ target: Phaser.GameObjects.GameObject; localY: number; margin: number }> = [];
+    let scrollOffset = 0;
+    let dragPointerId: number | null = null;
+    let dragStartY = 0;
+    let dragStartOffset = 0;
+
+    maskGraphics.fillStyle(0xffffff, 1);
+    maskGraphics.fillRect(-viewportWidth / 2, viewportTop, viewportWidth, viewportHeight);
+    maskGraphics.setVisible(false);
+    panel.add(maskGraphics);
+
+    const mask = maskGraphics.createGeometryMask();
+    content.setMask(mask);
+
+    const scrollbarTrack = maxScroll > 0
+      ? this.add.rectangle(panelWidth / 2 - 18, viewportTop + viewportHeight / 2, 4, viewportHeight, 0x0d2718, 0.42)
+      : undefined;
+    const scrollbarThumbHeight = maxScroll > 0
+      ? Math.max(32, viewportHeight * (viewportHeight / contentHeight))
+      : 0;
+    const scrollbarThumb = maxScroll > 0
+      ? this.add.rectangle(panelWidth / 2 - 18, viewportTop + scrollbarThumbHeight / 2, 4, scrollbarThumbHeight, THEME.panelBorder, 0.72)
+      : undefined;
+
+    const updateInteractiveTargets = (): void => {
+      interactiveTargets.forEach(({ target, localY, margin }) => {
+        if (!target.input) {
+          return;
+        }
+
+        target.input.enabled = localY >= scrollOffset - margin
+          && localY <= scrollOffset + viewportHeight + margin;
+      });
+    };
+
+    const applyScroll = (nextOffset: number): void => {
+      scrollOffset = Phaser.Math.Clamp(nextOffset, 0, maxScroll);
+      content.y = viewportTop - scrollOffset;
+
+      if (scrollbarThumb && maxScroll > 0) {
+        const travel = viewportHeight - scrollbarThumbHeight;
+        scrollbarThumb.y = viewportTop + scrollbarThumbHeight / 2 + travel * (scrollOffset / maxScroll);
+      }
+
+      updateInteractiveTargets();
+    };
+
+    viewportHitArea
+      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation();
+        dragPointerId = pointer.id;
+        dragStartY = pointer.y;
+        dragStartOffset = scrollOffset;
+      })
+      .on('pointermove', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation();
+
+        if (dragPointerId !== pointer.id || !pointer.isDown) {
+          return;
+        }
+
+        applyScroll(dragStartOffset - (pointer.y - dragStartY));
+      })
+      .on('pointerup', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation();
+
+        if (dragPointerId === pointer.id) {
+          dragPointerId = null;
+        }
+      })
+      .on('pointerupoutside', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation();
+
+        if (dragPointerId === pointer.id) {
+          dragPointerId = null;
+        }
+      })
+      .on('wheel', (
+        pointer: Phaser.Input.Pointer,
+        _deltaX: number,
+        deltaY: number,
+        _deltaZ: number,
+        event: Phaser.Types.Input.EventData,
+      ) => {
+        event.stopPropagation();
+        pointer.event?.stopPropagation();
+        applyScroll(scrollOffset + deltaY * 0.45);
+      });
+
+    panel.add([viewportHitArea, content]);
+
+    if (scrollbarTrack && scrollbarThumb) {
+      panel.add([scrollbarTrack, scrollbarThumb]);
+    }
+
+    applyScroll(0);
+
+    return {
+      content,
+      registerInteractive: (target: Phaser.GameObjects.GameObject, localY: number, margin = 56): void => {
+        interactiveTargets.push({ target, localY, margin });
+        updateInteractiveTargets();
+      },
+    };
+  }
+
   private showModalOverlay(): void {
     this.hideModalOverlay();
     this.setModalOpenVisualState(true);
@@ -2031,9 +2154,11 @@ export class FarmScene extends Phaser.Scene {
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
     const { width: panelWidth, height: panelHeight } = this.getPanelSize(580, 520);
-    const rowGap = Math.min(82, Math.max(58, (panelHeight - 118) / UPGRADE_DEFINITIONS.length));
+    const rowGap = panelWidth < 500 ? 76 : 82;
     const rowHeight = Math.min(72, rowGap - 8);
-    const firstRowY = -panelHeight / 2 + 92;
+    const viewportTop = -panelHeight / 2 + 76;
+    const viewportHeight = panelHeight - 100;
+    const contentHeight = UPGRADE_DEFINITIONS.length * rowGap + 16;
 
     panel.setDepth(24);
 
@@ -2067,8 +2192,15 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(closeText);
 
+    const scrollable = this.createScrollableContent(panel, panelWidth, viewportTop, viewportHeight, contentHeight);
+
     UPGRADE_DEFINITIONS.forEach((upgrade, index) => {
-      this.addUpgradeRow(panel, upgrade, firstRowY + index * rowGap, panelWidth, rowHeight);
+      const rowY = 8 + index * rowGap + rowGap / 2;
+      const buyText = this.addUpgradeRow(scrollable.content, upgrade, rowY, panelWidth, rowHeight);
+
+      if (buyText?.input) {
+        scrollable.registerInteractive(buyText, rowY);
+      }
     });
 
     this.upgradeShopPanel = panel;
@@ -2081,7 +2213,7 @@ export class FarmScene extends Phaser.Scene {
     rowY: number,
     panelWidth: number,
     rowHeight: number,
-  ): void {
+  ): Phaser.GameObjects.Text | undefined {
     const isCompactPanel = panelWidth < 500 || rowHeight < 70;
     const level = this.getUpgradeLevel(upgrade.id);
     const isMaxLevel = level >= upgrade.maxLevel;
@@ -2156,6 +2288,7 @@ export class FarmScene extends Phaser.Scene {
     }
 
     panel.add(buyText);
+    return buyText;
   }
 
   private closeUpgradeShopPanel(): void {
@@ -3322,9 +3455,11 @@ export class FarmScene extends Phaser.Scene {
       0,
     );
     const { width: panelWidth, height: panelHeight } = this.getPanelSize(460, 560);
-    const rowGap = Math.min(38, Math.max(28, (panelHeight - 116) / Math.max(1, totalRows)));
+    const rowGap = panelWidth < 390 ? 34 : 38;
     const rowHeight = Math.min(34, rowGap - 3);
-    const firstRowY = -panelHeight / 2 + 82;
+    const viewportTop = -panelHeight / 2 + 68;
+    const viewportHeight = panelHeight - 92;
+    const contentHeight = totalRows * rowGap + rowGap;
 
     panel.setDepth(20);
     this.addPanelBackground(panel, panelWidth, panelHeight);
@@ -3357,14 +3492,15 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(closeText);
 
+    const scrollable = this.createScrollableContent(panel, panelWidth, viewportTop, viewportHeight, contentHeight);
     let rowIndex = 0;
 
     groupedDefinitions.forEach((group) => {
-      this.addCompendiumFamilyLabel(panel, group.family, firstRowY + rowIndex * rowGap, panelWidth);
+      this.addCompendiumFamilyLabel(scrollable.content, group.family, rowIndex * rowGap + 18, panelWidth);
       rowIndex += 1;
 
       group.definitions.forEach((definition) => {
-        this.addCompendiumRow(panel, definition, firstRowY + rowIndex * rowGap, panelWidth, rowHeight);
+        this.addCompendiumRow(scrollable.content, definition, rowIndex * rowGap + rowGap / 2, panelWidth, rowHeight);
         rowIndex += 1;
       });
     });
