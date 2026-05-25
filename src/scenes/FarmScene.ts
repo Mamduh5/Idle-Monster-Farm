@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { EGG_COST_MULTIPLIER, EXPANSION_UNLOCK_COST, STARTING_EGG_COST } from '../data/economy';
+import { EXPANSION_UNLOCK_COST, STARTING_EGG_COST } from '../data/economy';
 import { MISSION_DEFINITIONS, type MissionDefinition, type MissionId, type MissionReward } from '../data/missions';
 import { ORDER_DEFINITIONS, type OrderDefinition, type OrderId, type OrderReward } from '../data/orders';
 import {
@@ -29,6 +29,22 @@ import {
   SAVE_VERSION,
   writeSaveData,
 } from '../systems/saveSystem';
+import {
+  calculateOfflineCoins,
+  canPrestigeFromOwnedMonsters,
+  getEffectiveMonsterIncome,
+  getFamilyIncomeMultiplier,
+  getHatchCooldownMs,
+  getMushroomHatchChance,
+  getNextEggCost,
+  getOfflineCapSeconds,
+  getPrestigeEssenceReward,
+  getPrestigeIncomeMultiplier,
+  getTotalIncomePerSecond,
+  HATCH_COOLDOWN_MS,
+  MUSHROOM_FOREST_HATCH_CHANCE_BONUS,
+  sanitizeEggCost,
+} from '../systems/progressionSystem';
 import { audioSystem } from '../systems/audioSystem';
 import { getText, type LanguageCode } from '../i18n/translations';
 import { loadSettings, writeSettings, type GameSettings } from '../systems/settingsSystem';
@@ -52,20 +68,9 @@ const EXPANSION_SLOT_COUNT = EXPANSION_COLUMNS * EXPANSION_ROWS;
 const TOTAL_SLOT_COUNT = MAIN_SLOT_COUNT + EXPANSION_SLOT_COUNT;
 const MILLISECONDS_PER_SECOND = 1000;
 const SAVE_THROTTLE_MS = 5000;
-const MAX_OFFLINE_SECONDS = 7200;
-const HATCH_COOLDOWN_MS = 3000;
-const BASE_MUSHROOM_HATCH_CHANCE = 0.2;
-const MUSHROOM_FOREST_HATCH_CHANCE_BONUS = 0.05;
-const MUSHROOM_HATCH_CHANCE_PER_LEVEL = 0.04;
 const HATCH_PROGRESS_WIDTH = 142;
 const STARTING_COINS = STARTING_EGG_COST;
-const MIN_HATCH_COOLDOWN_MS = 1200;
-const SLIME_INCOME_BOOST_PER_LEVEL = 0.2;
-const MUSHROOM_INCOME_BOOST_PER_LEVEL = 0.22;
-const ESSENCE_POWER_INCOME_BOOST_PER_LEVEL = 0.15;
 const ESSENCE_POWER_COST = 1;
-const HATCH_SPEED_REDUCTION_PER_LEVEL = 0.07;
-const OFFLINE_STORAGE_SECONDS_PER_LEVEL = 1800;
 const COIN_BUG_SPAWN_MIN_MS = 20_000;
 const COIN_BUG_SPAWN_MAX_MS = 35_000;
 const COIN_BUG_MIN_LIFETIME_MS = 8_000;
@@ -2125,10 +2130,6 @@ export class FarmScene extends Phaser.Scene {
     }
   }
 
-  private getCurrentZoneMushroomHatchBonus(): number {
-    return this.currentZone === MUSHROOM_FOREST_ZONE_ID ? MUSHROOM_FOREST_HATCH_CHANCE_BONUS : 0;
-  }
-
   private toggleMissionsPanel(): void {
     if (this.missionsPanel) {
       this.closeMissionsPanel();
@@ -3705,14 +3706,11 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getPrestigeEssenceReward(): number {
-    return this.hasPrestigeMilestone() ? 1 : 0;
+    return getPrestigeEssenceReward(this.farmSlots);
   }
 
   private hasPrestigeMilestone(): boolean {
-    return this.farmSlots.some((slot) => (
-      (slot.monster?.family === 'Slime' && slot.monster.level >= 6)
-      || (slot.monster?.family === 'Mushroom' && slot.monster.level >= 5)
-    ));
+    return canPrestigeFromOwnedMonsters(this.farmSlots);
   }
 
   private performPrestigeReset(essenceReward: number): void {
@@ -3850,34 +3848,27 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getFamilyIncomeMultiplier(family: MonsterFamily): number {
-    if (family === 'Mushroom') {
-      return 1 + this.getUpgradeLevel('mushroom-income-boost') * MUSHROOM_INCOME_BOOST_PER_LEVEL;
-    }
-
-    return 1 + this.getUpgradeLevel('slime-income-boost') * SLIME_INCOME_BOOST_PER_LEVEL;
+    return getFamilyIncomeMultiplier(
+      family,
+      this.getUpgradeLevel('slime-income-boost'),
+      this.getUpgradeLevel('mushroom-income-boost'),
+    );
   }
 
   private getPrestigeIncomeMultiplier(): number {
-    return 1 + this.essencePowerLevel * ESSENCE_POWER_INCOME_BOOST_PER_LEVEL;
+    return getPrestigeIncomeMultiplier(this.essencePowerLevel);
   }
 
   private getHatchCooldownMs(): number {
-    const reduction = this.getUpgradeLevel('hatch-speed') * HATCH_SPEED_REDUCTION_PER_LEVEL;
-    const cooldown = HATCH_COOLDOWN_MS * Math.max(0, 1 - reduction);
-
-    return Math.max(MIN_HATCH_COOLDOWN_MS, Math.floor(cooldown));
+    return getHatchCooldownMs(this.getUpgradeLevel('hatch-speed'));
   }
 
   private getOfflineCapSeconds(): number {
-    return MAX_OFFLINE_SECONDS + this.getUpgradeLevel('offline-storage') * OFFLINE_STORAGE_SECONDS_PER_LEVEL;
+    return getOfflineCapSeconds(this.getUpgradeLevel('offline-storage'));
   }
 
   private getMushroomHatchChance(): number {
-    const chance = BASE_MUSHROOM_HATCH_CHANCE
-      + this.getCurrentZoneMushroomHatchBonus()
-      + this.getUpgradeLevel('mushroom-chance') * MUSHROOM_HATCH_CHANCE_PER_LEVEL;
-
-    return Phaser.Math.Clamp(chance, 0, 1);
+    return getMushroomHatchChance(this.getUpgradeLevel('mushroom-chance'), this.currentZone);
   }
 
   private formatDuration(seconds: number): string {
@@ -3957,15 +3948,11 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getNextEggCost(currentEggCost: number): number {
-    return Math.max(STARTING_EGG_COST, Math.ceil(this.sanitizeEggCost(currentEggCost) * EGG_COST_MULTIPLIER));
+    return getNextEggCost(currentEggCost);
   }
 
   private sanitizeEggCost(eggCost: number): number {
-    if (!Number.isFinite(eggCost) || eggCost < STARTING_EGG_COST) {
-      return STARTING_EGG_COST;
-    }
-
-    return Math.ceil(eggCost);
+    return sanitizeEggCost(eggCost);
   }
 
   private updateHatchCooldown(deltaMs: number): void {
@@ -5811,16 +5798,11 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private calculateOfflineCoinsForElapsed(elapsedMilliseconds: number): number {
-    if (!Number.isFinite(elapsedMilliseconds) || elapsedMilliseconds <= 0) {
-      return 0;
-    }
-
-    const elapsedSeconds = Math.floor(elapsedMilliseconds / MILLISECONDS_PER_SECOND);
-    const cappedElapsedSeconds = Math.min(elapsedSeconds, this.getOfflineCapSeconds());
-    const incomePerSecond = this.getTotalIncomePerSecond();
-    const offlineCoins = cappedElapsedSeconds * incomePerSecond;
-
-    return this.sanitizeCoins(offlineCoins);
+    return calculateOfflineCoins(
+      elapsedMilliseconds,
+      this.getOfflineCapSeconds(),
+      this.getTotalIncomePerSecond(),
+    );
   }
 
   private showOfflineEarningsMessage(offlineCoins: number): void {
@@ -5928,26 +5910,20 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getTotalIncomePerSecond(): number {
-    return this.roundCurrency(this.farmSlots.reduce((totalIncome, slot) => {
-      const income = this.getEffectiveMonsterIncome(slot.monster);
-
-      if (!Number.isFinite(income) || income <= 0) {
-        return totalIncome;
-      }
-
-      return totalIncome + income;
-    }, 0));
+    return getTotalIncomePerSecond(
+      this.farmSlots,
+      this.getUpgradeLevel('slime-income-boost'),
+      this.getUpgradeLevel('mushroom-income-boost'),
+      this.essencePowerLevel,
+    );
   }
 
   private getEffectiveMonsterIncome(monster: MonsterInstance | null | undefined): number {
-    if (!monster || !Number.isFinite(monster.incomePerSecond) || monster.incomePerSecond <= 0) {
-      return 0;
-    }
-
-    return this.roundCurrency(
-      monster.incomePerSecond
-      * this.getFamilyIncomeMultiplier(monster.family)
-      * this.getPrestigeIncomeMultiplier(),
+    return getEffectiveMonsterIncome(
+      monster,
+      this.getUpgradeLevel('slime-income-boost'),
+      this.getUpgradeLevel('mushroom-income-boost'),
+      this.essencePowerLevel,
     );
   }
 

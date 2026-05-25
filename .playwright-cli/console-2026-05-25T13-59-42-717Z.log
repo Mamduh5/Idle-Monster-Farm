@@ -1,0 +1,27 @@
+[ 2284309ms] [LOG] %c %c %c %c %c Phaser v3.90.0 (WebGL | Web Audio) %c https://phaser.io/v390 background: #ff0000 background: #ffff00 background: #00ff00 background: #00ffff color: #ffffff; background: #000000 background: transparent @ http://127.0.0.1:5173/node_modules/.vite/deps/phaser.js?v=9035e6f7:8456
+[ 2284459ms] ReferenceError: HATCH_SPEED_REDUCTION_PER_LEVEL is not defined
+    at FarmScene.getHatchCooldownMs (http://127.0.0.1:5173/src/scenes/FarmScene.ts?t=1779719866634:2931:61)
+    at FarmScene.updateHatchCooldownUi (http://127.0.0.1:5173/src/scenes/FarmScene.ts?t=1779719866634:3021:29)
+    at FarmScene.createHatchArea (http://127.0.0.1:5173/src/scenes/FarmScene.ts?t=1779719866634:647:10)
+    at FarmScene.create (http://127.0.0.1:5173/src/scenes/FarmScene.ts?t=1779719866634:269:10)
+    at SceneManager2.create (http://127.0.0.1:5173/node_modules/.vite/deps/phaser.js?v=9035e6f7:110814:36)
+    at SceneManager2.bootScene (http://127.0.0.1:5173/node_modules/.vite/deps/phaser.js?v=9035e6f7:110730:28)
+    at SceneManager2.start (http://127.0.0.1:5173/node_modules/.vite/deps/phaser.js?v=9035e6f7:111272:26)
+    at SceneManager2.processQueue (http://127.0.0.1:5173/node_modules/.vite/deps/phaser.js?v=9035e6f7:110591:37)
+    at SceneManager2.update (http://127.0.0.1:5173/node_modules/.vite/deps/phaser.js?v=9035e6f7:110769:26)
+    at Game2.step (http://127.0.0.1:5173/node_modules/.vite/deps/phaser.js?v=9035e6f7:8625:32)
+[ 2302844ms] [LOG] %c %c %c %c %c Phaser v3.90.0 (WebGL | Web Audio) %c https://phaser.io/v390 background: #ff0000 background: #ffff00 background: #00ff00 background: #00ffff color: #ffffff; background: #000000 background: transparent @ http://127.0.0.1:5173/node_modules/.vite/deps/phaser.js?v=9035e6f7:8456
+[ 2316275ms] [LOG] %c %c %c %c %c Phaser v3.90.0 (WebGL | Web Audio) %c https://phaser.io/v390 background: #ff0000 background: #ffff00 background: #00ff00 background: #00ffff color: #ffffff; background: #000000 background: transparent @ http://127.0.0.1:5173/node_modules/.vite/deps/phaser.js?v=9035e6f7:8456
+[ 2316424ms] ReferenceError: getTotalIncomePerSecond is not defined
+    at FarmScene.getTotalIncomePerSecond (http://127.0.0.1:5173/src/scenes/FarmScene.ts?t=1779719898780:4570:5)
+    at FarmScene.calculateOfflineCoinsForElapsed (http://127.0.0.1:5173/src/scenes/FarmScene.ts?t=1779719898780:4475:12)
+    at FarmScene.applyAwayProgress (http://127.0.0.1:5173/src/scenes/FarmScene.ts?t=1779719898780:4311:31)
+    at FarmScene.loadProgress (http://127.0.0.1:5173/src/scenes/FarmScene.ts?t=1779719898780:4293:10)
+    at FarmScene.create (http://127.0.0.1:5173/src/scenes/FarmScene.ts?t=1779719898780:288:10)
+    at SceneManager2.create (http://127.0.0.1:5173/node_modules/.vite/deps/phaser.js?v=9035e6f7:110814:36)
+    at SceneManager2.bootScene (http://127.0.0.1:5173/node_modules/.vite/deps/phaser.js?v=9035e6f7:110730:28)
+    at SceneManager2.start (http://127.0.0.1:5173/node_modules/.vite/deps/phaser.js?v=9035e6f7:111272:26)
+    at SceneManager2.processQueue (http://127.0.0.1:5173/node_modules/.vite/deps/phaser.js?v=9035e6f7:110591:37)
+    at SceneManager2.update (http://127.0.0.1:5173/node_modules/.vite/deps/phaser.js?v=9035e6f7:110769:26)
+[ 2322896ms] [LOG] %c %c %c %c %c Phaser v3.90.0 (WebGL | Web Audio) %c https://phaser.io/v390 background: #ff0000 background: #ffff00 background: #00ff00 background: #00ffff color: #ffffff; background: #000000 background: transparent @ http://127.0.0.1:5173/node_modules/.vite/deps/phaser.js?v=9035e6f7:8456
+[ 2364702ms] [LOG] %c %c %c %c %c Phaser v3.90.0 (WebGL | Web Audio) %c https://phaser.io/v390 background: #ff0000 background: #ffff00 background: #00ff00 background: #00ffff color: #ffffff; background: #000000 background: transparent @ http://127.0.0.1:5173/node_modules/.vite/deps/phaser.js?v=9035e6f7:8456
