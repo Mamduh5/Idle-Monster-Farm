@@ -45,6 +45,7 @@ import {
   MUSHROOM_FOREST_HATCH_CHANCE_BONUS,
   sanitizeEggCost,
 } from '../systems/progressionSystem';
+import { canMergeMonsters, getMonsterMergeResult } from '../systems/monsterMergeSystem';
 import { audioSystem } from '../systems/audioSystem';
 import { getText, type LanguageCode } from '../i18n/translations';
 import { loadSettings, writeSettings, type GameSettings } from '../systems/settingsSystem';
@@ -5628,7 +5629,7 @@ export class FarmScene extends Phaser.Scene {
     const sourceMonster = this.farmSlots[sourceSlotId]?.monster;
     const targetMonster = this.farmSlots[targetSlotId]?.monster;
 
-    return Boolean(this.getMergeResultDefinition(sourceMonster, targetMonster));
+    return canMergeMonsters(sourceMonster, targetMonster);
   }
 
   private canMoveSlots(sourceSlotId: number, targetSlotId: number): boolean {
@@ -5663,7 +5664,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private mergeSlots(sourceSlotId: number, targetSlotId: number): void {
-    const nextMonsterDefinition = this.getMergeResultDefinition(
+    const nextMonsterDefinition = getMonsterMergeResult(
       this.farmSlots[sourceSlotId]?.monster,
       this.farmSlots[targetSlotId]?.monster,
     );
@@ -5687,21 +5688,6 @@ export class FarmScene extends Phaser.Scene {
     this.showOnboardingHint('upgrades', this.t('hint.upgrades'));
     this.skipSavingUntilProgress = false;
     this.saveProgress();
-  }
-
-  private getMergeResultDefinition(
-    sourceMonster: MonsterInstance | null | undefined,
-    targetMonster: MonsterInstance | null | undefined,
-  ): MonsterDefinition | undefined {
-    if (!sourceMonster || !targetMonster) {
-      return undefined;
-    }
-
-    if (sourceMonster.family !== targetMonster.family || sourceMonster.level !== targetMonster.level) {
-      return undefined;
-    }
-
-    return getNextMonsterDefinition(sourceMonster.family, sourceMonster.level);
   }
 
   private clearMonsterVisual(slotId: number): void {
