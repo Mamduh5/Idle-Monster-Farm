@@ -2458,7 +2458,13 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = this.getModalSize('expedition', 560, 540);
+    const isMobilePanel = this.getUiLayoutMode() === 'mobile';
+    const { width: panelWidth, height: panelHeight } = getInsetPanelSize(
+      this.scale,
+      isMobilePanel ? 390 : 560,
+      isMobilePanel ? 620 : 560,
+      isMobilePanel ? 12 : 36,
+    );
     const stage = getCurrentBattleStage(EXPEDITION_DEFINITIONS, this.claimedExpeditionIds);
     const isCompactPanel = panelWidth < 420;
     const contentLeft = -panelWidth / 2 + 24;
@@ -2472,26 +2478,7 @@ export class FarmScene extends Phaser.Scene {
       fontFamily: UI_FONT_FAMILY,
       fontSize: getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
-    }));
-
-    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 54, this.t('ui.expedition.description'), {
-      color: THEME.mutedText,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: panelWidth < 390 ? '12px' : '13px',
-      fixedWidth: panelWidth - 48,
-      wordWrap: {
-        width: panelWidth - 48,
-        useAdvancedWrap: true,
-      },
-    }));
-
-    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 92, this.t('ui.expedition.power', {
-      amount: this.getCurrentExpeditionPower(),
-    }), {
-      color: '#fff4a8',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: panelWidth < 390 ? '15px' : '17px',
-      fontStyle: 'bold',
+      fixedWidth: panelWidth - 118,
     }));
 
     this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closeExpeditionPanel(), {
@@ -2526,38 +2513,82 @@ export class FarmScene extends Phaser.Scene {
     const contentWidth = panelWidth - 48;
     const stageStatus = getBattleStageStatus(stage, this.farmSlots, this.claimedExpeditionIds);
     const isClaimed = stageStatus === 'claimed';
+    const allBattlesCleared = this.claimedExpeditionIds.size >= EXPEDITION_DEFINITIONS.length;
     const battlePower = this.getCurrentExpeditionPower();
     const finalHp = isClaimed ? 0 : getEnemyHpAfterBattle(battlePower, stage.requiredPower);
     const initialHpRatio = isClaimed ? 0 : 1;
     const teamMonsters = getTopBattleMonsters(this.farmSlots, 3);
-    const arenaTop = -panelHeight / 2 + (isCompactPanel ? 96 : 104);
-    const arenaHeight = Math.min(isCompactPanel ? 204 : 224, panelHeight * 0.38);
+    const stageY = -panelHeight / 2 + (isCompactPanel ? 58 : 62);
+    const powerY = stageY + (isCompactPanel ? 30 : 34);
+    const arenaTop = powerY + (isCompactPanel ? 30 : 34);
+    const actionY = panelHeight / 2 - (isCompactPanel ? 104 : 108);
+    const arenaHeight = Math.max(
+      isCompactPanel ? 244 : 268,
+      Math.min(isCompactPanel ? 286 : 304, actionY - arenaTop - 54),
+    );
     const arenaCenterY = arenaTop + arenaHeight / 2;
     const playerX = -panelWidth * 0.23;
     const enemyX = panelWidth * 0.24;
-    const enemyY = arenaCenterY + (isCompactPanel ? 6 : 0);
-    const hpWidth = Math.min(isCompactPanel ? 138 : 170, contentWidth * 0.48);
-    const hpY = arenaTop + 16;
+    const enemyY = arenaTop + arenaHeight * 0.6;
+    const hpWidth = Math.min(isCompactPanel ? 150 : 178, contentWidth * 0.5);
+    const hpY = arenaTop + (isCompactPanel ? 48 : 52);
+    const statusText = isClaimed
+      ? this.t('ui.battle.claimed')
+      : stageStatus === 'ready'
+        ? this.t('ui.battle.readyBadge')
+        : this.t('ui.battle.needPowerBadge');
+    const statusColor = isClaimed
+      ? THEME.lockedInner
+      : stageStatus === 'ready'
+        ? THEME.buttonHover
+        : THEME.buttonWarm;
 
-    panel.add(this.add.text(contentLeft, -panelHeight / 2 + 54, this.getLocalizedExpeditionName(stage), {
+    panel.add(this.add.text(contentLeft, stageY, this.getLocalizedExpeditionName(stage), {
       color: THEME.goldText,
       fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '17px' : '19px',
       fontStyle: 'bold',
-      fixedWidth: contentWidth,
+      fixedWidth: contentWidth - 104,
     }));
+    panel.add(this.add.text(contentLeft + contentWidth, stageY - 2, statusText, {
+      align: 'center',
+      backgroundColor: `#${statusColor.toString(16).padStart(6, '0')}`,
+      color: '#ffffff',
+      fixedWidth: isCompactPanel ? 86 : 98,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '11px' : '12px',
+      fontStyle: 'bold',
+      padding: { y: 4 },
+    }).setOrigin(1, 0));
+
+    panel.add(this.add.text(contentLeft, powerY, this.t('ui.battle.yourPower', {
+      amount: battlePower,
+    }), {
+      color: '#fff4a8',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '12px' : '14px',
+      fontStyle: 'bold',
+    }));
+    panel.add(this.add.text(contentLeft + contentWidth, powerY, this.t('ui.battle.enemyPower', {
+      amount: stage.requiredPower,
+    }), {
+      color: THEME.mutedText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '12px' : '14px',
+      fontStyle: 'bold',
+    }).setOrigin(1, 0));
 
     panel.add(this.add.rectangle(0, arenaCenterY, contentWidth, arenaHeight, 0x102a1c, 0.42)
       .setStrokeStyle(2, THEME.panelBorder, 0.34));
 
-    panel.add(this.add.text(playerX, arenaTop + 14, this.t('ui.battle.yourTeam'), {
+    panel.add(this.add.text(playerX, arenaTop + 16, this.t('ui.battle.yourTeam'), {
       color: THEME.text,
       fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '12px' : '13px',
       fontStyle: 'bold',
     }).setOrigin(0.5));
 
-    panel.add(this.add.text(enemyX, arenaTop + 14, this.t('ui.battle.enemy'), {
+    panel.add(this.add.text(enemyX, arenaTop + 16, this.t('ui.battle.enemy'), {
       color: THEME.text,
       fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '12px' : '13px',
@@ -2580,9 +2611,9 @@ export class FarmScene extends Phaser.Scene {
     }).setOrigin(0.5);
     panel.add([hpTrack, hpFill, hpText]);
 
-    this.addBattleTeamVisuals(panel, teamMonsters, playerX, arenaCenterY, isCompactPanel);
+    this.addBattleTeamVisuals(panel, teamMonsters, playerX, arenaTop + arenaHeight * 0.58, isCompactPanel);
     const enemyContainer = this.add.container(enemyX, enemyY);
-    this.addBattleEnemyVisual(enemyContainer, stage, isCompactPanel ? 0.86 : 1);
+    this.addBattleEnemyVisual(enemyContainer, stage, isCompactPanel ? 1.03 : 1.12);
     panel.add(enemyContainer);
 
     const damageText = this.add.text(enemyX + (isCompactPanel ? 38 : 48), enemyY - 40, '', {
@@ -2595,51 +2626,33 @@ export class FarmScene extends Phaser.Scene {
     }).setOrigin(0.5).setAlpha(0);
     panel.add(damageText);
 
-    const powerY = arenaTop + arenaHeight + (isCompactPanel ? 12 : 14);
-    panel.add(this.add.text(contentLeft, powerY, this.t('ui.battle.yourPower', {
-      amount: battlePower,
-    }), {
-      color: '#fff4a8',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '13px' : '15px',
-      fontStyle: 'bold',
-    }));
-    panel.add(this.add.text(contentLeft + contentWidth, powerY, this.t('ui.battle.enemyPower', {
-      amount: stage.requiredPower,
-    }), {
-      color: THEME.mutedText,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '13px' : '15px',
-      fontStyle: 'bold',
-    }).setOrigin(1, 0));
-
-    const resultText = this.add.text(0, powerY + (isCompactPanel ? 26 : 30), isClaimed ? this.t('ui.battle.claimed') : this.t('ui.battle.ready'), {
+    const resultText = this.add.text(0, arenaTop + arenaHeight + (isCompactPanel ? 10 : 12), isClaimed ? this.t('ui.battle.clearedReady') : this.t('ui.battle.ready'), {
       align: 'center',
       color: isClaimed ? '#cdebb3' : THEME.mutedText,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '13px' : '15px',
+      fontSize: isCompactPanel ? '12px' : '14px',
       fontStyle: 'bold',
       fixedWidth: contentWidth,
       wordWrap: { width: contentWidth },
     }).setOrigin(0.5, 0);
     panel.add(resultText);
 
-    const buttonY = panelHeight / 2 - (isCompactPanel ? 38 : 44);
     const buttonHeight = isCompactPanel ? 34 : 38;
     const buttonGap = 10;
     const buttonWidth = Math.min(isCompactPanel ? 126 : 150, (contentWidth - buttonGap) / 2);
     const fightButton = this.addBattleButton(
       panel,
       -buttonWidth / 2 - buttonGap / 2,
-      buttonY,
+      actionY,
       buttonWidth,
       buttonHeight,
-      this.t('ui.battle.fight'),
-      isClaimed ? THEME.lockedInner : THEME.buttonWarm,
-      isClaimed ? '#9ca79f' : '#ffffff',
+      isClaimed ? this.t('ui.battle.replayFight') : this.t('ui.battle.fight'),
+      THEME.buttonWarm,
+      '#ffffff',
       () => {
         this.startBattleTrainingAnimation({
           battlePower,
+          isClaimed,
           damageText,
           enemyContainer,
           fightButton,
@@ -2650,13 +2663,13 @@ export class FarmScene extends Phaser.Scene {
           claimButton,
         });
       },
-      !isClaimed,
+      true,
     );
 
     const claimButton = this.addBattleButton(
       panel,
       buttonWidth / 2 + buttonGap / 2,
-      buttonY,
+      actionY,
       buttonWidth,
       buttonHeight,
       isClaimed ? this.t('ui.battle.claimed') : this.t('ui.battle.claimReward'),
@@ -2668,6 +2681,17 @@ export class FarmScene extends Phaser.Scene {
       !isClaimed,
     );
     claimButton.setVisible(isClaimed);
+
+    panel.add(this.add.text(0, actionY + buttonHeight / 2 + 14, allBattlesCleared ? this.t('ui.battle.allClearedNote') : this.t('common.reward', {
+      reward: this.getExpeditionRewardText(stage.reward),
+    }), {
+      align: 'center',
+      color: allBattlesCleared ? '#cdebb3' : THEME.goldText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '11px' : '12px',
+      fixedWidth: contentWidth,
+      wordWrap: { width: contentWidth },
+    }).setOrigin(0.5, 0));
 
     if (isClaimed) {
       hpText.setText(this.t('ui.battle.enemyHp', {
@@ -2696,32 +2720,32 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    const spacing = isCompactPanel ? 38 : 46;
-    const cardWidth = isCompactPanel ? 34 : 40;
-    const cardHeight = isCompactPanel ? 52 : 60;
+    const spacing = isCompactPanel ? 45 : 52;
+    const cardWidth = isCompactPanel ? 42 : 48;
+    const cardHeight = isCompactPanel ? 72 : 78;
     const startX = centerX - spacing * (monsters.length - 1) / 2;
 
     monsters.forEach((monster, index) => {
       const x = startX + index * spacing;
-      const cardY = centerY + (isCompactPanel ? 20 : 24);
+      const cardY = centerY + (isCompactPanel ? 24 : 28);
 
       panel.add(this.add.rectangle(x, cardY, cardWidth, cardHeight, THEME.slot, 0.88)
         .setStrokeStyle(2, THEME.slotBorder, 0.72));
-      this.monsterRenderer.addMonsterVisual(panel, monster, x, cardY - (isCompactPanel ? 8 : 10), isCompactPanel ? 0.38 : 0.44);
-      panel.add(this.add.text(x, cardY + cardHeight / 2 - 11, this.t('common.levelShort', {
+      this.monsterRenderer.addMonsterVisual(panel, monster, x, cardY - (isCompactPanel ? 12 : 14), isCompactPanel ? 0.46 : 0.52);
+      panel.add(this.add.text(x, cardY + cardHeight / 2 - 17, this.t('common.levelShort', {
         level: monster.level,
       }), {
         align: 'center',
         color: '#173c27',
         fontFamily: UI_FONT_FAMILY,
-        fontSize: isCompactPanel ? '9px' : '10px',
+        fontSize: isCompactPanel ? '10px' : '11px',
         fontStyle: 'bold',
       }).setOrigin(0.5));
-      panel.add(this.add.text(x, cardY + cardHeight / 2, getMonsterBattlePower(monster).toString(), {
+      panel.add(this.add.text(x, cardY + cardHeight / 2 - 3, getMonsterBattlePower(monster).toString(), {
         align: 'center',
         color: '#173c27',
         fontFamily: UI_FONT_FAMILY,
-        fontSize: isCompactPanel ? '8px' : '9px',
+        fontSize: isCompactPanel ? '9px' : '10px',
         fontStyle: 'bold',
       }).setOrigin(0.5));
     });
@@ -2831,16 +2855,17 @@ export class FarmScene extends Phaser.Scene {
     fightButton: Phaser.GameObjects.Text;
     hpFill: Phaser.GameObjects.Rectangle;
     hpText: Phaser.GameObjects.Text;
+    isClaimed: boolean;
     resultText: Phaser.GameObjects.Text;
     stage: ExpeditionDefinition;
   }): void {
-    if (this.battleAnimationInProgress || this.claimedExpeditionIds.has(options.stage.id)) {
+    if (this.battleAnimationInProgress) {
       return;
     }
 
     this.clearBattleAnimationEvents();
     this.battleAnimationInProgress = true;
-    options.claimButton.setVisible(false);
+    options.claimButton.setVisible(options.isClaimed);
     options.fightButton.disableInteractive();
     options.fightButton.setAlpha(0.62);
     options.resultText.setColor(THEME.mutedText);
@@ -2909,12 +2934,23 @@ export class FarmScene extends Phaser.Scene {
       if (result === 'victory') {
         options.resultText.setColor('#fff4a8');
         options.resultText.setText(this.t('ui.battle.victory'));
-        options.claimButton.setVisible(canClaimBattleReward(options.stage, this.farmSlots, this.claimedExpeditionIds));
+        options.claimButton.setText(options.isClaimed ? this.t('ui.battle.claimed') : this.t('ui.battle.claimReward'));
+        options.claimButton.setBackgroundColor(`#${(options.isClaimed ? THEME.lockedInner : THEME.buttonHover).toString(16).padStart(6, '0')}`);
+        if (!options.isClaimed) {
+          options.claimButton.setInteractive({ useHandCursor: true });
+        }
+        options.claimButton.setVisible(options.isClaimed || canClaimBattleReward(options.stage, this.farmSlots, this.claimedExpeditionIds));
         return;
       }
 
       options.resultText.setColor('#fff4a8');
       options.resultText.setText(this.t('ui.battle.needMorePower'));
+      if (!options.isClaimed) {
+        options.claimButton.setText(this.t('ui.battle.needMorePower'));
+        options.claimButton.setBackgroundColor(`#${THEME.lockedInner.toString(16).padStart(6, '0')}`);
+        options.claimButton.disableInteractive();
+        options.claimButton.setVisible(true);
+      }
     });
     this.battleAnimationEvents.push(finishEvent);
   }
