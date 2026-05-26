@@ -3,6 +3,7 @@ import { MonsterRenderer, type MonsterVisual } from '../rendering/MonsterRendere
 import { HatchPanelView } from '../ui/HatchPanelView';
 import { HudView } from '../ui/HudView';
 import { NavigationControlView } from '../ui/NavigationControlView';
+import { NavigationMenuPanelView, type NavigationMenuPanelItem } from '../ui/NavigationMenuPanelView';
 import { OrderWidgetView } from '../ui/OrderWidgetView';
 import { TapFarmView } from '../ui/TapFarmView';
 import { ToastView, type ToastVariant } from '../ui/ToastView';
@@ -138,10 +139,6 @@ type MonsterDragZone = Phaser.GameObjects.Zone;
 type DiscoveryKey = `${MonsterFamily}:${number}`;
 type UiLayoutMode = 'mobile' | 'desktop';
 type ModalKind = 'compendium' | 'upgrade-shop' | 'goals' | 'orders' | 'default';
-type NavigationMenuItem = {
-  label: string;
-  openPanel: () => void;
-};
 type UpgradeBuyMode = 'x1' | 'x10' | 'x50' | 'max';
 type UpgradePurchasePreview = {
   levels: number;
@@ -222,6 +219,7 @@ export class FarmScene extends Phaser.Scene {
   private readonly hudView: HudView;
   private readonly monsterRenderer: MonsterRenderer;
   private readonly navigationControlView: NavigationControlView;
+  private readonly navigationMenuPanelView: NavigationMenuPanelView;
   private readonly orderWidgetView: OrderWidgetView;
   private readonly tapFarmView: TapFarmView;
   private readonly toastView: ToastView;
@@ -264,7 +262,6 @@ export class FarmScene extends Phaser.Scene {
   private ordersPanel?: Phaser.GameObjects.Container;
   private upgradeShopPanel?: Phaser.GameObjects.Container;
   private prestigePanel?: Phaser.GameObjects.Container;
-  private navigationMenuPanel?: Phaser.GameObjects.Container;
   private modalOverlay?: Phaser.GameObjects.Rectangle;
   private economyDebugPanel?: Phaser.GameObjects.Container;
   private economyDebugText?: Phaser.GameObjects.Text;
@@ -367,6 +364,19 @@ export class FarmScene extends Phaser.Scene {
       t: (key, params) => this.t(key, params),
       theme: THEME,
     });
+    this.navigationMenuPanelView = new NavigationMenuPanelView(this, {
+      addPanelBackground: (panel, width, height) => {
+        this.addPanelBackground(panel, width, height);
+      },
+      fontFamily: UI_FONT_FAMILY,
+      getLayout: () => this.getLayout(),
+      getPanelSize: (preferredWidth, preferredHeight) => this.getPanelSize(preferredWidth, preferredHeight),
+      getPanelTitleFontSize: (panelWidth, desktopSize) => this.getPanelTitleFontSize(panelWidth, desktopSize),
+      onButtonClickSound: () => this.playButtonClickSound(),
+      onClose: () => this.closeNavigationMenuPanel(),
+      t: (key, params) => this.t(key, params),
+      theme: THEME,
+    });
     this.orderWidgetView = new OrderWidgetView(this, {
       fontFamily: UI_FONT_FAMILY,
       getLayout: () => this.getLayout(),
@@ -422,7 +432,7 @@ export class FarmScene extends Phaser.Scene {
     this.ordersPanel = undefined;
     this.upgradeShopPanel = undefined;
     this.prestigePanel = undefined;
-    this.navigationMenuPanel = undefined;
+    this.navigationMenuPanelView.destroy();
     this.modalOverlay = undefined;
     this.economyDebugPanel = undefined;
     this.economyDebugText = undefined;
@@ -892,7 +902,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private toggleNavigationMenuPanel(): void {
-    if (this.navigationMenuPanel) {
+    if (this.navigationMenuPanelView.isOpen()) {
       this.closeNavigationMenuPanel();
       return;
     }
@@ -919,52 +929,7 @@ export class FarmScene extends Phaser.Scene {
     this.clearSelectedSlot();
     this.showModalOverlay();
 
-    const layout = this.getLayout();
-    const preferredPanelWidth = layout.isNarrow ? 260 : 280;
-    const preferredPanelHeight = 398;
-    const { width: panelWidth, height: panelHeight } = this.getPanelSize(preferredPanelWidth, preferredPanelHeight);
-    const panelX = layout.isNarrow
-      ? Math.min(this.scale.width - layout.margin - panelWidth / 2, Math.max(layout.margin + panelWidth / 2, layout.menuX - panelWidth / 2))
-      : this.scale.width - layout.margin - panelWidth / 2;
-    const panelY = Math.min(
-      this.scale.height - layout.margin - panelHeight / 2,
-      layout.menuY + 42 + panelHeight / 2,
-    );
-    const panel = this.add.container(panelX, panelY);
-
-    panel.setDepth(26);
-    this.addPanelBackground(panel, panelWidth, panelHeight);
-
-    panel.add(this.add.text(-panelWidth / 2 + 22, -panelHeight / 2 + 18, this.t('ui.menu'), {
-      color: THEME.text,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: this.getPanelTitleFontSize(panelWidth, 23),
-      fontStyle: 'bold',
-    }));
-
-    const closeText = this.add.text(panelWidth / 2 - 20, -panelHeight / 2 + 20, this.t('common.close'), {
-      color: THEME.text,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: '14px',
-      fontStyle: 'bold',
-      backgroundColor: '#49395d',
-      padding: {
-        x: 9,
-        y: 5,
-      },
-    }).setOrigin(1, 0);
-
-    closeText
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-        pointer.event?.stopPropagation();
-        this.playButtonClickSound();
-        this.closeNavigationMenuPanel();
-      });
-
-    panel.add(closeText);
-
-    const menuItems: NavigationMenuItem[] = [
+    const menuItems: NavigationMenuPanelItem[] = [
       { label: this.t('ui.menu.upgrades'), openPanel: () => this.openUpgradeShopPanel() },
       { label: this.t('ui.menu.goals'), openPanel: () => this.openMissionsPanel() },
       { label: this.t('ui.menu.orders'), openPanel: () => this.openOrdersPanel() },
@@ -975,65 +940,12 @@ export class FarmScene extends Phaser.Scene {
       { label: this.t('ui.menu.settings'), openPanel: () => this.openSettingsPanel() },
     ];
 
-    const itemWidth = panelWidth - 42;
-    const itemHeight = 32;
-    const itemGap = 8;
-    const firstItemY = -panelHeight / 2 + 72;
-
-    menuItems.forEach((item, index) => {
-      this.addNavigationMenuItem(
-        panel,
-        item,
-        -panelWidth / 2 + 21,
-        firstItemY + index * (itemHeight + itemGap),
-        itemWidth,
-        itemHeight,
-      );
-    });
-
-    this.navigationMenuPanel = panel;
-  }
-
-  private addNavigationMenuItem(
-    panel: Phaser.GameObjects.Container,
-    item: NavigationMenuItem,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-  ): void {
-    const itemBackground = this.add.rectangle(x, y, width, height, THEME.button, 0.96)
-      .setOrigin(0)
-      .setStrokeStyle(1, THEME.panelBorder, 0.34)
-      .setInteractive({ useHandCursor: true });
-    const itemLabel = this.add.text(x + 14, y + height / 2, item.label, {
-      color: THEME.text,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: '15px',
-      fontStyle: 'bold',
-    }).setOrigin(0, 0.5);
-
-    itemBackground
-      .on('pointerover', () => {
-        itemBackground.setFillStyle(THEME.buttonHover, 0.98);
-      })
-      .on('pointerout', () => {
-        itemBackground.setFillStyle(THEME.button, 0.96);
-      })
-      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-        pointer.event?.stopPropagation();
-        this.playButtonClickSound();
-        this.closeNavigationMenuPanel();
-        item.openPanel();
-      });
-
-    panel.add([itemBackground, itemLabel]);
+    this.navigationMenuPanelView.create(menuItems);
   }
 
   private closeNavigationMenuPanel(): void {
-    if (this.navigationMenuPanel) {
-      this.navigationMenuPanel.destroy();
-      this.navigationMenuPanel = undefined;
+    if (this.navigationMenuPanelView.isOpen()) {
+      this.navigationMenuPanelView.destroy();
       this.hideModalOverlay();
     }
   }
@@ -1279,7 +1191,7 @@ export class FarmScene extends Phaser.Scene {
       || this.ordersPanel
       || this.upgradeShopPanel
       || this.prestigePanel
-      || this.navigationMenuPanel
+      || this.navigationMenuPanelView.isOpen()
       || this.modalOverlay
     );
   }
@@ -1338,7 +1250,7 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    if (this.navigationMenuPanel) {
+    if (this.navigationMenuPanelView.isOpen()) {
       this.closeNavigationMenuPanel();
     }
   }

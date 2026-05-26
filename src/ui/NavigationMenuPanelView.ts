@@ -1,0 +1,155 @@
+import Phaser from 'phaser';
+
+type NavigationMenuLayout = {
+  isNarrow: boolean;
+  margin: number;
+  menuX: number;
+  menuY: number;
+};
+
+type NavigationMenuTheme = {
+  button: number;
+  buttonHover: number;
+  panelBorder: number;
+  text: string;
+};
+
+export type NavigationMenuPanelItem = {
+  label: string;
+  openPanel: () => void;
+};
+
+type NavigationMenuPanelViewOptions = {
+  addPanelBackground: (panel: Phaser.GameObjects.Container, width: number, height: number) => void;
+  fontFamily: string;
+  getLayout: () => NavigationMenuLayout;
+  getPanelSize: (preferredWidth: number, preferredHeight: number) => { width: number; height: number };
+  getPanelTitleFontSize: (panelWidth: number, desktopSize?: number) => string;
+  onButtonClickSound: () => void;
+  onClose: () => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
+  theme: NavigationMenuTheme;
+};
+
+export class NavigationMenuPanelView {
+  private panel?: Phaser.GameObjects.Container;
+
+  constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly options: NavigationMenuPanelViewOptions,
+  ) {}
+
+  create(menuItems: NavigationMenuPanelItem[]): void {
+    this.destroy();
+
+    const { fontFamily, theme } = this.options;
+    const layout = this.options.getLayout();
+    const preferredPanelWidth = layout.isNarrow ? 260 : 280;
+    const preferredPanelHeight = 398;
+    const { width: panelWidth, height: panelHeight } = this.options.getPanelSize(preferredPanelWidth, preferredPanelHeight);
+    const panelX = layout.isNarrow
+      ? Math.min(this.scene.scale.width - layout.margin - panelWidth / 2, Math.max(layout.margin + panelWidth / 2, layout.menuX - panelWidth / 2))
+      : this.scene.scale.width - layout.margin - panelWidth / 2;
+    const panelY = Math.min(
+      this.scene.scale.height - layout.margin - panelHeight / 2,
+      layout.menuY + 42 + panelHeight / 2,
+    );
+    const panel = this.scene.add.container(panelX, panelY);
+
+    panel.setDepth(26);
+    this.options.addPanelBackground(panel, panelWidth, panelHeight);
+
+    panel.add(this.scene.add.text(-panelWidth / 2 + 22, -panelHeight / 2 + 18, this.options.t('ui.menu'), {
+      color: theme.text,
+      fontFamily,
+      fontSize: this.options.getPanelTitleFontSize(panelWidth, 23),
+      fontStyle: 'bold',
+    }));
+
+    const closeText = this.scene.add.text(panelWidth / 2 - 20, -panelHeight / 2 + 20, this.options.t('common.close'), {
+      color: theme.text,
+      fontFamily,
+      fontSize: '14px',
+      fontStyle: 'bold',
+      backgroundColor: '#49395d',
+      padding: {
+        x: 9,
+        y: 5,
+      },
+    }).setOrigin(1, 0);
+
+    closeText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation();
+        this.options.onButtonClickSound();
+        this.options.onClose();
+      });
+
+    panel.add(closeText);
+
+    const itemWidth = panelWidth - 42;
+    const itemHeight = 32;
+    const itemGap = 8;
+    const firstItemY = -panelHeight / 2 + 72;
+
+    menuItems.forEach((item, index) => {
+      this.addMenuItem(
+        panel,
+        item,
+        -panelWidth / 2 + 21,
+        firstItemY + index * (itemHeight + itemGap),
+        itemWidth,
+        itemHeight,
+      );
+    });
+
+    this.panel = panel;
+  }
+
+  destroy(): void {
+    this.panel?.destroy();
+    this.panel = undefined;
+  }
+
+  isOpen(): boolean {
+    return Boolean(this.panel);
+  }
+
+  private addMenuItem(
+    panel: Phaser.GameObjects.Container,
+    item: NavigationMenuPanelItem,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ): void {
+    const { fontFamily, theme } = this.options;
+    const itemBackground = this.scene.add.rectangle(x, y, width, height, theme.button, 0.96)
+      .setOrigin(0)
+      .setStrokeStyle(1, theme.panelBorder, 0.34)
+      .setInteractive({ useHandCursor: true });
+    const itemLabel = this.scene.add.text(x + 14, y + height / 2, item.label, {
+      color: theme.text,
+      fontFamily,
+      fontSize: '15px',
+      fontStyle: 'bold',
+    }).setOrigin(0, 0.5);
+
+    itemBackground
+      .on('pointerover', () => {
+        itemBackground.setFillStyle(theme.buttonHover, 0.98);
+      })
+      .on('pointerout', () => {
+        itemBackground.setFillStyle(theme.button, 0.96);
+      })
+      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation();
+        this.options.onButtonClickSound();
+        this.options.onClose();
+        item.openPanel();
+      });
+
+    panel.add([itemBackground, itemLabel]);
+  }
+}
