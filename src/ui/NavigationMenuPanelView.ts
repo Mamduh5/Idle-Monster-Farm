@@ -5,6 +5,7 @@ import {
   getPanelTitleFontSize,
   type PanelChromeTheme,
 } from './PanelChrome';
+import { addCloseButton } from './PanelControls';
 
 type NavigationMenuLayout = {
   isNarrow: boolean;
@@ -68,27 +69,19 @@ export class NavigationMenuPanelView {
       fontStyle: 'bold',
     }));
 
-    const closeText = this.scene.add.text(panelWidth / 2 - 20, -panelHeight / 2 + 20, this.options.t('common.close'), {
+    addCloseButton(this.scene, panel, {
       color: theme.text,
       fontFamily,
       fontSize: '14px',
-      fontStyle: 'bold',
-      backgroundColor: '#49395d',
-      padding: {
-        x: 9,
-        y: 5,
-      },
-    }).setOrigin(1, 0);
-
-    closeText
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-        pointer.event?.stopPropagation();
+      label: this.options.t('common.close'),
+      onPointerDown: () => {
         this.options.onButtonClickSound();
         this.options.onClose();
-      });
-
-    panel.add(closeText);
+      },
+      stopPropagation: true,
+      x: panelWidth / 2 - 20,
+      y: -panelHeight / 2 + 20,
+    });
 
     const itemWidth = panelWidth - 42;
     const itemHeight = 32;

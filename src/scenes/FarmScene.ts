@@ -11,6 +11,10 @@ import {
   getPanelSize,
   getPanelTitleFontSize,
 } from '../ui/PanelChrome';
+import {
+  addCloseButton,
+  addPaginationControls as addPanelPaginationControls,
+} from '../ui/PanelControls';
 import { TapFarmView } from '../ui/TapFarmView';
 import { ToastView, type ToastVariant } from '../ui/ToastView';
 import { EXPANSION_UNLOCK_COST, STARTING_EGG_COST } from '../data/economy';
@@ -1047,6 +1051,33 @@ export class FarmScene extends Phaser.Scene {
     return Math.max(1, Math.ceil(totalItems / Math.max(1, rowsPerPage)));
   }
 
+  private addModalCloseButton(
+    panel: Phaser.GameObjects.Container,
+    panelWidth: number,
+    panelHeight: number,
+    onClose: () => void,
+    options: {
+      color?: string;
+      label?: string;
+      stopPropagation?: boolean;
+      xOffset?: number;
+      yOffset?: number;
+    } = {},
+  ): void {
+    addCloseButton(this, panel, {
+      color: options.color ?? THEME.text,
+      fontFamily: UI_FONT_FAMILY,
+      label: options.label ?? this.t('common.close'),
+      onPointerDown: () => {
+        this.playButtonClickSound();
+        onClose();
+      },
+      stopPropagation: options.stopPropagation,
+      x: panelWidth / 2 - (options.xOffset ?? 24),
+      y: -panelHeight / 2 + (options.yOffset ?? 22),
+    });
+  }
+
   private addPaginationControls(
     panel: Phaser.GameObjects.Container,
     panelWidth: number,
@@ -1055,63 +1086,30 @@ export class FarmScene extends Phaser.Scene {
     pageCount: number,
     onPageChange: (nextPageIndex: number) => void,
   ): void {
-    if (pageCount <= 1) {
-      return;
-    }
-
-    const y = panelHeight / 2 - 32;
-    const previousText = this.add.text(-panelWidth / 2 + 24, y, this.t('common.prev'), {
-      color: pageIndex > 0 ? THEME.text : '#9ca79f',
+    addPanelPaginationControls(this, panel, {
+      buttonColor: THEME.button,
+      disabledButtonColor: THEME.lockedInner,
+      disabledTextColor: '#9ca79f',
       fontFamily: UI_FONT_FAMILY,
-      fontSize: panelWidth < 390 ? '14px' : '15px',
-      fontStyle: 'bold',
-      backgroundColor: `#${(pageIndex > 0 ? THEME.button : THEME.lockedInner).toString(16).padStart(6, '0')}`,
-      padding: {
-        x: panelWidth < 390 ? 13 : 15,
-        y: 7,
+      mutedTextColor: THEME.mutedText,
+      nextEnabled: pageIndex < pageCount - 1,
+      nextLabel: this.t('common.next'),
+      onNext: () => {
+        this.playButtonClickSound();
+        onPageChange(pageIndex + 1);
       },
-    }).setOrigin(0, 0.5);
-
-    if (pageIndex > 0) {
-      previousText
-        .setInteractive({ useHandCursor: true })
-        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-          pointer.event?.stopPropagation();
-          this.playButtonClickSound();
-          onPageChange(pageIndex - 1);
-        });
-    }
-
-    const nextText = this.add.text(panelWidth / 2 - 24, y, this.t('common.next'), {
-      color: pageIndex < pageCount - 1 ? THEME.text : '#9ca79f',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: panelWidth < 390 ? '14px' : '15px',
-      fontStyle: 'bold',
-      backgroundColor: `#${(pageIndex < pageCount - 1 ? THEME.button : THEME.lockedInner).toString(16).padStart(6, '0')}`,
-      padding: {
-        x: panelWidth < 390 ? 13 : 15,
-        y: 7,
+      onPrevious: () => {
+        this.playButtonClickSound();
+        onPageChange(pageIndex - 1);
       },
-    }).setOrigin(1, 0.5);
-
-    if (pageIndex < pageCount - 1) {
-      nextText
-        .setInteractive({ useHandCursor: true })
-        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-          pointer.event?.stopPropagation();
-          this.playButtonClickSound();
-          onPageChange(pageIndex + 1);
-        });
-    }
-
-    const pageLabel = this.add.text(0, y, `${pageIndex + 1}/${pageCount}`, {
-      color: THEME.mutedText,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: panelWidth < 390 ? '13px' : '14px',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-
-    panel.add([previousText, nextText, pageLabel]);
+      pageCount,
+      pageIndex,
+      panelHeight,
+      panelWidth,
+      previousEnabled: pageIndex > 0,
+      previousLabel: this.t('common.prev'),
+      textColor: THEME.text,
+    });
   }
 
   private showModalOverlay(): void {
@@ -1433,26 +1431,7 @@ export class FarmScene extends Phaser.Scene {
       fontStyle: 'bold',
     }));
 
-    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, this.t('common.close'), {
-      color: THEME.text,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: '15px',
-      fontStyle: 'bold',
-      backgroundColor: '#49395d',
-      padding: {
-        x: 9,
-        y: 5,
-      },
-    }).setOrigin(1, 0);
-
-    closeText
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        this.playButtonClickSound();
-        this.closeSettingsPanel();
-      });
-
-    panel.add(closeText);
+    this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closeSettingsPanel());
 
     this.addSettingsToggle(panel, this.t('ui.settings.music'), this.settings.musicEnabled, -86, () => {
       this.settings.musicEnabled = !this.settings.musicEnabled;
@@ -1658,26 +1637,7 @@ export class FarmScene extends Phaser.Scene {
       fontStyle: 'bold',
     }));
 
-    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, this.t('common.close'), {
-      color: THEME.text,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: '15px',
-      fontStyle: 'bold',
-      backgroundColor: '#49395d',
-      padding: {
-        x: 9,
-        y: 5,
-      },
-    }).setOrigin(1, 0);
-
-    closeText
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        this.playButtonClickSound();
-        this.closeHelpPanel();
-      });
-
-    panel.add(closeText);
+    this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closeHelpPanel());
 
     const helpLines = [
       [this.t('ui.help.hatch.label'), this.t('ui.help.hatch.description')],
@@ -1794,26 +1754,7 @@ export class FarmScene extends Phaser.Scene {
       fontStyle: 'bold',
     }));
 
-    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, this.t('common.close'), {
-      color: THEME.text,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: '15px',
-      fontStyle: 'bold',
-      backgroundColor: '#49395d',
-      padding: {
-        x: 9,
-        y: 5,
-      },
-    }).setOrigin(1, 0);
-
-    closeText
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        this.playButtonClickSound();
-        this.closeZonePanel();
-      });
-
-    panel.add(closeText);
+    this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closeZonePanel());
 
     ZONE_DEFINITIONS.forEach((zone, index) => {
       this.addZoneRow(panel, zone, firstRowY + index * rowGap, panelWidth, rowHeight);
@@ -1984,26 +1925,7 @@ export class FarmScene extends Phaser.Scene {
       fontStyle: 'bold',
     }));
 
-    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, this.t('common.close'), {
-      color: THEME.text,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: '15px',
-      fontStyle: 'bold',
-      backgroundColor: '#49395d',
-      padding: {
-        x: 9,
-        y: 5,
-      },
-    }).setOrigin(1, 0);
-
-    closeText
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        this.playButtonClickSound();
-        this.closeMissionsPanel();
-      });
-
-    panel.add(closeText);
+    this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closeMissionsPanel());
 
     pageMissions.forEach((mission, index) => {
       this.addMissionRow(panel, mission, firstRowY + index * rowGap, panelWidth, rowHeight);
@@ -2157,27 +2079,9 @@ export class FarmScene extends Phaser.Scene {
       },
     }));
 
-    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, this.t('common.close'), {
-      color: THEME.text,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: '15px',
-      fontStyle: 'bold',
-      backgroundColor: '#49395d',
-      padding: {
-        x: 9,
-        y: 5,
-      },
-    }).setOrigin(1, 0);
-
-    closeText
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-        pointer.event?.stopPropagation();
-        this.playButtonClickSound();
-        this.closeOrdersPanel();
-      });
-
-    panel.add(closeText);
+    this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closeOrdersPanel(), {
+      stopPropagation: true,
+    });
 
     pageOrders.forEach((order, index) => {
       this.addOrderRow(panel, order, firstRowY + index * rowGap, panelWidth, rowHeight);
@@ -2436,26 +2340,12 @@ export class FarmScene extends Phaser.Scene {
       fontSize: '12px',
     }));
 
-    const closeText = this.add.text(panelWidth / 2 - 20, -panelHeight / 2 + 20, 'Close', {
+    this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closeEconomyDebugPanel(), {
       color: '#f7ffe8',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: '15px',
-      fontStyle: 'bold',
-      backgroundColor: '#49395d',
-      padding: {
-        x: 9,
-        y: 5,
-      },
-    }).setOrigin(1, 0);
-
-    closeText
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        this.playButtonClickSound();
-        this.closeEconomyDebugPanel();
-      });
-
-    panel.add(closeText);
+      label: 'Close',
+      xOffset: 20,
+      yOffset: 20,
+    });
 
     this.economyDebugText = this.add.text(-panelWidth / 2 + 20, -panelHeight / 2 + 78, '', {
       color: '#f7ffe8',
@@ -2553,26 +2443,7 @@ export class FarmScene extends Phaser.Scene {
       fontStyle: 'bold',
     }));
 
-    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, this.t('common.close'), {
-      color: THEME.text,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: '15px',
-      fontStyle: 'bold',
-      backgroundColor: '#49395d',
-      padding: {
-        x: 9,
-        y: 5,
-      },
-    }).setOrigin(1, 0);
-
-    closeText
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        this.playButtonClickSound();
-        this.closeUpgradeShopPanel();
-      });
-
-    panel.add(closeText);
+    this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closeUpgradeShopPanel());
 
     this.addUpgradeBuyModeControls(panel, panelWidth, -panelHeight / 2 + 66);
 
@@ -2735,26 +2606,7 @@ export class FarmScene extends Phaser.Scene {
       fontStyle: 'bold',
     }));
 
-    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 22, this.t('common.close'), {
-      color: THEME.text,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: '15px',
-      fontStyle: 'bold',
-      backgroundColor: '#49395d',
-      padding: {
-        x: 9,
-        y: 5,
-      },
-    }).setOrigin(1, 0);
-
-    closeText
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        this.playButtonClickSound();
-        this.closePrestigePanel();
-      });
-
-    panel.add(closeText);
+    this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closePrestigePanel());
 
     const contentX = -panelWidth / 2 + 26;
     const contentWidth = panelWidth - 52;
@@ -4630,26 +4482,9 @@ export class FarmScene extends Phaser.Scene {
       fontStyle: 'bold',
     }));
 
-    const closeText = this.add.text(panelWidth / 2 - 24, -panelHeight / 2 + 20, this.t('common.close'), {
-      color: THEME.text,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: '15px',
-      fontStyle: 'bold',
-      backgroundColor: '#49395d',
-      padding: {
-        x: 9,
-        y: 5,
-      },
-    }).setOrigin(1, 0);
-
-    closeText
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        this.playButtonClickSound();
-        this.closeCompendiumPanel();
-      });
-
-    panel.add(closeText);
+    this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closeCompendiumPanel(), {
+      yOffset: 20,
+    });
 
     this.addCompendiumSummary(panel, panelWidth, panelHeight, pageItems);
 
