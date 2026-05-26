@@ -46,6 +46,7 @@ import {
   type CompendiumListItem,
   type DiscoveryKey,
 } from '../state/discoveryState';
+import { canAffordHatch as canAffordHatchInState, getAppliedAwayHatchCooldown, getCappedHatchCooldown, getHatchAttemptState, getHatchCooldownDurationForState, getHatchCost, getHatchedMonsterDefinition, getMushroomHatchChanceForState, getNextHatchCostAfterSuccess, getUpdatedHatchCooldown, isHatchReady as isHatchReadyInState } from '../state/hatchState';
 import {
   canIncrementMission,
   createInitialMissionProgress as createInitialMissionProgressState,
@@ -110,11 +111,7 @@ import {
   calculateOfflineCoins,
   getCoinBugReward as getProgressionCoinBugReward,
   getEffectiveMonsterIncome,
-  getEffectiveEggCost,
   getFamilyIncomeMultiplier,
-  getHatchCooldownMs,
-  getMushroomHatchChance,
-  getNextEggCost,
   getOfflineCapSeconds,
   getOrderCoinReward,
   getPrestigeIncomeMultiplier,
@@ -3973,7 +3970,7 @@ export class FarmScene extends Phaser.Scene {
       ...this.upgradeLevels,
       [upgradeId]: currentLevel,
     }, upgradeId, purchasePreview.levels);
-    this.hatchCooldownMs = Math.min(this.hatchCooldownMs, this.getHatchCooldownMs());
+    this.hatchCooldownMs = getCappedHatchCooldown(this.hatchCooldownMs, this.getHatchCooldownMs());
     this.completeMission('buy-upgrade-1');
     this.hideFarmMessage();
     this.updateHud();
@@ -4208,7 +4205,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getHatchCooldownMs(): number {
-    return getHatchCooldownMs(this.getUpgradeLevel('hatch-speed'));
+    return getHatchCooldownDurationForState(this.getUpgradeLevel('hatch-speed'));
   }
 
   private getOfflineCapSeconds(): number {
@@ -4216,7 +4213,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getMushroomHatchChance(): number {
-    return getMushroomHatchChance(this.getUpgradeLevel('mushroom-chance'), this.currentZone);
+    return getMushroomHatchChanceForState(this.getUpgradeLevel('mushroom-chance'), this.currentZone);
   }
 
   private getTapPowerMultiplier(): number {
@@ -4249,28 +4246,37 @@ export class FarmScene extends Phaser.Scene {
 
   private hatchMonster(): void {
     const emptySlot = findFirstEmptyUnlockedSlot(this.farmSlots, this.expansionUnlocked, MAIN_SLOT_COUNT);
+    const hatchAttemptState = getHatchAttemptState({
+      availableCoins: this.currency.coins,
+      cost: this.getEffectiveEggCost(),
+      hasEmptySlot: emptySlot !== undefined,
+      hatchCooldownDurationMs: this.getHatchCooldownMs(),
+      hatchCooldownMs: this.hatchCooldownMs,
+      isFarmFull: this.isFarmFull(),
+    });
+
+    if (!hatchAttemptState.canHatch) {
+      if (hatchAttemptState.reason === 'not-ready') {
+        this.showToast(this.t('ui.hatch.hatching'), 'info');
+      } else if (hatchAttemptState.reason === 'not-enough-coins') {
+        this.showNotEnoughCoinsMessage();
+      } else {
+        this.showFullFarmMessage();
+      }
+
+      return;
+    }
 
     if (!emptySlot) {
       this.showFullFarmMessage();
       return;
     }
 
-    if (!this.isHatchReady()) {
-      this.showToast(this.t('ui.hatch.hatching'), 'info');
-      return;
-    }
-
-    if (!this.canAffordHatch()) {
-      this.showNotEnoughCoinsMessage();
-      return;
-    }
-
     const hatchDefinition = this.rollHatchMonsterDefinition();
-    const effectiveEggCost = this.getEffectiveEggCost();
 
-    this.currency.coins = this.sanitizeCoins(this.currency.coins - effectiveEggCost);
+    this.currency.coins = this.sanitizeCoins(this.currency.coins - hatchAttemptState.cost);
     this.farmSlots = setSlotMonster(this.farmSlots, emptySlot.id, this.createMonsterInstance(hatchDefinition));
-    this.currentEggCost = this.getNextEggCost(this.currentEggCost);
+    this.currentEggCost = getNextHatchCostAfterSuccess(this.currentEggCost);
     audioSystem.playHatch();
     this.discoverMonster(hatchDefinition);
     this.incrementMissionProgress('hatch-3');
@@ -4287,7 +4293,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private rollHatchMonsterDefinition(): MonsterDefinition {
-    return Math.random() < this.getMushroomHatchChance() ? BUTTON_MUSHROOM : BABY_SLIME;
+    return getHatchedMonsterDefinition(Math.random(), this.getMushroomHatchChance(), BABY_SLIME, BUTTON_MUSHROOM);
   }
 
   private createMonsterInstance(definition = BABY_SLIME): MonsterInstance {
@@ -4301,19 +4307,11 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private isHatchReady(): boolean {
-    return this.hatchCooldownMs >= this.getHatchCooldownMs();
-  }
-
-  private canAffordHatch(): boolean {
-    return this.currency.coins >= this.getEffectiveEggCost();
-  }
-
-  private getNextEggCost(currentEggCost: number): number {
-    return getNextEggCost(currentEggCost);
+    return isHatchReadyInState(this.hatchCooldownMs, this.getHatchCooldownMs());
   }
 
   private getEffectiveEggCost(): number {
-    return getEffectiveEggCost(this.currentEggCost, this.getUpgradeLevel('egg-discount'));
+    return getHatchCost(this.currentEggCost, this.getUpgradeLevel('egg-discount'));
   }
 
   private sanitizeEggCost(eggCost: number): number {
@@ -4326,13 +4324,13 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    this.hatchCooldownMs = Phaser.Math.Clamp(this.hatchCooldownMs + deltaMs, 0, this.getHatchCooldownMs());
+    this.hatchCooldownMs = getUpdatedHatchCooldown(this.hatchCooldownMs, deltaMs, this.getHatchCooldownMs());
     this.updateHatchCooldownUi();
   }
 
   private updateHatchCooldownUi(): void {
     this.hatchPanelView.refresh({
-      canAfford: this.canAffordHatch(),
+      canAfford: canAffordHatchInState(this.currency.coins, this.getEffectiveEggCost()),
       cooldownMs: this.getHatchCooldownMs(),
       effectiveEggCost: this.getEffectiveEggCost(),
       expansionUnlocked: this.expansionUnlocked,
@@ -5054,9 +5052,9 @@ export class FarmScene extends Phaser.Scene {
     }
 
     if (!this.isHatchReady()) {
-      this.hatchCooldownMs = Phaser.Math.Clamp(
-        this.hatchCooldownMs + elapsedMilliseconds,
-        0,
+      this.hatchCooldownMs = getAppliedAwayHatchCooldown(
+        this.hatchCooldownMs,
+        elapsedMilliseconds,
         this.getHatchCooldownMs(),
       );
       this.hasUnsavedProgress = true;
