@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { MonsterRenderer, type MonsterVisual } from '../rendering/MonsterRenderer';
+import { HatchPanelView } from '../ui/HatchPanelView';
+import { HudView } from '../ui/HudView';
 import { ToastView, type ToastVariant } from '../ui/ToastView';
 import { EXPANSION_UNLOCK_COST, STARTING_EGG_COST } from '../data/economy';
 import { MISSION_DEFINITIONS, type MissionDefinition, type MissionId, type MissionReward } from '../data/missions';
@@ -76,7 +78,6 @@ const EXPANSION_SLOT_COUNT = EXPANSION_COLUMNS * EXPANSION_ROWS;
 const TOTAL_SLOT_COUNT = MAIN_SLOT_COUNT + EXPANSION_SLOT_COUNT;
 const MILLISECONDS_PER_SECOND = 1000;
 const SAVE_THROTTLE_MS = 5000;
-const HATCH_PROGRESS_WIDTH = 142;
 const STARTING_COINS = STARTING_EGG_COST;
 const ESSENCE_POWER_COST = 1;
 const COIN_BUG_SPAWN_MIN_MS = 20_000;
@@ -218,18 +219,16 @@ type FarmSceneLayout = {
 };
 
 export class FarmScene extends Phaser.Scene {
+  private readonly hatchPanelView: HatchPanelView;
+  private readonly hudView: HudView;
   private readonly monsterRenderer: MonsterRenderer;
   private readonly toastView: ToastView;
   private currency: CurrencyState = {
     coins: STARTING_COINS,
   };
 
-  private coinText?: Phaser.GameObjects.Text;
-  private incomeText?: Phaser.GameObjects.Text;
-  private productionStatsText?: Phaser.GameObjects.Text;
   private backgroundContainer?: Phaser.GameObjects.Container;
   private farmGridContainer?: Phaser.GameObjects.Container;
-  private hudContainer?: Phaser.GameObjects.Container;
   private orderWidgetContainer?: Phaser.GameObjects.Container;
   private expansionContainer?: Phaser.GameObjects.Container;
   private tapFarmContainer?: Phaser.GameObjects.Container;
@@ -241,7 +240,6 @@ export class FarmScene extends Phaser.Scene {
   private tapFarmReactionHideTween?: Phaser.Tweens.Tween;
   private tapFarmReactionHideEvent?: Phaser.Time.TimerEvent;
   private tapFarmReactionEffects: Phaser.GameObjects.GameObject[] = [];
-  private hatchContainer?: Phaser.GameObjects.Container;
   private menuControlsContainer?: Phaser.GameObjects.Container;
   private activeCoinBugs: CoinBug[] = [];
   private farmSlots: FarmSlotState[] = [];
@@ -249,12 +247,7 @@ export class FarmScene extends Phaser.Scene {
   private monsterVisuals: Array<MonsterVisual | null> = [];
   private monsterDragZones: Array<MonsterDragZone | null> = [];
   private hatchCooldownMs = HATCH_COOLDOWN_MS;
-  private hatchLabelText?: Phaser.GameObjects.Text;
-  private hatchStatusText?: Phaser.GameObjects.Text;
-  private hatchProgressFill?: Phaser.GameObjects.Rectangle;
-  private hatchPanel?: Phaser.GameObjects.Rectangle;
   private menuButtons: MenuButtonVisual[] = [];
-  private hatchProgressWidth = HATCH_PROGRESS_WIDTH;
   private cellSize = CELL_SIZE;
   private gridGap = GRID_GAP;
   private currentEggCost = STARTING_EGG_COST;
@@ -343,6 +336,30 @@ export class FarmScene extends Phaser.Scene {
 
   constructor() {
     super('FarmScene');
+    this.hatchPanelView = new HatchPanelView(this, {
+      fontFamily: UI_FONT_FAMILY,
+      formatCoinAmount: (amount) => this.formatCoinAmount(amount),
+      getLayout: () => this.getLayout(),
+      isModalOpen: () => this.isModalOpen(),
+      onHatchClick: () => {
+        this.playButtonClickSound();
+        this.hatchMonster();
+      },
+      onHoverBlocked: () => this.resetFarmControlHoverState(),
+      t: (key, params) => this.t(key, params),
+      theme: THEME,
+    });
+    this.hudView = new HudView(this, {
+      fontFamily: UI_FONT_FAMILY,
+      formatCoinAmount: (amount) => this.formatCoinAmount(amount),
+      formatDuration: (seconds) => this.formatDuration(seconds),
+      getEffectiveEggCost: () => this.getEffectiveEggCost(),
+      getLayout: () => this.getLayout(),
+      getOfflineCapSeconds: () => this.getOfflineCapSeconds(),
+      getTotalIncomePerSecond: () => this.getTotalIncomePerSecond(),
+      t: (key, params) => this.t(key, params),
+      theme: THEME,
+    });
     this.monsterRenderer = new MonsterRenderer(this, UI_FONT_FAMILY, SHOW_DEBUG_PANEL);
     this.toastView = new ToastView(this, {
       fontFamily: UI_FONT_FAMILY,
@@ -407,13 +424,10 @@ export class FarmScene extends Phaser.Scene {
     this.monsterRenderer.validateMonsterVisualIdentities();
     this.clearCoinBugs();
     this.hatchCooldownMs = HATCH_COOLDOWN_MS;
-    this.hatchLabelText = undefined;
-    this.hatchStatusText = undefined;
-    this.hatchProgressFill = undefined;
-    this.hatchPanel = undefined;
+    this.hatchPanelView.destroy();
     this.backgroundContainer = undefined;
     this.farmGridContainer = undefined;
-    this.hudContainer = undefined;
+    this.hudView.destroy();
     this.orderWidgetContainer = undefined;
     this.expansionContainer = undefined;
     this.tapFarmContainer = undefined;
@@ -421,10 +435,8 @@ export class FarmScene extends Phaser.Scene {
     this.tapFarmStatusText = undefined;
     this.tapFarmEnergyFill = undefined;
     this.clearTapFarmReactionStack();
-    this.hatchContainer = undefined;
     this.menuControlsContainer = undefined;
     this.menuButtons = [];
-    this.productionStatsText = undefined;
     this.currentEggCost = STARTING_EGG_COST;
     this.monsterEssence = 0;
     this.essencePowerLevel = 0;
@@ -819,69 +831,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private createHud(): void {
-    this.hudContainer?.destroy();
-
-    const layout = this.getLayout();
-    const coinFontSize = layout.isNarrow ? '18px' : '24px';
-    const productionTitleFontSize = layout.isNarrow ? '15px' : '16px';
-    const productionTextFontSize = layout.isNarrow ? '12px' : '14px';
-    const productionLineSpacing = layout.isNarrow ? 2 : 5;
-    const hudContainer = this.add.container(0, 0);
-
-    hudContainer.add(this.add.rectangle(layout.hudX + 3, layout.hudY + 4, layout.hudWidth, layout.hudHeight, THEME.shadow, 0.25)
-      .setOrigin(0));
-
-    hudContainer.add(this.add.rectangle(layout.hudX, layout.hudY, layout.hudWidth, layout.hudHeight, THEME.panel, 0.86)
-      .setOrigin(0)
-      .setStrokeStyle(2, THEME.panelBorder, 0.72));
-
-    this.coinText = this.add.text(layout.hudX + 18, layout.hudY + 10, this.t('ui.hud.coins', {
-      amount: this.formatCoinAmount(this.currency.coins),
-    }), {
-      color: THEME.goldText,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: coinFontSize,
-      fontStyle: 'bold',
-      fixedWidth: layout.hudWidth - 30,
-    });
-    hudContainer.add(this.coinText);
-
-    this.incomeText = this.add.text(layout.hudX + 18, layout.hudY + (layout.isNarrow ? 36 : 39), this.t('common.perSecond', { amount: '+0' }), {
-      color: '#d9f6ba',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: layout.isNarrow ? '13px' : '15px',
-      fontStyle: 'bold',
-      fixedWidth: layout.hudWidth - 30,
-    });
-    hudContainer.add(this.incomeText);
-
-    hudContainer.add(this.add.rectangle(layout.statsX + 3, layout.statsY + 4, layout.statsWidth, layout.statsHeight, THEME.shadow, 0.2)
-      .setOrigin(0));
-
-    hudContainer.add(this.add.rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight, THEME.panel, 0.8)
-      .setOrigin(0)
-      .setStrokeStyle(2, THEME.slot, 0.62));
-
-    hudContainer.add(this.add.text(layout.statsX + 18, layout.statsY + 9, this.t('ui.hud.production'), {
-      color: THEME.text,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: productionTitleFontSize,
-      fontStyle: 'bold',
-    }));
-
-    this.productionStatsText = this.add.text(layout.statsX + 18, layout.statsY + 32, '', {
-      color: THEME.mutedText,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: productionTextFontSize,
-      lineSpacing: productionLineSpacing,
-      fixedWidth: layout.statsWidth - 30,
-      wordWrap: {
-        width: layout.statsWidth - 30,
-      },
-    });
-    hudContainer.add(this.productionStatsText);
-
-    this.hudContainer = hudContainer;
+    this.hudView.create(this.currency.coins);
   }
 
   private createOrderWidget(): void {
@@ -996,85 +946,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private createHatchArea(): void {
-    this.hatchContainer?.destroy();
-
-    const layout = this.getLayout();
-    const panelWidth = layout.hatchWidth;
-    const panelHeight = layout.hatchHeight;
-    const x = layout.hatchX;
-    const y = layout.hatchY;
-    const eggX = x + Math.min(48, panelWidth * 0.19);
-    const textX = x + Math.min(88, panelWidth * 0.34);
-    const hatchContainer = this.add.container(0, 0);
-
-    hatchContainer.add(this.add.rectangle(x + 4, y + 5, panelWidth, panelHeight, THEME.shadow, 0.35)
-      .setOrigin(0));
-
-    const hatchPanel = this.add.rectangle(x, y, panelWidth, panelHeight, 0x49395d, 0.92)
-      .setOrigin(0)
-      .setStrokeStyle(3, THEME.panelBorder, 0.9);
-    this.hatchPanel = hatchPanel;
-    hatchContainer.add(hatchPanel);
-
-    hatchPanel
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        if (this.isModalOpen()) {
-          return;
-        }
-
-        this.playButtonClickSound();
-        this.hatchMonster();
-      })
-      .on('pointerover', () => {
-        if (this.isModalOpen()) {
-          this.resetFarmControlHoverState();
-          return;
-        }
-
-        hatchPanel.setFillStyle(0x58456f, 0.96);
-      })
-      .on('pointerout', () => {
-        hatchPanel.setFillStyle(0x49395d, 0.92);
-      });
-
-    hatchContainer.add(this.add.ellipse(eggX + 2, y + 40, 44, 56, THEME.shadow, 0.2));
-    hatchContainer.add(this.add.ellipse(eggX, y + 38, 44, 56, 0xffe7a8)
-      .setStrokeStyle(3, 0x9f6a2a, 0.95));
-    hatchContainer.add(this.add.ellipse(eggX - 8, y + 29, 12, 18, 0xffffff, 0.35));
-
-    this.hatchLabelText = this.add.text(textX, y + 16, this.t('ui.hatch.label'), {
-      color: '#ffffff',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: layout.isNarrow ? '21px' : '24px',
-      fontStyle: 'bold',
-      fixedWidth: panelWidth - (textX - x) - 16,
-    });
-    hatchContainer.add(this.hatchLabelText);
-
-    this.hatchStatusText = this.add.text(textX, y + 44, this.t('ui.hatch.ready'), {
-      color: '#d9d6ec',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: layout.isNarrow ? '12px' : '14px',
-      fixedWidth: panelWidth - (textX - x) - 16,
-      wordWrap: {
-        width: panelWidth - (textX - x) - 16,
-      },
-    });
-    hatchContainer.add(this.hatchStatusText);
-
-    this.hatchProgressWidth = Math.min(HATCH_PROGRESS_WIDTH, panelWidth - (textX - x) - 18);
-
-    hatchContainer.add(this.add.rectangle(textX, y + 61, this.hatchProgressWidth, 8, 0x17152a, 0.9)
-      .setOrigin(0)
-      .setStrokeStyle(1, 0xf3d06b, 0.55));
-
-    this.hatchProgressFill = this.add.rectangle(textX, y + 61, this.hatchProgressWidth, 8, 0x8ecf62, 0.95)
-      .setOrigin(0);
-    hatchContainer.add(this.hatchProgressFill);
-
-    this.hatchContainer = hatchContainer;
-
+    this.hatchPanelView.create();
     this.updateHatchCooldownUi();
   }
 
@@ -1705,7 +1577,7 @@ export class FarmScene extends Phaser.Scene {
 
   private setModalOpenVisualState(isOpen: boolean): void {
     this.resetFarmControlHoverState();
-    this.hatchPanel?.setAlpha(isOpen ? 0.82 : 1);
+    this.hatchPanelView.setModalOpenVisualState(isOpen);
     this.tapFarmPanel?.setAlpha(isOpen ? 0.82 : 1);
     this.orderWidgetContainer?.setAlpha(isOpen ? 0.72 : 1);
 
@@ -1715,7 +1587,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private resetFarmControlHoverState(): void {
-    this.hatchPanel?.setFillStyle(0x49395d, 0.92);
+    this.hatchPanelView.resetHoverState();
     this.tapFarmPanel?.setFillStyle(THEME.button, 0.94);
 
     this.menuButtons.forEach(({ text, defaultBackgroundColor }) => {
@@ -4976,34 +4848,14 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private updateHatchCooldownUi(): void {
-    const cooldownMs = this.getHatchCooldownMs();
-    const progress = Phaser.Math.Clamp(this.hatchCooldownMs / cooldownMs, 0, 1);
-    const isReady = progress >= 1;
-    const isFull = this.isFarmFull();
-    const canAfford = this.canAffordHatch();
-    const statusColor = isFull || !canAfford ? '#fff4a8' : '#d9d6ec';
-    const formattedEggCost = this.formatCoinAmount(this.getEffectiveEggCost());
-
-    if (!isReady) {
-      this.hatchLabelText?.setText(this.t('ui.hatch.hatching'));
-      this.hatchStatusText?.setText(this.t('ui.hatch.hatchingStatus', {
-        seconds: Math.ceil((cooldownMs - this.hatchCooldownMs) / 1000),
-        amount: formattedEggCost,
-      }));
-    } else if (isFull) {
-      this.hatchLabelText?.setText(this.t('ui.hatch.farmFull'));
-      this.hatchStatusText?.setText(this.expansionUnlocked ? this.t('ui.hatch.mergeFreeSlot') : this.t('ui.hatch.unlockSlots'));
-    } else if (!canAfford) {
-      this.hatchLabelText?.setText(this.t('ui.hatch.needCoins'));
-      this.hatchStatusText?.setText(this.t('ui.hatch.cost', { amount: formattedEggCost }));
-    } else {
-      this.hatchLabelText?.setText(this.t('ui.hatch.label'));
-      this.hatchStatusText?.setText(this.t('ui.hatch.cost', { amount: formattedEggCost }));
-    }
-
-    this.hatchStatusText?.setColor(statusColor);
-    this.hatchProgressFill?.setDisplaySize(this.hatchProgressWidth * progress, 8);
-    this.hatchProgressFill?.setFillStyle(isReady && canAfford && !isFull ? 0x8ecf62 : 0xf3d06b, 0.95);
+    this.hatchPanelView.refresh({
+      canAfford: this.canAffordHatch(),
+      cooldownMs: this.getHatchCooldownMs(),
+      effectiveEggCost: this.getEffectiveEggCost(),
+      expansionUnlocked: this.expansionUnlocked,
+      hatchCooldownMs: this.hatchCooldownMs,
+      isFull: this.isFarmFull(),
+    });
   }
 
   private discoverMonster(monster: MonsterDefinition): void {
@@ -6139,13 +5991,7 @@ export class FarmScene extends Phaser.Scene {
 
   private updateHud(): void {
     this.currency.coins = this.sanitizeCoins(this.currency.coins);
-    this.coinText?.setText(this.t('ui.hud.coins', {
-      amount: this.formatCoinAmount(this.currency.coins),
-    }));
-    this.incomeText?.setText(this.t('common.perSecond', {
-      amount: `+${this.formatCoinAmount(this.getTotalIncomePerSecond())}`,
-    }));
-    this.updateProductionStatsUi();
+    this.hudView.refresh(this.currency.coins);
     this.updateHatchCooldownUi();
     this.updateTapFarmUi();
   }
@@ -6180,17 +6026,4 @@ export class FarmScene extends Phaser.Scene {
     return multiplier.toFixed(1).replace(/\.0$/, '');
   }
 
-  private updateProductionStatsUi(): void {
-    this.productionStatsText?.setText([
-      this.t('ui.hud.incomePerSecond', {
-        amount: this.formatCoinAmount(this.getTotalIncomePerSecond()),
-      }),
-      this.t('ui.hud.nextEgg', {
-        amount: this.formatCoinAmount(this.getEffectiveEggCost()),
-      }),
-      this.t('ui.hud.offlineCap', {
-        duration: this.formatDuration(this.getOfflineCapSeconds()),
-      }),
-    ].join('\n'));
-  }
 }
