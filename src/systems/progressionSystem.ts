@@ -12,7 +12,7 @@ export const MIN_HATCH_COOLDOWN_MS = 1200;
 export const SLIME_INCOME_BOOST_PER_LEVEL = 0.2;
 export const MUSHROOM_INCOME_BOOST_PER_LEVEL = 0.22;
 export const FUSION_POWER_INCOME_BOOST_PER_LEVEL = 0.15;
-export const ESSENCE_POWER_INCOME_BOOST_PER_LEVEL = 0.15;
+export const RITUAL_INCOME_BOOST_PER_COMPLETION = 0.1;
 export const HATCH_SPEED_REDUCTION_PER_LEVEL = 0.07;
 export const OFFLINE_STORAGE_SECONDS_PER_LEVEL = 1800;
 export const EGG_DISCOUNT_PER_LEVEL = 0.03;
@@ -85,15 +85,15 @@ export function getSporeIncomeMultiplier(fusionPowerLevel: number): number {
   return 1 + sanitizeProgressionLevel(fusionPowerLevel) * FUSION_POWER_INCOME_BOOST_PER_LEVEL;
 }
 
-export function getPrestigeIncomeMultiplier(essencePowerLevel: number): number {
-  return 1 + sanitizeProgressionLevel(essencePowerLevel) * ESSENCE_POWER_INCOME_BOOST_PER_LEVEL;
+export function getPrestigeIncomeMultiplier(totalRitualsPerformed: number): number {
+  return 1 + sanitizeProgressionLevel(totalRitualsPerformed) * RITUAL_INCOME_BOOST_PER_COMPLETION;
 }
 
 export function getEffectiveMonsterIncome(
   monster: Pick<MonsterDefinition, 'family' | 'incomePerSecond'> | null | undefined,
   slimeIncomeBoostLevel: number,
   mushroomIncomeBoostLevel: number,
-  essencePowerLevel: number,
+  totalRitualsPerformed: number,
   fusionPowerLevel = 0,
 ): number {
   if (!monster || !Number.isFinite(monster.incomePerSecond) || monster.incomePerSecond <= 0) {
@@ -103,7 +103,7 @@ export function getEffectiveMonsterIncome(
   return roundCurrency(
     monster.incomePerSecond
     * getFamilyIncomeMultiplier(monster.family, slimeIncomeBoostLevel, mushroomIncomeBoostLevel, fusionPowerLevel)
-    * getPrestigeIncomeMultiplier(essencePowerLevel),
+    * getPrestigeIncomeMultiplier(totalRitualsPerformed),
   );
 }
 
@@ -111,7 +111,7 @@ export function getTotalIncomePerSecond(
   farmSlots: readonly FarmSlotState[],
   slimeIncomeBoostLevel: number,
   mushroomIncomeBoostLevel: number,
-  essencePowerLevel: number,
+  totalRitualsPerformed: number,
   fusionPowerLevel = 0,
 ): number {
   return roundCurrency(farmSlots.reduce((totalIncome, slot) => {
@@ -119,7 +119,7 @@ export function getTotalIncomePerSecond(
       slot.monster,
       slimeIncomeBoostLevel,
       mushroomIncomeBoostLevel,
-      essencePowerLevel,
+      totalRitualsPerformed,
       fusionPowerLevel,
     );
 
@@ -171,17 +171,6 @@ export function calculateOfflineCoins(
   const offlineCoins = cappedElapsedSeconds * incomePerSecond;
 
   return sanitizeCurrency(offlineCoins);
-}
-
-export function canPrestigeFromOwnedMonsters(farmSlots: readonly FarmSlotState[]): boolean {
-  return farmSlots.some((slot) => (
-    (slot.monster?.family === 'Slime' && slot.monster.level >= 6)
-    || (slot.monster?.family === 'Mushroom' && slot.monster.level >= 5)
-  ));
-}
-
-export function getPrestigeEssenceReward(farmSlots: readonly FarmSlotState[]): number {
-  return canPrestigeFromOwnedMonsters(farmSlots) ? 1 : 0;
 }
 
 function sanitizeProgressionLevel(level: number): number {

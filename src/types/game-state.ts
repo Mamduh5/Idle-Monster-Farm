@@ -5,6 +5,7 @@ export type CurrencyState = {
 export type PrestigeState = {
   monsterEssence: number;
   essencePowerLevel: number;
+  totalRitualsPerformed: number;
 };
 
 export const MONSTER_FAMILIES = ['Slime', 'Mushroom', 'Spore'] as const;

@@ -1,8 +1,4 @@
 import type { ZoneId } from '../data/zones';
-import {
-  canPrestigeFromOwnedMonsters,
-  getPrestigeEssenceReward,
-} from '../systems/progressionSystem';
 import type { FarmSlotState } from '../types/game-state';
 
 export type EssencePowerPurchaseResult =
@@ -24,6 +20,9 @@ export type ZoneUnlockSyncResult = {
   currentZone: ZoneId;
   hasPrestigedOnce: boolean;
 };
+
+const RITUAL_ESSENCE_REWARD = 1;
+const RITUAL_INCOME_BOOST_PER_COMPLETION = 0.1;
 
 export function sanitizePrestigeInteger(value: number): number {
   if (!Number.isFinite(value) || value < 0) {
@@ -57,20 +56,64 @@ export function getEssencePowerPurchaseResult(
   };
 }
 
-export function canPrestige(farmSlots: readonly FarmSlotState[]): boolean {
-  return canPrestigeFromOwnedMonsters(farmSlots);
+export function getMonsterRitualPower(monster: FarmSlotState['monster']): number {
+  if (!monster) {
+    return 0;
+  }
+
+  return Math.floor(monster.level * 10 + monster.incomePerSecond);
 }
 
-export function getPrestigeReward(farmSlots: readonly FarmSlotState[]): number {
-  return getPrestigeEssenceReward(farmSlots);
+export function getFarmRitualPower(farmSlots: readonly FarmSlotState[]): number {
+  return farmSlots.reduce((highestPower, slot) => Math.max(highestPower, getMonsterRitualPower(slot.monster)), 0);
 }
 
-export function canPerformSafeRitual(farmSlots: readonly FarmSlotState[], alreadyUsedThisSession: boolean): boolean {
-  return !alreadyUsedThisSession && getSafeRitualReward(farmSlots) > 0;
+export function getRitualRequirement(totalRitualsPerformed: number): number {
+  const ritualCount = sanitizePrestigeInteger(totalRitualsPerformed);
+
+  if (ritualCount >= 50) {
+    return 7000 + (ritualCount - 50) * 350;
+  }
+
+  if (ritualCount >= 20) {
+    return 1500 + (ritualCount - 20) * 180;
+  }
+
+  if (ritualCount >= 10) {
+    return 600 + (ritualCount - 10) * 90;
+  }
+
+  return 180 + ritualCount * 40;
 }
 
-export function getSafeRitualReward(farmSlots: readonly FarmSlotState[]): number {
-  return getPrestigeReward(farmSlots);
+export function canPerformRitual(farmSlots: readonly FarmSlotState[], totalRitualsPerformed: number): boolean {
+  return getFarmRitualPower(farmSlots) >= getRitualRequirement(totalRitualsPerformed);
+}
+
+export function getRitualIncomeMultiplier(totalRitualsPerformed: number): number {
+  return 1 + sanitizePrestigeInteger(totalRitualsPerformed) * RITUAL_INCOME_BOOST_PER_COMPLETION;
+}
+
+export function getPrestigeReward(
+  farmSlots: readonly FarmSlotState[],
+  totalRitualsPerformed: number,
+): number {
+  return canPerformRitual(farmSlots, totalRitualsPerformed) ? RITUAL_ESSENCE_REWARD : 0;
+}
+
+export function canPerformSafeRitual(
+  farmSlots: readonly FarmSlotState[],
+  alreadyUsedThisSession: boolean,
+  totalRitualsPerformed: number,
+): boolean {
+  return !alreadyUsedThisSession && getSafeRitualReward(farmSlots, totalRitualsPerformed) > 0;
+}
+
+export function getSafeRitualReward(
+  farmSlots: readonly FarmSlotState[],
+  totalRitualsPerformed: number,
+): number {
+  return getPrestigeReward(farmSlots, totalRitualsPerformed);
 }
 
 export function createInitialUnlockedZones(defaultZoneId: ZoneId): Set<ZoneId> {
@@ -109,8 +152,9 @@ export function shouldUnlockMushroomForestFromPrestige(
   hasPrestigedOnce: boolean,
   monsterEssence: number,
   essencePowerLevel: number,
+  totalRitualsPerformed = 0,
 ): boolean {
-  return hasPrestigedOnce || monsterEssence > 0 || essencePowerLevel > 0;
+  return hasPrestigedOnce || monsterEssence > 0 || essencePowerLevel > 0 || totalRitualsPerformed > 0;
 }
 
 export function syncZoneUnlockFromPrestigeProgress(
@@ -119,13 +163,19 @@ export function syncZoneUnlockFromPrestigeProgress(
   hasPrestigedOnce: boolean,
   monsterEssence: number,
   essencePowerLevel: number,
+  totalRitualsPerformed: number,
   defaultZoneId: ZoneId,
   mushroomForestZoneId: ZoneId,
 ): ZoneUnlockSyncResult {
   const nextUnlockedZones = new Set(unlockedZones);
   let nextHasPrestigedOnce = hasPrestigedOnce;
 
-  if (shouldUnlockMushroomForestFromPrestige(hasPrestigedOnce, monsterEssence, essencePowerLevel)) {
+  if (shouldUnlockMushroomForestFromPrestige(
+    hasPrestigedOnce,
+    monsterEssence,
+    essencePowerLevel,
+    totalRitualsPerformed,
+  )) {
     nextHasPrestigedOnce = true;
     nextUnlockedZones.add(mushroomForestZoneId);
   }

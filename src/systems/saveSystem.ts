@@ -33,6 +33,7 @@ export type LocalSaveData = {
   upgrades: Record<UpgradeId, number>;
   monsterEssence: number;
   essencePowerLevel: number;
+  totalRitualsPerformed: number;
   currentEggCost: number;
   onboardingHintsSeen: OnboardingHintId[];
   expansionUnlocked: boolean;
@@ -97,6 +98,7 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
     return null;
   }
 
+  const hasPrestigedOnce = rawData.hasPrestigedOnce === true;
   const rawGrid = Array.isArray(rawData.grid) ? rawData.grid : [];
   const rawDiscoveries = Array.isArray(rawData.discoveredMonsters)
     ? rawData.discoveredMonsters
@@ -114,6 +116,7 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
     upgrades: normalizeUpgradeLevels(rawData.upgrades),
     monsterEssence: normalizePrestigeInteger(rawData.monsterEssence),
     essencePowerLevel: normalizePrestigeInteger(rawData.essencePowerLevel),
+    totalRitualsPerformed: normalizeTotalRitualsPerformed(rawData.totalRitualsPerformed, hasPrestigedOnce),
     currentEggCost: normalizeEggCost(rawData.currentEggCost),
     onboardingHintsSeen: normalizeOnboardingHints(rawData.onboardingHintsSeen),
     expansionUnlocked: rawData.expansionUnlocked === true,
@@ -124,8 +127,16 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
     claimedExpeditionIds: normalizeExpeditionIds(rawData.claimedExpeditionIds),
     unlockedZones: normalizeUnlockedZones(rawData.unlockedZones),
     currentZone: normalizeCurrentZone(rawData.currentZone, rawData.unlockedZones),
-    hasPrestigedOnce: rawData.hasPrestigedOnce === true,
+    hasPrestigedOnce,
   };
+}
+
+function normalizeTotalRitualsPerformed(rawTotalRitualsPerformed: unknown, hasPrestigedOnce: boolean): number {
+  if (rawTotalRitualsPerformed === undefined) {
+    return hasPrestigedOnce ? 1 : 0;
+  }
+
+  return normalizePrestigeInteger(rawTotalRitualsPerformed);
 }
 
 function normalizeUnlockedZones(rawZones: unknown): ZoneId[] {

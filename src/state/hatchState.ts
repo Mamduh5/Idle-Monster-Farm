@@ -33,6 +33,12 @@ export type HatchAttemptOptions = {
   isFarmFull: boolean;
 };
 
+export type HatchBlessingTierBonus = {
+  plusOneChance: number;
+  plusTwoChance: number;
+  plusThreeChance: number;
+};
+
 export function isHatchReady(hatchCooldownMs: number, hatchCooldownDurationMs: number): boolean {
   return hatchCooldownMs >= hatchCooldownDurationMs;
 }
@@ -119,6 +125,55 @@ export function getHatchedMonsterDefinition(
   return randomValue < mushroomChance ? buttonMushroom : babySlime;
 }
 
+export function getHatchBlessingTierBonus(essencePowerLevel: number): HatchBlessingTierBonus {
+  const blessingLevel = sanitizeHatchBlessingLevel(essencePowerLevel);
+
+  return {
+    plusOneChance: clamp(blessingLevel * 0.02, 0, 0.25),
+    plusTwoChance: clamp(Math.max(0, blessingLevel - 5) * 0.008, 0, 0.08),
+    plusThreeChance: clamp(Math.max(0, blessingLevel - 15) * 0.003, 0, 0.03),
+  };
+}
+
+export function getHatchBonusLevelFromBlessing(essencePowerLevel: number, randomValue: number): number {
+  const safeRandomValue = Number.isFinite(randomValue) ? clamp(randomValue, 0, 1) : 1;
+  const bonus = getHatchBlessingTierBonus(essencePowerLevel);
+
+  if (safeRandomValue < bonus.plusThreeChance) {
+    return 3;
+  }
+
+  if (safeRandomValue < bonus.plusThreeChance + bonus.plusTwoChance) {
+    return 2;
+  }
+
+  if (safeRandomValue < bonus.plusThreeChance + bonus.plusTwoChance + bonus.plusOneChance) {
+    return 1;
+  }
+
+  return 0;
+}
+
+export function applyHatchBlessingToMonsterDefinition(
+  baseMonster: MonsterDefinition,
+  essencePowerLevel: number,
+  randomValue: number,
+  monsterDefinitions: readonly MonsterDefinition[],
+): MonsterDefinition {
+  const bonusLevel = getHatchBonusLevelFromBlessing(essencePowerLevel, randomValue);
+
+  if (bonusLevel <= 0) {
+    return baseMonster;
+  }
+
+  const targetLevel = baseMonster.level + bonusLevel;
+  const cappedDefinition = monsterDefinitions
+    .filter((monster) => monster.family === baseMonster.family && monster.level <= targetLevel)
+    .sort((left, right) => right.level - left.level)[0];
+
+  return cappedDefinition ?? baseMonster;
+}
+
 export function getMushroomHatchChanceForState(mushroomChanceLevel: number, currentZone: ZoneId): number {
   return getMushroomHatchChance(mushroomChanceLevel, currentZone);
 }
@@ -129,4 +184,12 @@ export function getHatchCooldownDurationForState(hatchSpeedLevel: number): numbe
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function sanitizeHatchBlessingLevel(level: number): number {
+  if (!Number.isFinite(level) || level < 0) {
+    return 0;
+  }
+
+  return Math.floor(level);
 }
