@@ -52,3 +52,5 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+# deploy trigger 2026-05-26T18:40:01.4029009+07:00
