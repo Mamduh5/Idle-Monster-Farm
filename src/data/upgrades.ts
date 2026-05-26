@@ -3,7 +3,12 @@ export type UpgradeId =
   | 'mushroom-income-boost'
   | 'hatch-speed'
   | 'mushroom-chance'
-  | 'offline-storage';
+  | 'offline-storage'
+  | 'egg-discount'
+  | 'tap-power'
+  | 'fusion-power'
+  | 'order-bonus'
+  | 'coin-bug-value';
 
 export type UpgradeDefinition = {
   id: UpgradeId;
@@ -21,7 +26,7 @@ export const UPGRADE_DEFINITIONS: UpgradeDefinition[] = [
     effect: '+20% Slime income per level',
     baseCost: 20,
     costMultiplier: 1.45,
-    maxLevel: 10,
+    maxLevel: 20,
   },
   {
     id: 'mushroom-income-boost',
@@ -29,7 +34,7 @@ export const UPGRADE_DEFINITIONS: UpgradeDefinition[] = [
     effect: '+22% Mushroom income per level',
     baseCost: 35,
     costMultiplier: 1.5,
-    maxLevel: 10,
+    maxLevel: 20,
   },
   {
     id: 'hatch-speed',
@@ -53,7 +58,47 @@ export const UPGRADE_DEFINITIONS: UpgradeDefinition[] = [
     effect: '+30 minutes offline cap per level',
     baseCost: 50,
     costMultiplier: 1.6,
-    maxLevel: 4,
+    maxLevel: 8,
+  },
+  {
+    id: 'egg-discount',
+    name: 'Egg Discount',
+    effect: '-3% hatch egg cost per level',
+    baseCost: 150,
+    costMultiplier: 1.45,
+    maxLevel: 25,
+  },
+  {
+    id: 'tap-power',
+    name: 'Tap Power',
+    effect: '+15% Tap Farm reward per level',
+    baseCost: 90,
+    costMultiplier: 1.5,
+    maxLevel: 20,
+  },
+  {
+    id: 'fusion-power',
+    name: 'Fusion Power',
+    effect: '+15% Spore income per level',
+    baseCost: 250,
+    costMultiplier: 1.55,
+    maxLevel: 20,
+  },
+  {
+    id: 'order-bonus',
+    name: 'Order Bonus',
+    effect: '+10% Order and Goal coin rewards per level',
+    baseCost: 300,
+    costMultiplier: 1.6,
+    maxLevel: 15,
+  },
+  {
+    id: 'coin-bug-value',
+    name: 'Coin Bug Value',
+    effect: '+20% Coin Bug reward per level',
+    baseCost: 180,
+    costMultiplier: 1.55,
+    maxLevel: 15,
   },
 ];
 

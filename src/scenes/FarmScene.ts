@@ -32,14 +32,19 @@ import {
 import {
   calculateOfflineCoins,
   canPrestigeFromOwnedMonsters,
+  getCoinBugReward as getProgressionCoinBugReward,
   getEffectiveMonsterIncome,
+  getEffectiveEggCost,
   getFamilyIncomeMultiplier,
   getHatchCooldownMs,
   getMushroomHatchChance,
   getNextEggCost,
   getOfflineCapSeconds,
+  getOrderCoinReward,
   getPrestigeEssenceReward,
   getPrestigeIncomeMultiplier,
+  getSporeIncomeMultiplier,
+  getTapFarmReward as getProgressionTapFarmReward,
   getTotalIncomePerSecond,
   HATCH_COOLDOWN_MS,
   MUSHROOM_FOREST_HATCH_CHANCE_BONUS,
@@ -243,6 +248,13 @@ export class FarmScene extends Phaser.Scene {
   private tapFarmPanel?: Phaser.GameObjects.Rectangle;
   private tapFarmStatusText?: Phaser.GameObjects.Text;
   private tapFarmEnergyFill?: Phaser.GameObjects.Rectangle;
+  private tapFarmReactionContainer?: Phaser.GameObjects.Container;
+  private tapFarmReactionBubble?: Phaser.GameObjects.Arc;
+  private tapFarmReactionIconText?: Phaser.GameObjects.Text;
+  private tapFarmReactionComboText?: Phaser.GameObjects.Text;
+  private tapFarmReactionRewardText?: Phaser.GameObjects.Text;
+  private tapFarmReactionTween?: Phaser.Tweens.Tween;
+  private tapFarmReactionHideEvent?: Phaser.Time.TimerEvent;
   private hatchContainer?: Phaser.GameObjects.Container;
   private menuControlsContainer?: Phaser.GameObjects.Container;
   private toastContainer?: Phaser.GameObjects.Container;
@@ -418,6 +430,7 @@ export class FarmScene extends Phaser.Scene {
     this.tapFarmPanel = undefined;
     this.tapFarmStatusText = undefined;
     this.tapFarmEnergyFill = undefined;
+    this.clearTapFarmReactionStack();
     this.hatchContainer = undefined;
     this.menuControlsContainer = undefined;
     this.menuButtons = [];
@@ -1076,6 +1089,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private createTapFarmArea(): void {
+    this.clearTapFarmReactionStack();
     this.tapFarmContainer?.destroy();
 
     const layout = this.getLayout();
@@ -2159,6 +2173,7 @@ export class FarmScene extends Phaser.Scene {
       [this.t('ui.help.hatch.label'), this.t('ui.help.hatch.description')],
       [this.t('ui.help.tapFarm.label'), this.t('ui.help.tapFarm.description')],
       [this.t('ui.help.merge.label'), this.t('ui.help.merge.description')],
+      [this.t('ui.help.upgrades.label'), this.t('ui.help.upgrades.description')],
       [this.t('ui.help.orders.label'), this.t('ui.help.orders.description')],
       [this.t('ui.help.info.label'), this.t('ui.help.info.description')],
       [this.t('ui.help.compendium.label'), this.t('ui.help.compendium.description')],
@@ -2840,7 +2855,7 @@ export class FarmScene extends Phaser.Scene {
     }
 
     if (order.reward.type === 'coins') {
-      this.currency.coins = this.sanitizeCoins(this.currency.coins + order.reward.amount);
+      this.currency.coins = this.sanitizeCoins(this.currency.coins + this.getEffectiveOrderCoinReward(order.reward.amount));
     } else {
       this.monsterEssence = this.sanitizePrestigeInteger(this.monsterEssence + order.reward.amount);
       this.syncZoneUnlockFromPrestigeProgress();
@@ -2860,7 +2875,7 @@ export class FarmScene extends Phaser.Scene {
   private getOrderRewardText(reward: OrderReward): string {
     if (reward.type === 'coins') {
       return this.t('common.coins', {
-        amount: this.formatCoinAmount(reward.amount),
+        amount: this.formatCoinAmount(this.getEffectiveOrderCoinReward(reward.amount)),
       });
     }
 
@@ -2969,7 +2984,7 @@ export class FarmScene extends Phaser.Scene {
       .join('\n');
 
     return [
-      `Egg cost: ${this.currentEggCost}`,
+      `Egg cost: ${this.getEffectiveEggCost()} effective / ${this.currentEggCost} raw`,
       `Income/sec: ${this.formatCoinAmount(this.getTotalIncomePerSecond())}`,
       `Hatch cooldown: ${(cooldownMs / MILLISECONDS_PER_SECOND).toFixed(1)}s`,
       `Hatch state: ${hatchState}`,
@@ -3673,10 +3688,12 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getCoinBugReward(): number {
-    return this.sanitizeCoins(Math.max(
+    const baseReward = this.sanitizeCoins(Math.max(
       COIN_BUG_MIN_REWARD,
       this.getTotalIncomePerSecond() * COIN_BUG_REWARD_SECONDS,
     ));
+
+    return getProgressionCoinBugReward(baseReward, this.getUpgradeLevel('coin-bug-value'));
   }
 
   private handleTapFarm(pointer: Phaser.Input.Pointer): void {
@@ -3698,8 +3715,10 @@ export class FarmScene extends Phaser.Scene {
     const layout = this.getLayout();
     const popupX = Number.isFinite(pointer.worldX) ? pointer.worldX : layout.tapFarmX + layout.tapFarmWidth / 2;
     const popupY = Number.isFinite(pointer.worldY) ? pointer.worldY - 10 : layout.tapFarmY;
+    const combo = this.getActiveTapFarmCombo();
 
     this.showFloatingCoinReward(popupX, popupY, reward);
+    this.showTapFarmReactionStack(combo, reward, false);
     this.showTapFarmPulse(this.isTapFarmComboTierTap() ? 0xf3d06b : 0xd9f6ba);
     this.showTapFarmParticles(popupX, popupY, false);
 
@@ -3714,7 +3733,7 @@ export class FarmScene extends Phaser.Scene {
     const baseReward = this.getBaseTapFarmReward();
     const multiplier = this.getTapFarmComboMultiplier(this.getActiveTapFarmCombo());
 
-    return this.sanitizeCoins(baseReward * multiplier);
+    return getProgressionTapFarmReward(baseReward, multiplier, this.getUpgradeLevel('tap-power'));
   }
 
   private getBaseTapFarmReward(): number {
@@ -3740,6 +3759,7 @@ export class FarmScene extends Phaser.Scene {
 
     this.tapFarmCombo = 0;
     this.lastTapFarmComboAt = -TAP_FARM_COMBO_TIMEOUT_MS;
+    this.hideTapFarmReactionStack();
     this.updateTapFarmUi();
   }
 
@@ -3787,16 +3807,153 @@ export class FarmScene extends Phaser.Scene {
 
     this.tapFarmEnergy = 0;
     this.currency.coins = this.sanitizeCoins(this.currency.coins + reward);
+    this.showTapFarmReactionStack(this.getActiveTapFarmCombo(), reward, true);
     this.showFarmBurstReward(x, y, reward);
     this.showTapFarmPulse(0xf3d06b);
     this.showTapFarmParticles(x, y, true);
   }
 
   private getTapFarmBurstReward(): number {
-    return this.sanitizeCoins(Math.max(
+    const baseReward = this.sanitizeCoins(Math.max(
       TAP_FARM_BURST_MIN_REWARD,
       this.getTotalIncomePerSecond() * TAP_FARM_BURST_REWARD_SECONDS,
     ));
+
+    return getProgressionTapFarmReward(baseReward, 1, this.getUpgradeLevel('tap-power'));
+  }
+
+  private showTapFarmReactionStack(combo: number, reward: number, isBurst: boolean): void {
+    const layout = this.getLayout();
+    const safeCombo = Math.max(1, Math.floor(combo));
+    const multiplier = this.getTapFarmComboMultiplier(safeCombo);
+    const x = layout.tapFarmX + layout.tapFarmWidth / 2;
+    const y = Math.max(56, layout.tapFarmY - (layout.isNarrow ? 20 : 28));
+    const color = this.getTapFarmReactionColor(safeCombo, isBurst);
+    const targetScale = this.getTapFarmReactionScale(safeCombo, isBurst);
+
+    if (!this.tapFarmReactionContainer || !this.tapFarmReactionContainer.active) {
+      this.tapFarmReactionContainer = this.add.container(x, y).setDepth(86);
+      this.tapFarmReactionBubble = this.add.circle(0, 0, 34, color, 0.92)
+        .setStrokeStyle(3, 0xffffff, 0.72);
+      this.tapFarmReactionIconText = this.add.text(0, -14, '+', {
+        color: '#ffffff',
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: '25px',
+        fontStyle: 'bold',
+        stroke: '#10291a',
+        strokeThickness: 4,
+      }).setOrigin(0.5);
+      this.tapFarmReactionComboText = this.add.text(0, 5, '', {
+        color: '#ffffff',
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: layout.isNarrow ? '12px' : '13px',
+        fontStyle: 'bold',
+        stroke: '#10291a',
+        strokeThickness: 3,
+        align: 'center',
+      }).setOrigin(0.5);
+      this.tapFarmReactionRewardText = this.add.text(0, 22, '', {
+        color: '#fff4a8',
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: layout.isNarrow ? '10px' : '11px',
+        fontStyle: 'bold',
+        stroke: '#10291a',
+        strokeThickness: 3,
+        align: 'center',
+      }).setOrigin(0.5);
+      this.tapFarmReactionContainer.add([
+        this.tapFarmReactionBubble,
+        this.tapFarmReactionIconText,
+        this.tapFarmReactionComboText,
+        this.tapFarmReactionRewardText,
+      ]);
+    }
+
+    this.tapFarmReactionContainer.setPosition(x, y);
+    this.tweens.killTweensOf(this.tapFarmReactionContainer);
+    this.tapFarmReactionContainer.setVisible(true);
+    this.tapFarmReactionContainer.setAlpha(1);
+    this.tapFarmReactionContainer.setScale(targetScale);
+    this.tapFarmReactionBubble?.setFillStyle(color, isBurst ? 0.98 : 0.92);
+    this.tapFarmReactionBubble?.setStrokeStyle(isBurst ? 5 : 3, isBurst ? 0xfff4a8 : 0xffffff, isBurst ? 0.9 : 0.72);
+    this.tapFarmReactionIconText?.setText(isBurst ? 'BURST' : '+');
+    this.tapFarmReactionIconText?.setFontSize(isBurst ? (layout.isNarrow ? 13 : 14) : (layout.isNarrow ? 23 : 25));
+    this.tapFarmReactionComboText?.setText(this.t('ui.tapFarm.reactionCombo', {
+      combo: safeCombo,
+      multiplier: this.formatTapFarmComboMultiplier(multiplier),
+    }));
+    this.tapFarmReactionRewardText?.setText(this.formatSignedCoinAmount(reward));
+
+    this.tapFarmReactionTween?.stop();
+    this.tapFarmReactionTween = this.tweens.add({
+      targets: this.tapFarmReactionContainer,
+      scale: targetScale * (isBurst ? 1.28 : 1.14),
+      duration: isBurst ? 150 : 95,
+      yoyo: true,
+      ease: 'Sine.easeOut',
+    });
+
+    this.tapFarmReactionHideEvent?.remove(false);
+    this.tapFarmReactionHideEvent = this.time.delayedCall(isBurst ? 1350 : 1100, () => {
+      this.hideTapFarmReactionStack();
+    });
+  }
+
+  private getTapFarmReactionColor(combo: number, isBurst: boolean): number {
+    if (isBurst || combo >= 70) {
+      return 0xd45a90;
+    }
+
+    if (combo >= 40) {
+      return 0x8a63d2;
+    }
+
+    if (combo >= 20) {
+      return 0xe38b3f;
+    }
+
+    if (combo >= 10) {
+      return 0x4f9d70;
+    }
+
+    return 0x3f8c43;
+  }
+
+  private getTapFarmReactionScale(combo: number, isBurst: boolean): number {
+    const comboScale = 0.86 + Math.min(0.62, combo * 0.012);
+    const tierScale = combo >= 70 ? 0.26 : combo >= 40 ? 0.18 : combo >= 20 ? 0.1 : combo >= 10 ? 0.04 : 0;
+
+    return Phaser.Math.Clamp(comboScale + tierScale + (isBurst ? 0.28 : 0), 0.88, 1.82);
+  }
+
+  private hideTapFarmReactionStack(): void {
+    if (!this.tapFarmReactionContainer || !this.tapFarmReactionContainer.active) {
+      return;
+    }
+
+    this.tweens.add({
+      targets: this.tapFarmReactionContainer,
+      alpha: 0,
+      y: this.tapFarmReactionContainer.y - 12,
+      duration: 220,
+      ease: 'Sine.easeIn',
+      onComplete: () => {
+        this.tapFarmReactionContainer?.setVisible(false);
+      },
+    });
+  }
+
+  private clearTapFarmReactionStack(): void {
+    this.tapFarmReactionTween?.stop();
+    this.tapFarmReactionHideEvent?.remove(false);
+    this.tapFarmReactionContainer?.destroy();
+    this.tapFarmReactionContainer = undefined;
+    this.tapFarmReactionBubble = undefined;
+    this.tapFarmReactionIconText = undefined;
+    this.tapFarmReactionComboText = undefined;
+    this.tapFarmReactionRewardText = undefined;
+    this.tapFarmReactionTween = undefined;
+    this.tapFarmReactionHideEvent = undefined;
   }
 
   private showTapFarmPulse(color = 0xd9f6ba): void {
@@ -4097,7 +4254,7 @@ export class FarmScene extends Phaser.Scene {
     }
 
     if (mission.reward.type === 'coins') {
-      this.currency.coins = this.sanitizeCoins(this.currency.coins + mission.reward.amount);
+      this.currency.coins = this.sanitizeCoins(this.currency.coins + this.getEffectiveMissionCoinReward(mission.reward.amount));
     } else {
       this.monsterEssence = this.sanitizePrestigeInteger(this.monsterEssence + mission.reward.amount);
     }
@@ -4115,13 +4272,21 @@ export class FarmScene extends Phaser.Scene {
   private getMissionRewardText(reward: MissionReward): string {
     if (reward.type === 'coins') {
       return this.t('common.coins', {
-        amount: this.formatCoinAmount(reward.amount),
+        amount: this.formatCoinAmount(this.getEffectiveMissionCoinReward(reward.amount)),
       });
     }
 
     return this.t('common.essence', {
       amount: reward.amount,
     });
+  }
+
+  private getEffectiveOrderCoinReward(amount: number): number {
+    return getOrderCoinReward(amount, this.getUpgradeLevel('order-bonus'));
+  }
+
+  private getEffectiveMissionCoinReward(amount: number): number {
+    return getOrderCoinReward(amount, this.getUpgradeLevel('order-bonus'));
   }
 
   private isSlotUnlocked(slotId: number): boolean {
@@ -4434,6 +4599,36 @@ export class FarmScene extends Phaser.Scene {
       });
     }
 
+    if (upgradeId === 'egg-discount') {
+      return this.t('upgrade.current.egg-discount', {
+        amount: this.formatCoinAmount(this.getEffectiveEggCost()),
+      });
+    }
+
+    if (upgradeId === 'tap-power') {
+      return this.t('upgrade.current.tap-power', {
+        value: this.getTapPowerMultiplier().toFixed(2),
+      });
+    }
+
+    if (upgradeId === 'fusion-power') {
+      return this.t('upgrade.current.fusion-power', {
+        value: this.getSporeIncomeMultiplier().toFixed(2),
+      });
+    }
+
+    if (upgradeId === 'order-bonus') {
+      return this.t('upgrade.current.order-bonus', {
+        value: this.getOrderBonusMultiplier().toFixed(2),
+      });
+    }
+
+    if (upgradeId === 'coin-bug-value') {
+      return this.t('upgrade.current.coin-bug-value', {
+        value: this.getCoinBugValueMultiplier().toFixed(2),
+      });
+    }
+
     return this.t('upgrade.current.offline-storage', {
       duration: this.formatDuration(this.getOfflineCapSeconds()),
     });
@@ -4444,7 +4639,12 @@ export class FarmScene extends Phaser.Scene {
       family,
       this.getUpgradeLevel('slime-income-boost'),
       this.getUpgradeLevel('mushroom-income-boost'),
+      this.getUpgradeLevel('fusion-power'),
     );
+  }
+
+  private getSporeIncomeMultiplier(): number {
+    return getSporeIncomeMultiplier(this.getUpgradeLevel('fusion-power'));
   }
 
   private getPrestigeIncomeMultiplier(): number {
@@ -4461,6 +4661,18 @@ export class FarmScene extends Phaser.Scene {
 
   private getMushroomHatchChance(): number {
     return getMushroomHatchChance(this.getUpgradeLevel('mushroom-chance'), this.currentZone);
+  }
+
+  private getTapPowerMultiplier(): number {
+    return getProgressionTapFarmReward(100, 1, this.getUpgradeLevel('tap-power')) / 100;
+  }
+
+  private getOrderBonusMultiplier(): number {
+    return getOrderCoinReward(100, this.getUpgradeLevel('order-bonus')) / 100;
+  }
+
+  private getCoinBugValueMultiplier(): number {
+    return getProgressionCoinBugReward(100, this.getUpgradeLevel('coin-bug-value')) / 100;
   }
 
   private formatDuration(seconds: number): string {
@@ -4498,8 +4710,9 @@ export class FarmScene extends Phaser.Scene {
     }
 
     const hatchDefinition = this.rollHatchMonsterDefinition();
+    const effectiveEggCost = this.getEffectiveEggCost();
 
-    this.currency.coins = this.sanitizeCoins(this.currency.coins - this.currentEggCost);
+    this.currency.coins = this.sanitizeCoins(this.currency.coins - effectiveEggCost);
     emptySlot.monster = this.createMonsterInstance(hatchDefinition);
     this.currentEggCost = this.getNextEggCost(this.currentEggCost);
     audioSystem.playHatch();
@@ -4536,11 +4749,15 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private canAffordHatch(): boolean {
-    return this.currency.coins >= this.currentEggCost;
+    return this.currency.coins >= this.getEffectiveEggCost();
   }
 
   private getNextEggCost(currentEggCost: number): number {
     return getNextEggCost(currentEggCost);
+  }
+
+  private getEffectiveEggCost(): number {
+    return getEffectiveEggCost(this.currentEggCost, this.getUpgradeLevel('egg-discount'));
   }
 
   private sanitizeEggCost(eggCost: number): number {
@@ -4564,7 +4781,7 @@ export class FarmScene extends Phaser.Scene {
     const isFull = this.isFarmFull();
     const canAfford = this.canAffordHatch();
     const statusColor = isFull || !canAfford ? '#fff4a8' : '#d9d6ec';
-    const formattedEggCost = this.formatCoinAmount(this.currentEggCost);
+    const formattedEggCost = this.formatCoinAmount(this.getEffectiveEggCost());
 
     if (!isReady) {
       this.hatchLabelText?.setText(this.t('ui.hatch.hatching'));
@@ -6758,6 +6975,7 @@ export class FarmScene extends Phaser.Scene {
     this.lastTapFarmAt = -TAP_FARM_COOLDOWN_MS;
     this.tapFarmCombo = 0;
     this.lastTapFarmComboAt = -TAP_FARM_COMBO_TIMEOUT_MS;
+    this.clearTapFarmReactionStack();
     this.createExpansionPlaceholder();
     this.createFarmBackground();
     this.refreshOrderWidget();
@@ -6955,6 +7173,7 @@ export class FarmScene extends Phaser.Scene {
       this.getUpgradeLevel('slime-income-boost'),
       this.getUpgradeLevel('mushroom-income-boost'),
       this.essencePowerLevel,
+      this.getUpgradeLevel('fusion-power'),
     );
   }
 
@@ -6964,6 +7183,7 @@ export class FarmScene extends Phaser.Scene {
       this.getUpgradeLevel('slime-income-boost'),
       this.getUpgradeLevel('mushroom-income-boost'),
       this.essencePowerLevel,
+      this.getUpgradeLevel('fusion-power'),
     );
   }
 
@@ -7073,7 +7293,7 @@ export class FarmScene extends Phaser.Scene {
         amount: this.formatCoinAmount(this.getTotalIncomePerSecond()),
       }),
       this.t('ui.hud.nextEgg', {
-        amount: this.formatCoinAmount(this.currentEggCost),
+        amount: this.formatCoinAmount(this.getEffectiveEggCost()),
       }),
       this.t('ui.hud.offlineCap', {
         duration: this.formatDuration(this.getOfflineCapSeconds()),

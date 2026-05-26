@@ -24,14 +24,21 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Own or seed a claimable Order, claim it from the Next Order widget, and confirm the required monster remains on the farm.
 - Buy at least one upgrade and confirm coins, income/cooldown text, and upgrade level update.
 - In Upgrade Shop, switch buy mode to x10, x50, and Max, then confirm buying purchases up to the selected amount without exceeding coins or max level.
+- Confirm Slime Income Boost and Mushroom Income Boost now have 20 levels, Offline Storage has 8 levels, and Hatch Speed remains safely capped.
+- Buy Egg Discount and confirm the displayed Hatch Egg and Production next-egg costs drop while never going below the 10 coin starting cost.
+- Buy Tap Power and confirm Tap Farm normal tap reward, and Farm Burst reward if checked, increase.
+- Buy Fusion Power and confirm owned Spore income and total income/sec increase while Slime and Mushroom family boosts remain separate.
+- Buy Order Bonus and confirm coin rewards in Orders and Goals display and grant the boosted amount; Essence rewards stay unchanged.
+- Buy Coin Bug Value and confirm Coin Bug pickup rewards increase.
+- Use x10 or Max on Egg Discount, Tap Power, Fusion Power, Order Bonus, or Coin Bug Value and confirm bulk buying respects cost, coins, and max level.
 - Claim a completed coin mission, confirm coins increase, and confirm the mission cannot be claimed again.
 - Buy Mushroom Income Boost and Mushroom Chance, then confirm Mushroom income and hatch odds text update.
 - Fill the grid, confirm the hatch panel says the farm is full, then merge a valid pair to free space.
 - Tap Tap Farm and confirm coins increase immediately with a compact `+coins` popup.
 - Tap Tap Farm repeatedly and confirm the combo count and multiplier appear, and tap reward popups grow at combo tiers.
-- Tap Tap Farm repeatedly and confirm floating hearts/particles increase with combo tier.
+- Tap Tap Farm repeatedly and confirm the central reaction stack shows the growing combo count, scales/pulses larger, and changes color at combo tiers.
 - Stop tapping for more than 2 seconds and confirm the combo resets back to the normal Tap Farm status.
-- Tap Tap Farm repeatedly and confirm Farm Burst still triggers at 20 taps, grants bonus coins, resets the meter, and shows a bigger particle burst.
+- Tap Tap Farm repeatedly and confirm Farm Burst still triggers at 20 taps, grants bonus coins, resets the meter, and pops the reaction stack with a bigger burst.
 - Open Menu or another panel, tap where Tap Farm sits, and confirm Tap Farm does not trigger through the modal.
 - Wait for a Coin Bug to appear, tap it, and confirm coins increase with a compact `+coins` popup.
 - Tap near a Coin Bug without hitting the exact visual and confirm proximity pickup collects it reliably.
@@ -71,6 +78,7 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Open Compendium on a desktop/wide browser, page through all entries, and confirm the layout is not compressed or overflowing.
 - Open Upgrade Shop on mobile and confirm rows and Buy buttons are visible without clipping.
 - Open Upgrade Shop on mobile and confirm x1/x10/x50/Max buy mode controls are readable and tappable.
+- Page through the mobile Upgrade Shop and confirm the new upgrade rows remain reachable without masked scrolling or clipped pagination controls.
 - Open Goals on mobile and confirm the mission list remains readable and Claim buttons still work.
 - With a paginated panel open, tap inside the panel body and confirm outside-tap close is not triggered.
 - With outside-tap close enabled, open Menu and tap outside it to confirm Menu closes.

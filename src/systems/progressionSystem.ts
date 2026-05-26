@@ -11,9 +11,14 @@ export const MUSHROOM_HATCH_CHANCE_PER_LEVEL = 0.04;
 export const MIN_HATCH_COOLDOWN_MS = 1200;
 export const SLIME_INCOME_BOOST_PER_LEVEL = 0.2;
 export const MUSHROOM_INCOME_BOOST_PER_LEVEL = 0.22;
+export const FUSION_POWER_INCOME_BOOST_PER_LEVEL = 0.15;
 export const ESSENCE_POWER_INCOME_BOOST_PER_LEVEL = 0.15;
 export const HATCH_SPEED_REDUCTION_PER_LEVEL = 0.07;
 export const OFFLINE_STORAGE_SECONDS_PER_LEVEL = 1800;
+export const EGG_DISCOUNT_PER_LEVEL = 0.03;
+export const TAP_POWER_REWARD_BOOST_PER_LEVEL = 0.15;
+export const ORDER_COIN_REWARD_BOOST_PER_LEVEL = 0.1;
+export const COIN_BUG_REWARD_BOOST_PER_LEVEL = 0.2;
 
 const MILLISECONDS_PER_SECOND = 1000;
 
@@ -27,6 +32,13 @@ export function sanitizeEggCost(eggCost: number): number {
 
 export function getNextEggCost(currentEggCost: number): number {
   return Math.max(STARTING_EGG_COST, Math.ceil(sanitizeEggCost(currentEggCost) * EGG_COST_MULTIPLIER));
+}
+
+export function getEffectiveEggCost(currentEggCost: number, eggDiscountLevel: number): number {
+  const rawCost = sanitizeEggCost(currentEggCost);
+  const discountMultiplier = Math.max(0, 1 - sanitizeProgressionLevel(eggDiscountLevel) * EGG_DISCOUNT_PER_LEVEL);
+
+  return Math.max(STARTING_EGG_COST, Math.ceil(rawCost * discountMultiplier));
 }
 
 export function getHatchCooldownMs(hatchSpeedLevel: number): number {
@@ -52,6 +64,7 @@ export function getFamilyIncomeMultiplier(
   family: MonsterFamily,
   slimeIncomeBoostLevel: number,
   mushroomIncomeBoostLevel: number,
+  fusionPowerLevel = 0,
 ): number {
   if (family === 'Mushroom') {
     return 1 + sanitizeProgressionLevel(mushroomIncomeBoostLevel) * MUSHROOM_INCOME_BOOST_PER_LEVEL;
@@ -61,7 +74,15 @@ export function getFamilyIncomeMultiplier(
     return 1 + sanitizeProgressionLevel(slimeIncomeBoostLevel) * SLIME_INCOME_BOOST_PER_LEVEL;
   }
 
+  if (family === 'Spore') {
+    return getSporeIncomeMultiplier(fusionPowerLevel);
+  }
+
   return 1;
+}
+
+export function getSporeIncomeMultiplier(fusionPowerLevel: number): number {
+  return 1 + sanitizeProgressionLevel(fusionPowerLevel) * FUSION_POWER_INCOME_BOOST_PER_LEVEL;
 }
 
 export function getPrestigeIncomeMultiplier(essencePowerLevel: number): number {
@@ -73,6 +94,7 @@ export function getEffectiveMonsterIncome(
   slimeIncomeBoostLevel: number,
   mushroomIncomeBoostLevel: number,
   essencePowerLevel: number,
+  fusionPowerLevel = 0,
 ): number {
   if (!monster || !Number.isFinite(monster.incomePerSecond) || monster.incomePerSecond <= 0) {
     return 0;
@@ -80,7 +102,7 @@ export function getEffectiveMonsterIncome(
 
   return roundCurrency(
     monster.incomePerSecond
-    * getFamilyIncomeMultiplier(monster.family, slimeIncomeBoostLevel, mushroomIncomeBoostLevel)
+    * getFamilyIncomeMultiplier(monster.family, slimeIncomeBoostLevel, mushroomIncomeBoostLevel, fusionPowerLevel)
     * getPrestigeIncomeMultiplier(essencePowerLevel),
   );
 }
@@ -90,6 +112,7 @@ export function getTotalIncomePerSecond(
   slimeIncomeBoostLevel: number,
   mushroomIncomeBoostLevel: number,
   essencePowerLevel: number,
+  fusionPowerLevel = 0,
 ): number {
   return roundCurrency(farmSlots.reduce((totalIncome, slot) => {
     const income = getEffectiveMonsterIncome(
@@ -97,6 +120,7 @@ export function getTotalIncomePerSecond(
       slimeIncomeBoostLevel,
       mushroomIncomeBoostLevel,
       essencePowerLevel,
+      fusionPowerLevel,
     );
 
     if (!Number.isFinite(income) || income <= 0) {
@@ -105,6 +129,28 @@ export function getTotalIncomePerSecond(
 
     return totalIncome + income;
   }, 0));
+}
+
+export function getTapFarmReward(baseReward: number, comboMultiplier: number, tapPowerLevel: number): number {
+  const safeBaseReward = sanitizeCurrency(baseReward);
+  const safeComboMultiplier = Number.isFinite(comboMultiplier) && comboMultiplier > 0 ? comboMultiplier : 1;
+  const tapPowerMultiplier = 1 + sanitizeProgressionLevel(tapPowerLevel) * TAP_POWER_REWARD_BOOST_PER_LEVEL;
+
+  return sanitizeCurrency(safeBaseReward * safeComboMultiplier * tapPowerMultiplier);
+}
+
+export function getOrderCoinReward(baseReward: number, orderBonusLevel: number): number {
+  const safeBaseReward = sanitizeCurrency(baseReward);
+  const orderMultiplier = 1 + sanitizeProgressionLevel(orderBonusLevel) * ORDER_COIN_REWARD_BOOST_PER_LEVEL;
+
+  return sanitizeCurrency(safeBaseReward * orderMultiplier);
+}
+
+export function getCoinBugReward(baseReward: number, coinBugValueLevel: number): number {
+  const safeBaseReward = sanitizeCurrency(baseReward);
+  const coinBugMultiplier = 1 + sanitizeProgressionLevel(coinBugValueLevel) * COIN_BUG_REWARD_BOOST_PER_LEVEL;
+
+  return sanitizeCurrency(safeBaseReward * coinBugMultiplier);
 }
 
 export function getOfflineCapSeconds(offlineStorageLevel: number): number {

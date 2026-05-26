@@ -9,7 +9,9 @@ Idle Monster Farm is a browser alpha idle merge game. Hatch monsters, merge matc
 - Slime and Mushroom monster families
 - Unlockable expansion slots
 - Upgrade Shop
+- Egg Discount, Tap Power, Fusion Power, Order Bonus, and Coin Bug Value upgrade depth
 - Goals/Missions
+- Tap Farm combo reaction stack and Farm Burst feedback
 - Monster Essence prestige
 - Zone 2: Mushroom Forest
 - Compact Menu navigation for panels
