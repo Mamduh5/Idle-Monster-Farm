@@ -62,6 +62,7 @@ import {
   type UpgradeBuyMode,
   type UpgradePurchasePreview,
 } from '../state/upgradeState';
+import { canAffordEssencePower, canSwitchToZone, createInitialUnlockedZones, getEssencePowerPurchaseResult, getPrestigeReward, getSanitizedUnlockedZones, getZoneSelectionStatus, sanitizePrestigeInteger as sanitizePrestigeIntegerState, syncZoneUnlockFromPrestigeProgress as syncZoneUnlockFromPrestigeProgressState } from '../state/prestigeZoneState';
 import {
   BABY_SLIME,
   BUTTON_MUSHROOM,
@@ -78,6 +79,7 @@ import {
   GRASS_FARM_ZONE_ID,
   MUSHROOM_FOREST_ZONE_ID,
   ZONE_DEFINITIONS,
+  ZONE_IDS,
   type ZoneDefinition,
   type ZoneId,
 } from '../data/zones';
@@ -90,7 +92,6 @@ import {
 } from '../systems/saveSystem';
 import {
   calculateOfflineCoins,
-  canPrestigeFromOwnedMonsters,
   getCoinBugReward as getProgressionCoinBugReward,
   getEffectiveMonsterIncome,
   getEffectiveEggCost,
@@ -100,7 +101,6 @@ import {
   getNextEggCost,
   getOfflineCapSeconds,
   getOrderCoinReward,
-  getPrestigeEssenceReward,
   getPrestigeIncomeMultiplier,
   getSporeIncomeMultiplier,
   getTapFarmReward as getProgressionTapFarmReward,
@@ -318,7 +318,7 @@ export class FarmScene extends Phaser.Scene {
   private completedMissionIds = new Set<MissionId>();
   private claimedMissionIds = new Set<MissionId>();
   private claimedOrderIds = new Set<OrderId>();
-  private unlockedZones = new Set<ZoneId>([GRASS_FARM_ZONE_ID]);
+  private unlockedZones = createInitialUnlockedZones(GRASS_FARM_ZONE_ID);
   private currentZone: ZoneId = GRASS_FARM_ZONE_ID;
   private hasPrestigedOnce = false;
   private settings: GameSettings = loadSettings();
@@ -484,7 +484,7 @@ export class FarmScene extends Phaser.Scene {
     this.completedMissionIds = new Set<MissionId>();
     this.claimedMissionIds = new Set<MissionId>();
     this.claimedOrderIds = new Set<OrderId>();
-    this.unlockedZones = new Set<ZoneId>([GRASS_FARM_ZONE_ID]);
+    this.unlockedZones = createInitialUnlockedZones(GRASS_FARM_ZONE_ID);
     this.currentZone = GRASS_FARM_ZONE_ID;
     this.hasPrestigedOnce = false;
     this.settings = loadSettings();
@@ -1806,13 +1806,14 @@ export class FarmScene extends Phaser.Scene {
     rowHeight: number,
   ): void {
     const isCompactPanel = panelWidth < 400;
-    const isUnlocked = this.unlockedZones.has(zone.id);
-    const isCurrent = this.currentZone === zone.id;
-    const canSelect = isUnlocked && !isCurrent;
+    const status = getZoneSelectionStatus(zone.id, this.currentZone, this.unlockedZones);
+    const isUnlocked = status !== 'locked';
+    const isCurrent = status === 'selected';
+    const canSelect = status === 'unlocked';
     const rowTop = rowY - rowHeight / 2;
-    const statusText = isCurrent
+    const statusText = status === 'selected'
       ? this.t('ui.zone.selected')
-      : isUnlocked
+      : status === 'unlocked'
         ? this.t('ui.zone.unlocked')
         : this.t('ui.zone.lockedPrestige');
     const bonusText = zone.id === MUSHROOM_FOREST_ZONE_ID
@@ -1884,7 +1885,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private switchZone(zoneId: ZoneId): void {
-    if (!this.unlockedZones.has(zoneId) || this.currentZone === zoneId) {
+    if (!canSwitchToZone(zoneId, this.currentZone, this.unlockedZones)) {
       return;
     }
 
@@ -1901,16 +1902,19 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private syncZoneUnlockFromPrestigeProgress(): void {
-    if (this.hasPrestigedOnce || this.monsterEssence > 0 || this.essencePowerLevel > 0) {
-      this.hasPrestigedOnce = true;
-      this.unlockedZones.add(MUSHROOM_FOREST_ZONE_ID);
-    }
+    const syncResult = syncZoneUnlockFromPrestigeProgressState(
+      this.unlockedZones,
+      this.currentZone,
+      this.hasPrestigedOnce,
+      this.monsterEssence,
+      this.essencePowerLevel,
+      GRASS_FARM_ZONE_ID,
+      MUSHROOM_FOREST_ZONE_ID,
+    );
 
-    this.unlockedZones.add(GRASS_FARM_ZONE_ID);
-
-    if (!this.unlockedZones.has(this.currentZone)) {
-      this.currentZone = GRASS_FARM_ZONE_ID;
-    }
+    this.unlockedZones = syncResult.unlockedZones;
+    this.currentZone = syncResult.currentZone;
+    this.hasPrestigedOnce = syncResult.hasPrestigedOnce;
   }
 
   private toggleMissionsPanel(): void {
@@ -2302,7 +2306,7 @@ export class FarmScene extends Phaser.Scene {
     if (order.reward.type === 'coins') {
       this.currency.coins = this.sanitizeCoins(this.currency.coins + this.getEffectiveOrderCoinReward(order.reward.amount));
     } else {
-      this.monsterEssence = this.sanitizePrestigeInteger(this.monsterEssence + order.reward.amount);
+      this.monsterEssence = sanitizePrestigeIntegerState(this.monsterEssence + order.reward.amount);
       this.syncZoneUnlockFromPrestigeProgress();
     }
 
@@ -2623,9 +2627,9 @@ export class FarmScene extends Phaser.Scene {
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
     const { width: panelWidth, height: panelHeight } = getPanelSize(this.scale, 430, 390);
-    const reward = this.getPrestigeEssenceReward();
+    const reward = getPrestigeReward(this.farmSlots);
     const canPrestige = reward > 0;
-    const canBuyEssencePower = this.monsterEssence >= ESSENCE_POWER_COST;
+    const canBuyEssencePower = canAffordEssencePower(this.monsterEssence, ESSENCE_POWER_COST);
 
     panel.setDepth(24);
     addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
@@ -3847,7 +3851,7 @@ export class FarmScene extends Phaser.Scene {
     if (mission.reward.type === 'coins') {
       this.currency.coins = this.sanitizeCoins(this.currency.coins + this.getEffectiveMissionCoinReward(mission.reward.amount));
     } else {
-      this.monsterEssence = this.sanitizePrestigeInteger(this.monsterEssence + mission.reward.amount);
+      this.monsterEssence = sanitizePrestigeIntegerState(this.monsterEssence + mission.reward.amount);
     }
 
     this.claimedMissionIds.add(missionId);
@@ -3975,14 +3979,20 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private buyEssencePower(): void {
-    if (this.monsterEssence < ESSENCE_POWER_COST) {
+    const purchaseResult = getEssencePowerPurchaseResult(
+      this.monsterEssence,
+      this.essencePowerLevel,
+      ESSENCE_POWER_COST,
+    );
+
+    if (!purchaseResult.success) {
       this.showToast(this.t('toast.notEnoughEssence'), 'warning');
       return;
     }
 
-    this.monsterEssence -= ESSENCE_POWER_COST;
-    this.essencePowerLevel += 1;
-    this.hasPrestigedOnce = true;
+    this.monsterEssence = purchaseResult.monsterEssence;
+    this.essencePowerLevel = purchaseResult.essencePowerLevel;
+    this.hasPrestigedOnce = purchaseResult.hasPrestigedOnce;
     this.syncZoneUnlockFromPrestigeProgress();
     this.prestigeConfirmationArmed = false;
     this.updateHud();
@@ -3992,7 +4002,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private tryPrestige(): void {
-    const reward = this.getPrestigeEssenceReward();
+    const reward = getPrestigeReward(this.farmSlots);
 
     if (reward <= 0) {
       this.showToast(this.t('toast.prestigeRequirement'), 'warning');
@@ -4008,14 +4018,6 @@ export class FarmScene extends Phaser.Scene {
     this.performPrestigeReset(reward);
     this.openPrestigePanel();
     this.showToast(this.t('toast.prestigeComplete', { amount: reward }), 'success');
-  }
-
-  private getPrestigeEssenceReward(): number {
-    return getPrestigeEssenceReward(this.farmSlots);
-  }
-
-  private hasPrestigeMilestone(): boolean {
-    return canPrestigeFromOwnedMonsters(this.farmSlots);
   }
 
   private performPrestigeReset(essenceReward: number): void {
@@ -5018,7 +5020,7 @@ export class FarmScene extends Phaser.Scene {
       this.completedMissionIds.add(missionId);
     });
     this.syncMissionStateFromCurrentProgress(false);
-    this.unlockedZones = new Set(saveData.unlockedZones);
+    this.unlockedZones = getSanitizedUnlockedZones(saveData.unlockedZones, ZONE_IDS, GRASS_FARM_ZONE_ID);
     this.currentZone = saveData.currentZone;
     this.hasPrestigedOnce = saveData.hasPrestigedOnce;
     this.syncZoneUnlockFromPrestigeProgress();
@@ -5104,8 +5106,8 @@ export class FarmScene extends Phaser.Scene {
         };
       }),
       upgrades: this.getSanitizedUpgradeLevels(),
-      monsterEssence: this.sanitizePrestigeInteger(this.monsterEssence),
-      essencePowerLevel: this.sanitizePrestigeInteger(this.essencePowerLevel),
+      monsterEssence: sanitizePrestigeIntegerState(this.monsterEssence),
+      essencePowerLevel: sanitizePrestigeIntegerState(this.essencePowerLevel),
       currentEggCost: this.sanitizeEggCost(this.currentEggCost),
       onboardingHintsSeen: Array.from(this.onboardingHintsSeen),
       expansionUnlocked: this.expansionUnlocked,
@@ -5152,7 +5154,7 @@ export class FarmScene extends Phaser.Scene {
     this.completedMissionIds = new Set<MissionId>();
     this.claimedMissionIds = new Set<MissionId>();
     this.claimedOrderIds = new Set<OrderId>();
-    this.unlockedZones = new Set<ZoneId>([GRASS_FARM_ZONE_ID]);
+    this.unlockedZones = createInitialUnlockedZones(GRASS_FARM_ZONE_ID);
     this.currentZone = GRASS_FARM_ZONE_ID;
     this.hasPrestigedOnce = false;
     this.monsterEssence = 0;
@@ -5394,14 +5396,6 @@ export class FarmScene extends Phaser.Scene {
     }
 
     return this.roundCurrency(coins);
-  }
-
-  private sanitizePrestigeInteger(value: number): number {
-    if (!Number.isFinite(value) || value < 0) {
-      return 0;
-    }
-
-    return Math.floor(value);
   }
 
   private roundCurrency(coins: number): number {
