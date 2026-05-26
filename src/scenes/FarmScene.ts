@@ -21,6 +21,37 @@ import { EXPANSION_UNLOCK_COST, STARTING_EGG_COST } from '../data/economy';
 import { MISSION_DEFINITIONS, type MissionDefinition, type MissionId, type MissionReward } from '../data/missions';
 import { ORDER_DEFINITIONS, type OrderDefinition, type OrderId, type OrderReward } from '../data/orders';
 import {
+  canMergeSlots as canMergeFarmSlots,
+  canMoveSlots as canMoveFarmSlots,
+  clearSlotMonster,
+  createInitialFarmSlots as createInitialFarmSlotState,
+  findFirstEmptyUnlockedSlot,
+  getUnlockedFarmSlots as getUnlockedFarmSlotState,
+  isFarmFull as isFarmSlotStateFull,
+  isSlotUnlocked as isFarmSlotUnlocked,
+  moveSlotMonster as moveFarmSlotMonster,
+  setSlotMonster,
+} from '../state/farmSlotState';
+import {
+  canIncrementMission,
+  createInitialMissionProgress as createInitialMissionProgressState,
+  getIncrementedMissionProgress,
+  getMissionClaimStatus,
+  getMissionDefinition as getMissionDefinitionFromState,
+  getMissionProgress as getMissionProgressFromState,
+  getSanitizedMissionProgress as getSanitizedMissionProgressFromState,
+} from '../state/missionState';
+import {
+  canClaimOrder,
+  getMonsterDiscoveryKey,
+  getOrderDefinition as getOrderDefinitionFromState,
+  getOrderStatus,
+  getRecommendedOrder as getRecommendedOrderFromState,
+  isOrderComplete as isOrderCompleteState,
+  isOrderUnlocked as isOrderUnlockedState,
+  type MonsterDiscoveryKey,
+} from '../state/orderState';
+import {
   BABY_SLIME,
   BUTTON_MUSHROOM,
   getMonsterDefinition,
@@ -68,7 +99,7 @@ import {
   MUSHROOM_FOREST_HATCH_CHANCE_BONUS,
   sanitizeEggCost,
 } from '../systems/progressionSystem';
-import { canMergeMonsters, getMonsterMergeResult } from '../systems/monsterMergeSystem';
+import { getMonsterMergeResult } from '../systems/monsterMergeSystem';
 import { audioSystem } from '../systems/audioSystem';
 import { getText, type LanguageCode } from '../i18n/translations';
 import { loadSettings, writeSettings, type GameSettings } from '../systems/settingsSystem';
@@ -146,7 +177,7 @@ const THEME = {
 };
 
 type MonsterDragZone = Phaser.GameObjects.Zone;
-type DiscoveryKey = `${MonsterFamily}:${number}`;
+type DiscoveryKey = MonsterDiscoveryKey;
 type UiLayoutMode = 'mobile' | 'desktop';
 type ModalKind = 'compendium' | 'upgrade-shop' | 'goals' | 'orders' | 'default';
 type UpgradeBuyMode = 'x1' | 'x10' | 'x50' | 'max';
@@ -2190,7 +2221,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getOrderDefinition(orderId: OrderId): OrderDefinition | undefined {
-    return ORDER_DEFINITIONS.find((order) => order.id === orderId);
+    return getOrderDefinitionFromState(ORDER_DEFINITIONS, orderId);
   }
 
   private getLocalizedOrderTitle(order: OrderDefinition): string {
@@ -2205,15 +2236,17 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getOrderStatusText(order: OrderDefinition): string {
-    if (this.claimedOrderIds.has(order.id)) {
+    const status = getOrderStatus(order, this.farmSlots, this.discoveredMonsters, this.claimedOrderIds);
+
+    if (status === 'done') {
       return this.t('ui.orders.done');
     }
 
-    if (!this.isOrderUnlocked(order)) {
+    if (status === 'locked') {
       return this.t('ui.orders.locked');
     }
 
-    if (this.isOrderComplete(order)) {
+    if (status === 'claim') {
       return this.t('ui.orders.claim');
     }
 
@@ -2221,15 +2254,17 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getOrderWidgetStatusText(order: OrderDefinition): string {
-    if (this.claimedOrderIds.has(order.id)) {
+    const status = getOrderStatus(order, this.farmSlots, this.discoveredMonsters, this.claimedOrderIds);
+
+    if (status === 'done') {
       return this.t('ui.orders.done');
     }
 
-    if (this.isOrderComplete(order)) {
+    if (status === 'claim') {
       return this.t('ui.orderWidget.ready');
     }
 
-    if (!this.isOrderUnlocked(order)) {
+    if (status === 'locked') {
       return this.t('ui.orders.locked');
     }
 
@@ -2237,34 +2272,26 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getRecommendedOrder(): OrderDefinition | undefined {
-    return ORDER_DEFINITIONS.find((order) => !this.claimedOrderIds.has(order.id) && this.isOrderComplete(order))
-      ?? ORDER_DEFINITIONS.find((order) => !this.claimedOrderIds.has(order.id) && this.isOrderUnlocked(order))
-      ?? ORDER_DEFINITIONS.find((order) => !this.claimedOrderIds.has(order.id));
+    return getRecommendedOrderFromState(
+      ORDER_DEFINITIONS,
+      this.farmSlots,
+      this.discoveredMonsters,
+      this.claimedOrderIds,
+    );
   }
 
   private isOrderUnlocked(order: OrderDefinition): boolean {
-    if (!order.unlockCondition) {
-      return true;
-    }
-
-    if (order.unlockCondition.type === 'discovered') {
-      return this.discoveredMonsters.has(this.getDiscoveryKey(order.unlockCondition.family, order.unlockCondition.level));
-    }
-
-    return false;
+    return isOrderUnlockedState(order, this.discoveredMonsters);
   }
 
   private isOrderComplete(order: OrderDefinition): boolean {
-    return this.isOrderUnlocked(order) && this.farmSlots.some((slot) => (
-      slot.monster?.family === order.requiredFamily
-      && slot.monster.level >= order.requiredLevel
-    ));
+    return isOrderCompleteState(order, this.farmSlots, this.discoveredMonsters);
   }
 
   private claimOrderReward(orderId: OrderId): void {
     const order = this.getOrderDefinition(orderId);
 
-    if (!order || this.claimedOrderIds.has(orderId) || !this.isOrderComplete(order)) {
+    if (!order || !canClaimOrder(order, this.farmSlots, this.discoveredMonsters, this.claimedOrderIds)) {
       return;
     }
 
@@ -3706,50 +3733,37 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private createInitialFarmSlots(): FarmSlotState[] {
-    return Array.from({ length: TOTAL_SLOT_COUNT }, (_, index) => ({
-      id: index,
-      monster: null,
-    }));
+    return createInitialFarmSlotState(TOTAL_SLOT_COUNT);
   }
 
   private createInitialMissionProgress(): Record<MissionId, number> {
-    return Object.fromEntries(
-      MISSION_DEFINITIONS.map((mission) => [mission.id, 0]),
-    ) as Record<MissionId, number>;
+    return createInitialMissionProgressState(MISSION_DEFINITIONS);
   }
 
   private getMissionDefinition(missionId: MissionId): MissionDefinition | undefined {
-    return MISSION_DEFINITIONS.find((mission) => mission.id === missionId);
+    return getMissionDefinitionFromState(MISSION_DEFINITIONS, missionId);
   }
 
   private getMissionProgress(mission: MissionDefinition): number {
-    if (this.completedMissionIds.has(mission.id)) {
-      return mission.goal;
-    }
-
-    const progress = this.missionProgress[mission.id] ?? 0;
-
-    if (!Number.isFinite(progress) || progress < 0) {
-      return 0;
-    }
-
-    return Math.min(Math.floor(progress), mission.goal);
+    return getMissionProgressFromState(mission, this.missionProgress, this.completedMissionIds);
   }
 
   private getSanitizedMissionProgress(): Record<MissionId, number> {
-    return Object.fromEntries(
-      MISSION_DEFINITIONS.map((mission) => [mission.id, this.getMissionProgress(mission)]),
-    ) as Record<MissionId, number>;
+    return getSanitizedMissionProgressFromState(
+      MISSION_DEFINITIONS,
+      this.missionProgress,
+      this.completedMissionIds,
+    );
   }
 
   private incrementMissionProgress(missionId: MissionId, amount = 1): void {
     const mission = this.getMissionDefinition(missionId);
 
-    if (!mission || this.completedMissionIds.has(missionId) || this.claimedMissionIds.has(missionId)) {
+    if (!mission || !canIncrementMission(missionId, this.completedMissionIds, this.claimedMissionIds)) {
       return;
     }
 
-    const nextProgress = Math.min(this.getMissionProgress(mission) + amount, mission.goal);
+    const nextProgress = getIncrementedMissionProgress(mission, this.getMissionProgress(mission), amount);
     this.missionProgress[missionId] = nextProgress;
 
     if (nextProgress >= mission.goal) {
@@ -3822,7 +3836,7 @@ export class FarmScene extends Phaser.Scene {
   private claimMissionReward(missionId: MissionId): void {
     const mission = this.getMissionDefinition(missionId);
 
-    if (!mission || !this.completedMissionIds.has(missionId) || this.claimedMissionIds.has(missionId)) {
+    if (!mission || getMissionClaimStatus(mission, this.completedMissionIds, this.claimedMissionIds) !== 'complete') {
       return;
     }
 
@@ -3863,11 +3877,11 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private isSlotUnlocked(slotId: number): boolean {
-    return slotId >= 0 && (slotId < MAIN_SLOT_COUNT || this.expansionUnlocked);
+    return isFarmSlotUnlocked(slotId, this.expansionUnlocked, MAIN_SLOT_COUNT);
   }
 
   private getUnlockedFarmSlots(): FarmSlotState[] {
-    return this.farmSlots.filter((slot) => this.isSlotUnlocked(slot.id));
+    return getUnlockedFarmSlotState(this.farmSlots, this.expansionUnlocked, MAIN_SLOT_COUNT);
   }
 
   private tryUnlockExpansion(): void {
@@ -4265,7 +4279,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private hatchMonster(): void {
-    const emptySlot = this.getUnlockedFarmSlots().find((slot) => slot.monster === null);
+    const emptySlot = findFirstEmptyUnlockedSlot(this.farmSlots, this.expansionUnlocked, MAIN_SLOT_COUNT);
 
     if (!emptySlot) {
       this.showFullFarmMessage();
@@ -4286,14 +4300,14 @@ export class FarmScene extends Phaser.Scene {
     const effectiveEggCost = this.getEffectiveEggCost();
 
     this.currency.coins = this.sanitizeCoins(this.currency.coins - effectiveEggCost);
-    emptySlot.monster = this.createMonsterInstance(hatchDefinition);
+    this.farmSlots = setSlotMonster(this.farmSlots, emptySlot.id, this.createMonsterInstance(hatchDefinition));
     this.currentEggCost = this.getNextEggCost(this.currentEggCost);
     audioSystem.playHatch();
     this.discoverMonster(hatchDefinition);
     this.incrementMissionProgress('hatch-3');
     this.evaluateMonsterMissions(hatchDefinition);
     this.hideFarmMessage();
-    this.renderMonsterInSlot(emptySlot);
+    this.renderMonsterInSlot(this.farmSlots[emptySlot.id]);
     this.updateHud();
     this.showOnboardingHint('income', this.t('hint.income'));
     this.checkMergeOnboardingHint();
@@ -4414,7 +4428,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getDiscoveryKey(family: MonsterFamily, level: number): DiscoveryKey {
-    return `${family}:${level}`;
+    return getMonsterDiscoveryKey(family, level);
   }
 
   private isMonsterDiscovered(monster: MonsterDefinition): boolean {
@@ -4797,7 +4811,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private isFarmFull(): boolean {
-    return this.getUnlockedFarmSlots().every((slot) => slot.monster !== null);
+    return isFarmSlotStateFull(this.farmSlots, this.expansionUnlocked, MAIN_SLOT_COUNT);
   }
 
   private showFullFarmMessage(): void {
@@ -4869,44 +4883,40 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private canMergeSlots(sourceSlotId: number, targetSlotId: number): boolean {
-    if (
-      sourceSlotId === targetSlotId
-      || targetSlotId < 0
-      || !this.isSlotUnlocked(sourceSlotId)
-      || !this.isSlotUnlocked(targetSlotId)
-    ) {
-      return false;
-    }
-
-    const sourceMonster = this.farmSlots[sourceSlotId]?.monster;
-    const targetMonster = this.farmSlots[targetSlotId]?.monster;
-
-    return canMergeMonsters(sourceMonster, targetMonster);
+    return canMergeFarmSlots(
+      this.farmSlots,
+      sourceSlotId,
+      targetSlotId,
+      this.expansionUnlocked,
+      MAIN_SLOT_COUNT,
+    );
   }
 
   private canMoveSlots(sourceSlotId: number, targetSlotId: number): boolean {
-    if (
-      sourceSlotId === targetSlotId
-      || targetSlotId < 0
-      || !this.isSlotUnlocked(sourceSlotId)
-      || !this.isSlotUnlocked(targetSlotId)
-    ) {
-      return false;
-    }
-
-    return Boolean(this.farmSlots[sourceSlotId]?.monster && this.farmSlots[targetSlotId]?.monster === null);
+    return canMoveFarmSlots(
+      this.farmSlots,
+      sourceSlotId,
+      targetSlotId,
+      this.expansionUnlocked,
+      MAIN_SLOT_COUNT,
+    );
   }
 
   private moveSlotMonster(sourceSlotId: number, targetSlotId: number): void {
-    const sourceMonster = this.farmSlots[sourceSlotId]?.monster;
+    const moveResult = moveFarmSlotMonster(
+      this.farmSlots,
+      sourceSlotId,
+      targetSlotId,
+      this.expansionUnlocked,
+      MAIN_SLOT_COUNT,
+    );
 
-    if (!sourceMonster || !this.isSlotUnlocked(targetSlotId) || this.farmSlots[targetSlotId]?.monster) {
+    if (!moveResult.success) {
       return;
     }
 
     this.clearSelectedSlot();
-    this.farmSlots[sourceSlotId].monster = null;
-    this.farmSlots[targetSlotId].monster = sourceMonster;
+    this.farmSlots = moveResult.slots;
 
     this.clearMonsterVisual(sourceSlotId);
     this.renderMonsterInSlot(this.farmSlots[targetSlotId]);
@@ -4926,8 +4936,11 @@ export class FarmScene extends Phaser.Scene {
     }
 
     this.clearSelectedSlot();
-    this.farmSlots[sourceSlotId].monster = null;
-    this.farmSlots[targetSlotId].monster = this.createMonsterInstance(nextMonsterDefinition);
+    this.farmSlots = setSlotMonster(
+      clearSlotMonster(this.farmSlots, sourceSlotId),
+      targetSlotId,
+      this.createMonsterInstance(nextMonsterDefinition),
+    );
     this.discoverMonster(nextMonsterDefinition);
 
     this.clearMonsterVisual(sourceSlotId);
@@ -5020,10 +5033,9 @@ export class FarmScene extends Phaser.Scene {
         return;
       }
 
-      const slot = this.farmSlots[slotId];
-      slot.monster = this.createMonsterInstance(monsterDefinition);
+      this.farmSlots = setSlotMonster(this.farmSlots, slotId, this.createMonsterInstance(monsterDefinition));
       this.discoverMonster(monsterDefinition);
-      this.renderMonsterInSlot(slot);
+      this.renderMonsterInSlot(this.farmSlots[slotId]);
     });
 
     this.upgradeLevels = {
