@@ -64,6 +64,10 @@ import {
 } from '../state/upgradeState';
 import { canAffordEssencePower, canSwitchToZone, createInitialUnlockedZones, getEssencePowerPurchaseResult, getPrestigeReward, getSanitizedUnlockedZones, getZoneSelectionStatus, sanitizePrestigeInteger as sanitizePrestigeIntegerState, syncZoneUnlockFromPrestigeProgress as syncZoneUnlockFromPrestigeProgressState } from '../state/prestigeZoneState';
 import {
+  createLoadedSetsFromSave,
+  createLocalSaveData,
+} from '../state/saveState';
+import {
   BABY_SLIME,
   BUTTON_MUSHROOM,
   getMonsterDefinition,
@@ -5008,17 +5012,16 @@ export class FarmScene extends Phaser.Scene {
     this.monsterEssence = saveData.monsterEssence;
     this.essencePowerLevel = saveData.essencePowerLevel;
     this.currentEggCost = this.sanitizeEggCost(saveData.currentEggCost);
-    this.onboardingHintsSeen = new Set(saveData.onboardingHintsSeen);
+    const loadedSets = createLoadedSetsFromSave(saveData);
+
+    this.onboardingHintsSeen = loadedSets.onboardingHintsSeen;
     this.missionProgress = {
       ...this.createInitialMissionProgress(),
       ...saveData.missionProgress,
     };
-    this.completedMissionIds = new Set(saveData.completedMissionIds);
-    this.claimedMissionIds = new Set(saveData.claimedMissionIds);
-    this.claimedOrderIds = new Set(saveData.claimedOrderIds);
-    this.claimedMissionIds.forEach((missionId) => {
-      this.completedMissionIds.add(missionId);
-    });
+    this.completedMissionIds = loadedSets.completedMissionIds;
+    this.claimedMissionIds = loadedSets.claimedMissionIds;
+    this.claimedOrderIds = loadedSets.claimedOrderIds;
     this.syncMissionStateFromCurrentProgress(false);
     this.unlockedZones = getSanitizedUnlockedZones(saveData.unlockedZones, ZONE_IDS, GRASS_FARM_ZONE_ID);
     this.currentZone = saveData.currentZone;
@@ -5083,42 +5086,26 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    writeSaveData({
+    writeSaveData(createLocalSaveData({
       version: SAVE_VERSION,
       coins: this.sanitizeCoins(this.currency.coins),
-      grid: this.farmSlots.map((slot) => {
-        if (!slot.monster) {
-          return null;
-        }
-
-        return {
-          family: slot.monster.family,
-          level: slot.monster.level,
-        };
-      }),
+      farmSlots: this.farmSlots,
       lastActiveAt: Date.now(),
-      discoveredMonsters: Array.from(this.discoveredMonsters).map((discoveryKey) => {
-        const [family, level] = discoveryKey.split(':');
-
-        return {
-          family: family as MonsterFamily,
-          level: Number(level),
-        };
-      }),
+      discoveredMonsters: this.discoveredMonsters,
       upgrades: this.getSanitizedUpgradeLevels(),
       monsterEssence: sanitizePrestigeIntegerState(this.monsterEssence),
       essencePowerLevel: sanitizePrestigeIntegerState(this.essencePowerLevel),
       currentEggCost: this.sanitizeEggCost(this.currentEggCost),
-      onboardingHintsSeen: Array.from(this.onboardingHintsSeen),
+      onboardingHintsSeen: this.onboardingHintsSeen,
       expansionUnlocked: this.expansionUnlocked,
       missionProgress: this.getSanitizedMissionProgress(),
-      completedMissionIds: Array.from(this.completedMissionIds),
-      claimedMissionIds: Array.from(this.claimedMissionIds),
-      claimedOrderIds: Array.from(this.claimedOrderIds),
-      unlockedZones: Array.from(this.unlockedZones),
+      completedMissionIds: this.completedMissionIds,
+      claimedMissionIds: this.claimedMissionIds,
+      claimedOrderIds: this.claimedOrderIds,
+      unlockedZones: this.unlockedZones,
       currentZone: this.currentZone,
       hasPrestigedOnce: this.hasPrestigedOnce,
-    });
+    }));
 
     this.hasUnsavedProgress = false;
     this.saveThrottleAccumulatorMs = 0;
