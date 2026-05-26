@@ -35,10 +35,10 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Buy Mushroom Income Boost and Mushroom Chance, then confirm Mushroom income and hatch odds text update.
 - Fill the grid, confirm the hatch panel says the farm is full, then merge a valid pair to free space.
 - Tap Tap Farm and confirm coins increase immediately with a compact `+coins` popup.
-- Tap Tap Farm repeatedly and confirm the combo count and multiplier appear, and tap reward popups grow at combo tiers.
-- Tap Tap Farm repeatedly and confirm the central reaction stack shows the growing combo count, scales/pulses larger, and changes color at combo tiers.
+- Tap Tap Farm repeatedly and confirm the combo badge keeps reward text separate while the combo number and multiplier stay readable.
+- Tap Tap Farm repeatedly through 10, 20, 40, and 70 combo tiers and confirm the badge grows, pulses, and gains stronger rings/sparkles/flares.
 - Stop tapping for more than 2 seconds and confirm the combo resets back to the normal Tap Farm status.
-- Tap Tap Farm repeatedly and confirm Farm Burst still triggers at 20 taps, grants bonus coins, resets the meter, and pops the reaction stack with a bigger burst.
+- Tap Tap Farm repeatedly and confirm Farm Burst still triggers at 20 taps, grants bonus coins, resets the meter, and adds a brief stronger badge ring/sparkle burst.
 - Open Menu or another panel, tap where Tap Farm sits, and confirm Tap Farm does not trigger through the modal.
 - Wait for a Coin Bug to appear, tap it, and confirm coins increase with a compact `+coins` popup.
 - Tap near a Coin Bug without hitting the exact visual and confirm proximity pickup collects it reliably.
@@ -61,7 +61,8 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Confirm HUD, production stats, compact Menu button, grid, expansion placeholder, and hatch panel do not overlap.
 - Confirm Tap Farm, Hatch, Menu, grid, and expansion controls remain distinct and usable.
 - Confirm the Next Order widget remains readable and tappable at `360px` width.
-- At `360px` width, confirm HUD, Tap Farm combo text, hatch, toast, and panel text do not visibly overflow their bounds.
+- At `360px` width, confirm HUD, Tap Farm combo badge, hatch, toast, and panel text do not visibly overflow their bounds.
+- At `360px` width, confirm the Tap Farm combo badge sits near Tap Farm without covering Hatch, the farm grid, or monster drag/drop.
 - In deployed mobile Chrome or an equivalent 360px-wide browser viewport, confirm the Hatch panel is fully visible above browser/navigation bars.
 - Confirm the Production panel shows Income/sec, Next Egg, and Offline Cap without clipping.
 - Confirm coin values use clean whole or compact text with no long decimal strings.

@@ -194,6 +194,20 @@ type CoinBug = {
   sparkleTween?: Phaser.Tweens.Tween;
   ringTween?: Phaser.Tweens.Tween;
 };
+type TapFarmReactionTier = {
+  fillColor: number;
+  ringColor: number;
+  glowColor: number;
+  accentColor: number;
+  textStroke: string;
+  numberColor: string;
+  multiplierColor: string;
+  labelColor: string;
+  radius: number;
+  ringWidth: number;
+  sparkleCount: number;
+  flareCount: number;
+};
 type FarmSceneLayout = {
   isNarrow: boolean;
   margin: number;
@@ -249,12 +263,10 @@ export class FarmScene extends Phaser.Scene {
   private tapFarmStatusText?: Phaser.GameObjects.Text;
   private tapFarmEnergyFill?: Phaser.GameObjects.Rectangle;
   private tapFarmReactionContainer?: Phaser.GameObjects.Container;
-  private tapFarmReactionBubble?: Phaser.GameObjects.Arc;
-  private tapFarmReactionIconText?: Phaser.GameObjects.Text;
-  private tapFarmReactionComboText?: Phaser.GameObjects.Text;
-  private tapFarmReactionRewardText?: Phaser.GameObjects.Text;
   private tapFarmReactionTween?: Phaser.Tweens.Tween;
+  private tapFarmReactionHideTween?: Phaser.Tweens.Tween;
   private tapFarmReactionHideEvent?: Phaser.Time.TimerEvent;
+  private tapFarmReactionEffects: Phaser.GameObjects.GameObject[] = [];
   private hatchContainer?: Phaser.GameObjects.Container;
   private menuControlsContainer?: Phaser.GameObjects.Container;
   private toastContainer?: Phaser.GameObjects.Container;
@@ -3718,7 +3730,7 @@ export class FarmScene extends Phaser.Scene {
     const combo = this.getActiveTapFarmCombo();
 
     this.showFloatingCoinReward(popupX, popupY, reward);
-    this.showTapFarmReactionStack(combo, reward, false);
+    this.showTapFarmReactionStack(combo, false);
     this.showTapFarmPulse(this.isTapFarmComboTierTap() ? 0xf3d06b : 0xd9f6ba);
     this.showTapFarmParticles(popupX, popupY, false);
 
@@ -3807,7 +3819,7 @@ export class FarmScene extends Phaser.Scene {
 
     this.tapFarmEnergy = 0;
     this.currency.coins = this.sanitizeCoins(this.currency.coins + reward);
-    this.showTapFarmReactionStack(this.getActiveTapFarmCombo(), reward, true);
+    this.showTapFarmReactionStack(this.getActiveTapFarmCombo(), true);
     this.showFarmBurstReward(x, y, reward);
     this.showTapFarmPulse(0xf3d06b);
     this.showTapFarmParticles(x, y, true);
@@ -3822,69 +3834,29 @@ export class FarmScene extends Phaser.Scene {
     return getProgressionTapFarmReward(baseReward, 1, this.getUpgradeLevel('tap-power'));
   }
 
-  private showTapFarmReactionStack(combo: number, reward: number, isBurst: boolean): void {
+  private showTapFarmReactionStack(combo: number, isBurst: boolean): void {
     const layout = this.getLayout();
     const safeCombo = Math.max(1, Math.floor(combo));
     const multiplier = this.getTapFarmComboMultiplier(safeCombo);
-    const x = layout.tapFarmX + layout.tapFarmWidth / 2;
-    const y = Math.max(56, layout.tapFarmY - (layout.isNarrow ? 20 : 28));
-    const color = this.getTapFarmReactionColor(safeCombo, isBurst);
-    const targetScale = this.getTapFarmReactionScale(safeCombo, isBurst);
+    const tier = this.getTapFarmReactionTier(safeCombo);
+    const targetScale = this.getTapFarmReactionScale(safeCombo);
+    const position = this.getTapFarmReactionPosition(layout, tier, targetScale);
 
     if (!this.tapFarmReactionContainer || !this.tapFarmReactionContainer.active) {
-      this.tapFarmReactionContainer = this.add.container(x, y).setDepth(86);
-      this.tapFarmReactionBubble = this.add.circle(0, 0, 34, color, 0.92)
-        .setStrokeStyle(3, 0xffffff, 0.72);
-      this.tapFarmReactionIconText = this.add.text(0, -14, '+', {
-        color: '#ffffff',
-        fontFamily: UI_FONT_FAMILY,
-        fontSize: '25px',
-        fontStyle: 'bold',
-        stroke: '#10291a',
-        strokeThickness: 4,
-      }).setOrigin(0.5);
-      this.tapFarmReactionComboText = this.add.text(0, 5, '', {
-        color: '#ffffff',
-        fontFamily: UI_FONT_FAMILY,
-        fontSize: layout.isNarrow ? '12px' : '13px',
-        fontStyle: 'bold',
-        stroke: '#10291a',
-        strokeThickness: 3,
-        align: 'center',
-      }).setOrigin(0.5);
-      this.tapFarmReactionRewardText = this.add.text(0, 22, '', {
-        color: '#fff4a8',
-        fontFamily: UI_FONT_FAMILY,
-        fontSize: layout.isNarrow ? '10px' : '11px',
-        fontStyle: 'bold',
-        stroke: '#10291a',
-        strokeThickness: 3,
-        align: 'center',
-      }).setOrigin(0.5);
-      this.tapFarmReactionContainer.add([
-        this.tapFarmReactionBubble,
-        this.tapFarmReactionIconText,
-        this.tapFarmReactionComboText,
-        this.tapFarmReactionRewardText,
-      ]);
+      this.tapFarmReactionContainer = this.add.container(position.x, position.y).setDepth(86);
     }
 
-    this.tapFarmReactionContainer.setPosition(x, y);
+    this.tapFarmReactionTween?.stop();
+    this.tapFarmReactionHideTween?.stop();
     this.tweens.killTweensOf(this.tapFarmReactionContainer);
+    this.tapFarmReactionContainer.removeAll(true);
+    this.tapFarmReactionContainer.setPosition(position.x, position.y);
     this.tapFarmReactionContainer.setVisible(true);
     this.tapFarmReactionContainer.setAlpha(1);
     this.tapFarmReactionContainer.setScale(targetScale);
-    this.tapFarmReactionBubble?.setFillStyle(color, isBurst ? 0.98 : 0.92);
-    this.tapFarmReactionBubble?.setStrokeStyle(isBurst ? 5 : 3, isBurst ? 0xfff4a8 : 0xffffff, isBurst ? 0.9 : 0.72);
-    this.tapFarmReactionIconText?.setText(isBurst ? 'BURST' : '+');
-    this.tapFarmReactionIconText?.setFontSize(isBurst ? (layout.isNarrow ? 13 : 14) : (layout.isNarrow ? 23 : 25));
-    this.tapFarmReactionComboText?.setText(this.t('ui.tapFarm.reactionCombo', {
-      combo: safeCombo,
-      multiplier: this.formatTapFarmComboMultiplier(multiplier),
-    }));
-    this.tapFarmReactionRewardText?.setText(this.formatSignedCoinAmount(reward));
 
-    this.tapFarmReactionTween?.stop();
+    this.populateTapFarmReactionBadge(layout, safeCombo, multiplier, tier, isBurst);
+
     this.tapFarmReactionTween = this.tweens.add({
       targets: this.tapFarmReactionContainer,
       scale: targetScale * (isBurst ? 1.28 : 1.14),
@@ -3893,37 +3865,279 @@ export class FarmScene extends Phaser.Scene {
       ease: 'Sine.easeOut',
     });
 
+    if (isBurst) {
+      this.showTapFarmBadgeBurstEffect(position.x, position.y, tier, targetScale);
+    }
+
     this.tapFarmReactionHideEvent?.remove(false);
-    this.tapFarmReactionHideEvent = this.time.delayedCall(isBurst ? 1350 : 1100, () => {
+    this.tapFarmReactionHideEvent = this.time.delayedCall(TAP_FARM_COMBO_TIMEOUT_MS + 120, () => {
       this.hideTapFarmReactionStack();
     });
   }
 
-  private getTapFarmReactionColor(combo: number, isBurst: boolean): number {
-    if (isBurst || combo >= 70) {
-      return 0xd45a90;
+  private populateTapFarmReactionBadge(
+    layout: FarmSceneLayout,
+    combo: number,
+    multiplier: number,
+    tier: TapFarmReactionTier,
+    isBurst: boolean,
+  ): void {
+    if (!this.tapFarmReactionContainer) {
+      return;
+    }
+
+    const radius = tier.radius;
+    const ringAlpha = isBurst ? 0.95 : 0.78;
+    const sparkleRadius = radius + (layout.isNarrow ? 9 : 11);
+
+    this.tapFarmReactionContainer.add(this.add.circle(2, 4, radius + 8, THEME.shadow, 0.22));
+    this.tapFarmReactionContainer.add(this.add.circle(0, 0, radius + 12, tier.glowColor, isBurst ? 0.28 : 0.18));
+
+    if (tier.flareCount > 0) {
+      const flareWidth = tier.flareCount >= 4 ? 32 : 24;
+      const flareAlpha = tier.flareCount >= 4 ? 0.52 : 0.4;
+
+      this.tapFarmReactionContainer.add(this.add.ellipse(
+        -radius - 13,
+        1,
+        flareWidth,
+        16,
+        tier.accentColor,
+        flareAlpha,
+      ).setAngle(-18));
+      this.tapFarmReactionContainer.add(this.add.ellipse(
+        radius + 13,
+        1,
+        flareWidth,
+        16,
+        tier.accentColor,
+        flareAlpha,
+      ).setAngle(18));
+    }
+
+    this.tapFarmReactionContainer.add(this.add.circle(0, 0, radius, tier.fillColor, 0.96)
+      .setStrokeStyle(tier.ringWidth, tier.ringColor, ringAlpha));
+    this.tapFarmReactionContainer.add(this.add.circle(-radius * 0.28, -radius * 0.34, radius * 0.28, 0xffffff, 0.22));
+    this.tapFarmReactionContainer.add(this.add.circle(radius * 0.24, radius * 0.22, radius * 0.18, tier.accentColor, 0.16));
+
+    if (combo >= 10) {
+      this.tapFarmReactionContainer.add(this.add.circle(0, 0, radius + 7, tier.ringColor, 0)
+        .setStrokeStyle(2, tier.ringColor, combo >= 40 ? 0.58 : 0.42));
+    }
+
+    for (let index = 0; index < tier.sparkleCount; index += 1) {
+      const angle = ((Math.PI * 2) / Math.max(1, tier.sparkleCount)) * index - Math.PI / 2;
+      const distance = sparkleRadius + (index % 2 === 0 ? 0 : 5);
+      const sparkle = this.add.star(
+        Math.cos(angle) * distance,
+        Math.sin(angle) * distance,
+        5,
+        combo >= 40 ? 1.8 : 1.4,
+        combo >= 70 ? 5.8 : combo >= 20 ? 5 : 4,
+        index % 2 === 0 ? tier.ringColor : tier.accentColor,
+        combo >= 20 ? 0.9 : 0.68,
+      );
+      sparkle.setAngle(Phaser.Math.RadToDeg(angle));
+      this.tapFarmReactionContainer.add(sparkle);
+    }
+
+    this.tapFarmReactionContainer.add(this.add.text(0, -radius - 13, this.t('ui.tapFarm.comboLabel'), {
+      color: tier.labelColor,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: layout.isNarrow ? '10px' : '11px',
+      fontStyle: 'bold',
+      stroke: tier.textStroke,
+      strokeThickness: 3,
+    }).setOrigin(0.5));
+
+    this.tapFarmReactionContainer.add(this.add.text(0, -3, combo.toString(), {
+      color: tier.numberColor,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: layout.isNarrow ? '30px' : '34px',
+      fontStyle: 'bold',
+      stroke: tier.textStroke,
+      strokeThickness: 5,
+    }).setOrigin(0.5));
+
+    this.tapFarmReactionContainer.add(this.add.text(0, radius - 7, `x${this.formatTapFarmComboMultiplier(multiplier)}`, {
+      color: tier.multiplierColor,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: layout.isNarrow ? '13px' : '14px',
+      fontStyle: 'bold',
+      stroke: tier.textStroke,
+      strokeThickness: 4,
+    }).setOrigin(0.5));
+  }
+
+  private getTapFarmReactionPosition(
+    layout: FarmSceneLayout,
+    tier: TapFarmReactionTier,
+    targetScale: number,
+  ): Phaser.Math.Vector2 {
+    const scaledRadius = (tier.radius + 22) * targetScale;
+    const x = layout.isNarrow
+      ? Math.min(
+        this.scale.width - layout.margin - scaledRadius,
+        layout.tapFarmX + layout.tapFarmWidth - 38,
+      )
+      : layout.tapFarmX + layout.tapFarmWidth / 2;
+    const y = Math.max(
+      layout.isNarrow ? 68 : 74,
+      layout.tapFarmY - (layout.isNarrow ? 18 : 28),
+    );
+
+    return new Phaser.Math.Vector2(x, y);
+  }
+
+  private getTapFarmReactionTier(combo: number): TapFarmReactionTier {
+    if (combo >= 70) {
+      return {
+        fillColor: 0x7554c8,
+        ringColor: 0xfff0a8,
+        glowColor: 0xff83df,
+        accentColor: 0xf3d06b,
+        textStroke: '#342052',
+        numberColor: '#ffffff',
+        multiplierColor: '#fff0a8',
+        labelColor: '#ffe8ff',
+        radius: 38,
+        ringWidth: 5,
+        sparkleCount: 8,
+        flareCount: 4,
+      };
     }
 
     if (combo >= 40) {
-      return 0x8a63d2;
+      return {
+        fillColor: 0xd88b2f,
+        ringColor: 0xfff0a8,
+        glowColor: 0xffb75e,
+        accentColor: 0xffdf7d,
+        textStroke: '#5f3212',
+        numberColor: '#ffffff',
+        multiplierColor: '#fff0a8',
+        labelColor: '#fff4c8',
+        radius: 36,
+        ringWidth: 4,
+        sparkleCount: 6,
+        flareCount: 2,
+      };
     }
 
     if (combo >= 20) {
-      return 0xe38b3f;
+      return {
+        fillColor: 0xb956bf,
+        ringColor: 0xff9fd6,
+        glowColor: 0xd8bdff,
+        accentColor: 0xfff0a8,
+        textStroke: '#4d2358',
+        numberColor: '#ffffff',
+        multiplierColor: '#fff0a8',
+        labelColor: '#ffe0ff',
+        radius: 34,
+        ringWidth: 4,
+        sparkleCount: 5,
+        flareCount: 0,
+      };
     }
 
     if (combo >= 10) {
-      return 0x4f9d70;
+      return {
+        fillColor: 0x45a985,
+        ringColor: 0xf3d06b,
+        glowColor: 0xa9f7ff,
+        accentColor: 0xd9f6ba,
+        textStroke: '#173c27',
+        numberColor: '#ffffff',
+        multiplierColor: '#fff0a8',
+        labelColor: '#eaffd6',
+        radius: 32,
+        ringWidth: 4,
+        sparkleCount: 3,
+        flareCount: 0,
+      };
     }
 
-    return 0x3f8c43;
+    return {
+      fillColor: 0x3f8c61,
+      ringColor: 0x9ff7ff,
+      glowColor: 0x70d6d0,
+      accentColor: 0xd9f6ba,
+      textStroke: '#10291a',
+      numberColor: '#ffffff',
+      multiplierColor: '#d9f6ba',
+      labelColor: '#eaffd6',
+      radius: 30,
+      ringWidth: 3,
+      sparkleCount: 1,
+      flareCount: 0,
+    };
   }
 
-  private getTapFarmReactionScale(combo: number, isBurst: boolean): number {
-    const comboScale = 0.86 + Math.min(0.62, combo * 0.012);
-    const tierScale = combo >= 70 ? 0.26 : combo >= 40 ? 0.18 : combo >= 20 ? 0.1 : combo >= 10 ? 0.04 : 0;
+  private getTapFarmReactionScale(combo: number): number {
+    const comboScale = 0.9 + Math.min(0.34, combo * 0.006);
+    const tierScale = combo >= 70 ? 0.22 : combo >= 40 ? 0.15 : combo >= 20 ? 0.08 : combo >= 10 ? 0.04 : 0;
 
-    return Phaser.Math.Clamp(comboScale + tierScale + (isBurst ? 0.28 : 0), 0.88, 1.82);
+    return Phaser.Math.Clamp(comboScale + tierScale, 0.9, 1.46);
+  }
+
+  private showTapFarmBadgeBurstEffect(
+    x: number,
+    y: number,
+    tier: TapFarmReactionTier,
+    targetScale: number,
+  ): void {
+    const baseRadius = tier.radius * targetScale;
+
+    for (let index = 0; index < 2; index += 1) {
+      const ring = this.add.circle(x, y, baseRadius + index * 8, tier.ringColor, 0)
+        .setStrokeStyle(index === 0 ? 5 : 3, index === 0 ? 0xfff4a8 : tier.glowColor, index === 0 ? 0.86 : 0.58)
+        .setDepth(85);
+      this.tapFarmReactionEffects.push(ring);
+
+      this.tweens.add({
+        targets: ring,
+        alpha: 0,
+        scale: index === 0 ? 2.05 : 2.45,
+        duration: index === 0 ? 360 : 480,
+        ease: 'Sine.easeOut',
+        onComplete: () => {
+          ring.destroy();
+          this.tapFarmReactionEffects = this.tapFarmReactionEffects.filter((effect) => effect !== ring);
+        },
+      });
+    }
+
+    for (let index = 0; index < 10; index += 1) {
+      const angle = ((Math.PI * 2) / 10) * index;
+      const startDistance = baseRadius + 6;
+      const endDistance = baseRadius + 36 + (index % 2) * 10;
+      const sparkle = this.add.star(
+        x + Math.cos(angle) * startDistance,
+        y + Math.sin(angle) * startDistance,
+        5,
+        2,
+        7,
+        index % 2 === 0 ? tier.ringColor : tier.accentColor,
+        0.95,
+      ).setDepth(87);
+      this.tapFarmReactionEffects.push(sparkle);
+
+      this.tweens.add({
+        targets: sparkle,
+        x: x + Math.cos(angle) * endDistance,
+        y: y + Math.sin(angle) * endDistance,
+        alpha: 0,
+        scale: 1.35,
+        angle: Phaser.Math.RadToDeg(angle) + 45,
+        duration: 520,
+        ease: 'Sine.easeOut',
+        onComplete: () => {
+          sparkle.destroy();
+          this.tapFarmReactionEffects = this.tapFarmReactionEffects.filter((effect) => effect !== sparkle);
+        },
+      });
+    }
   }
 
   private hideTapFarmReactionStack(): void {
@@ -3931,28 +4145,37 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    this.tweens.add({
+    this.tapFarmReactionHideEvent?.remove(false);
+    this.tapFarmReactionHideEvent = undefined;
+    this.tapFarmReactionTween?.stop();
+    this.tapFarmReactionHideTween?.stop();
+    this.tapFarmReactionHideTween = this.tweens.add({
       targets: this.tapFarmReactionContainer,
       alpha: 0,
       y: this.tapFarmReactionContainer.y - 12,
+      scale: this.tapFarmReactionContainer.scale * 0.72,
       duration: 220,
       ease: 'Sine.easeIn',
       onComplete: () => {
         this.tapFarmReactionContainer?.setVisible(false);
+        this.tapFarmReactionHideTween = undefined;
       },
     });
   }
 
   private clearTapFarmReactionStack(): void {
     this.tapFarmReactionTween?.stop();
+    this.tapFarmReactionHideTween?.stop();
     this.tapFarmReactionHideEvent?.remove(false);
+    this.tapFarmReactionEffects.forEach((effect) => {
+      this.tweens.killTweensOf(effect);
+      effect.destroy();
+    });
+    this.tapFarmReactionEffects = [];
     this.tapFarmReactionContainer?.destroy();
     this.tapFarmReactionContainer = undefined;
-    this.tapFarmReactionBubble = undefined;
-    this.tapFarmReactionIconText = undefined;
-    this.tapFarmReactionComboText = undefined;
-    this.tapFarmReactionRewardText = undefined;
     this.tapFarmReactionTween = undefined;
+    this.tapFarmReactionHideTween = undefined;
     this.tapFarmReactionHideEvent = undefined;
   }
 

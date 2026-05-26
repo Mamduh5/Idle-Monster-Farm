@@ -52,6 +52,7 @@ const EN: TranslationTable = {
   'ui.tapFarm.status': 'Tap {amount} | Burst {energy}/{goal}',
   'ui.tapFarm.comboStatus': 'Combo {combo} - x{multiplier}',
   'ui.tapFarm.reactionCombo': 'Combo {combo}\nx{multiplier}',
+  'ui.tapFarm.comboLabel': 'Combo',
   'ui.tapFarm.burstPopup': 'Farm Burst! {amount}',
 
   'ui.expansion.slots': 'Expansion Slots',
@@ -314,6 +315,7 @@ const TH: TranslationTable = {
   'ui.tapFarm.status': 'Tap {amount} | Burst {energy}/{goal}',
   'ui.tapFarm.comboStatus': 'คอมโบ {combo} - x{multiplier}',
   'ui.tapFarm.reactionCombo': 'คอมโบ {combo}\nx{multiplier}',
+  'ui.tapFarm.comboLabel': 'คอมโบ',
   'ui.tapFarm.burstPopup': 'Farm Burst! {amount}',
 
   'ui.expansion.slots': 'ช่องเสริม',
