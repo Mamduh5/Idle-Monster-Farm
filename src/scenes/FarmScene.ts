@@ -77,7 +77,7 @@ import {
   type UpgradeBuyMode,
   type UpgradePurchasePreview,
 } from '../state/upgradeState';
-import { canAffordEssencePower, canSwitchToZone, createInitialUnlockedZones, getEssencePowerPurchaseResult, getPrestigeReward, getSanitizedUnlockedZones, getZoneSelectionStatus, sanitizePrestigeInteger as sanitizePrestigeIntegerState, syncZoneUnlockFromPrestigeProgress as syncZoneUnlockFromPrestigeProgressState } from '../state/prestigeZoneState';
+import { canAffordEssencePower, canPerformSafeRitual, canSwitchToZone, createInitialUnlockedZones, getEssencePowerPurchaseResult, getPrestigeReward, getSafeRitualReward, getSanitizedUnlockedZones, getZoneSelectionStatus, sanitizePrestigeInteger as sanitizePrestigeIntegerState, syncZoneUnlockFromPrestigeProgress as syncZoneUnlockFromPrestigeProgressState } from '../state/prestigeZoneState';
 import {
   createLoadedSetsFromSave,
   createLocalSaveData,
@@ -126,6 +126,7 @@ import { getMonsterMergeResult } from '../systems/monsterMergeSystem';
 import { audioSystem } from '../systems/audioSystem';
 import { getText, type LanguageCode } from '../i18n/translations';
 import { loadSettings, writeSettings, type GameSettings } from '../systems/settingsSystem';
+import { showRewardedAd } from '../services/rewardedAdService';
 import type {
   CurrencyState,
   FarmSlotState,
@@ -309,6 +310,8 @@ export class FarmScene extends Phaser.Scene {
   private settings: GameSettings = loadSettings();
   private resetConfirmationArmed = false;
   private prestigeConfirmationArmed = false;
+  private safeRitualUsedThisSession = false;
+  private safeRitualInProgress = false;
   private compendiumPageIndex = 0;
   private upgradeShopPageIndex = 0;
   private missionsPageIndex = 0;
@@ -476,6 +479,8 @@ export class FarmScene extends Phaser.Scene {
     this.syncAudioSettings();
     this.resetConfirmationArmed = false;
     this.prestigeConfirmationArmed = false;
+    this.safeRitualUsedThisSession = false;
+    this.safeRitualInProgress = false;
     this.compendiumPageIndex = 0;
     this.upgradeShopPageIndex = 0;
     this.missionsPageIndex = 0;
@@ -2609,9 +2614,11 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = getPanelSize(this.scale, 430, 390);
+    const { width: panelWidth, height: panelHeight } = getPanelSize(this.scale, 430, 430);
     const reward = getPrestigeReward(this.farmSlots);
     const canPrestige = reward > 0;
+    const canSafeRitual = canPerformSafeRitual(this.farmSlots, this.safeRitualUsedThisSession)
+      && !this.safeRitualInProgress;
     const canBuyEssencePower = canAffordEssencePower(this.monsterEssence, ESSENCE_POWER_COST);
 
     panel.setDepth(24);
@@ -2671,7 +2678,7 @@ export class FarmScene extends Phaser.Scene {
     }));
 
     this.addEssencePowerSection(panel, panelWidth, panelHeight, canBuyEssencePower);
-    this.addPrestigeAction(panel, panelHeight, canPrestige);
+    this.addPrestigeAction(panel, panelWidth, panelHeight, canPrestige, canSafeRitual);
 
     this.prestigePanel = panel;
   }
@@ -2745,38 +2752,115 @@ export class FarmScene extends Phaser.Scene {
 
   private addPrestigeAction(
     panel: Phaser.GameObjects.Container,
+    panelWidth: number,
     panelHeight: number,
     canPrestige: boolean,
+    canSafeRitual: boolean,
   ): void {
     const label = this.prestigeConfirmationArmed
       ? this.t('ui.prestige.confirm')
-      : this.t('ui.prestige.reset');
+      : this.t('ui.prestige.normalRitual');
     const backgroundColor = !canPrestige
       ? THEME.lockedInner
       : this.prestigeConfirmationArmed
         ? THEME.warning
         : THEME.danger;
+    const actionY = panelHeight / 2 - 42;
+    const isCompact = panelWidth < 390;
 
-    const prestigeText = this.add.text(0, panelHeight / 2 - 38, label, {
+    if (!canPrestige || this.prestigeConfirmationArmed) {
+      const prestigeText = this.add.text(0, actionY, label, {
+        color: canPrestige ? '#ffffff' : '#9ca79f',
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: this.scale.width < 390 ? '14px' : '16px',
+        fontStyle: 'bold',
+        backgroundColor: `#${backgroundColor.toString(16).padStart(6, '0')}`,
+        align: 'center',
+        fixedWidth: Math.min(panelWidth - 76, 320),
+        padding: {
+          x: 13,
+          y: 8,
+        },
+      }).setOrigin(0.5);
+
+      prestigeText
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+          pointer.event?.stopPropagation();
+          this.playButtonClickSound();
+          this.tryPrestige();
+        });
+
+      panel.add(prestigeText);
+      return;
+    }
+
+    const buttonWidth = Math.floor((panelWidth - (isCompact ? 72 : 92)) / 2);
+    const buttonGap = isCompact ? 10 : 14;
+    const normalX = -buttonWidth / 2 - buttonGap / 2;
+    const safeX = buttonWidth / 2 + buttonGap / 2;
+    const normalText = this.add.text(normalX, actionY, label, {
       color: canPrestige ? '#ffffff' : '#9ca79f',
       fontFamily: UI_FONT_FAMILY,
-      fontSize: this.scale.width < 390 ? '14px' : '16px',
+      fontSize: this.scale.width < 390 ? '13px' : '15px',
       fontStyle: 'bold',
       backgroundColor: `#${backgroundColor.toString(16).padStart(6, '0')}`,
+      align: 'center',
+      fixedWidth: buttonWidth,
       padding: {
-        x: 13,
+        x: 8,
         y: 8,
       },
     }).setOrigin(0.5);
 
-    prestigeText
+    normalText
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
+      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation();
         this.playButtonClickSound();
         this.tryPrestige();
       });
 
-    panel.add(prestigeText);
+    const safeBackgroundColor = canSafeRitual ? THEME.buttonHover : THEME.lockedInner;
+    const safeText = this.add.text(safeX, actionY - 8, this.t('ui.prestige.safeRitual'), {
+      color: canSafeRitual ? '#ffffff' : '#9ca79f',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: this.scale.width < 390 ? '13px' : '15px',
+      fontStyle: 'bold',
+      backgroundColor: `#${safeBackgroundColor.toString(16).padStart(6, '0')}`,
+      align: 'center',
+      fixedWidth: buttonWidth,
+      padding: {
+        x: 8,
+        y: 8,
+      },
+    }).setOrigin(0.5);
+
+    safeText
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation();
+        this.playButtonClickSound();
+        void this.trySafeRitual();
+      });
+
+    const safeDetail = this.safeRitualUsedThisSession
+      ? this.t('ui.prestige.safeUsed')
+      : this.t('ui.prestige.safeDetail');
+
+    panel.add(this.add.text(safeX, actionY + 23, safeDetail, {
+      color: canSafeRitual ? '#cdebb3' : '#9ca79f',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompact ? '11px' : '12px',
+      align: 'center',
+      fixedWidth: buttonWidth,
+      wordWrap: {
+        width: buttonWidth,
+      },
+    }).setOrigin(0.5));
+
+    panel.add(normalText);
+    panel.add(safeText);
   }
 
   private closePrestigePanel(resetConfirmation = true): void {
@@ -3932,6 +4016,63 @@ export class FarmScene extends Phaser.Scene {
     this.showToast(this.t('toast.prestigeComplete', { amount: reward }), 'success');
   }
 
+  private async trySafeRitual(): Promise<void> {
+    const reward = getSafeRitualReward(this.farmSlots);
+
+    if (reward <= 0) {
+      this.showToast(this.t('toast.prestigeRequirement'), 'warning');
+      return;
+    }
+
+    if (!canPerformSafeRitual(this.farmSlots, this.safeRitualUsedThisSession)) {
+      this.showToast(this.t('toast.safeRitualUsed'), 'warning');
+      return;
+    }
+
+    if (this.safeRitualInProgress) {
+      return;
+    }
+
+    this.safeRitualInProgress = true;
+    this.prestigeConfirmationArmed = false;
+    this.openPrestigePanel();
+
+    const adCompleted = await showRewardedAd('safe-ritual').catch(() => false);
+    this.safeRitualInProgress = false;
+
+    if (!adCompleted) {
+      this.openPrestigePanel();
+      this.showToast(this.t('toast.adNotCompleted'), 'warning');
+      return;
+    }
+
+    const latestReward = getSafeRitualReward(this.farmSlots);
+
+    if (latestReward <= 0) {
+      this.openPrestigePanel();
+      this.showToast(this.t('toast.prestigeRequirement'), 'warning');
+      return;
+    }
+
+    this.performSafeRitualReward(latestReward);
+    this.openPrestigePanel();
+    this.showToast(this.t('toast.safeRitualComplete', { amount: latestReward }), 'success');
+  }
+
+  private performSafeRitualReward(essenceReward: number): void {
+    this.monsterEssence = sanitizePrestigeIntegerState(this.monsterEssence + essenceReward);
+    this.hasPrestigedOnce = true;
+    this.safeRitualUsedThisSession = true;
+    this.syncZoneUnlockFromPrestigeProgress();
+    this.skipSavingUntilProgress = false;
+    this.prestigeConfirmationArmed = false;
+    this.updateHud();
+    this.completeMission('prestige-once');
+    this.refreshOrdersPanel();
+    this.refreshOrderWidget();
+    this.saveProgress();
+  }
+
   private performPrestigeReset(essenceReward: number): void {
     this.monsterEssence += essenceReward;
     this.hasPrestigedOnce = true;
@@ -5025,6 +5166,8 @@ export class FarmScene extends Phaser.Scene {
     this.skipSavingUntilProgress = true;
     this.resetConfirmationArmed = false;
     this.prestigeConfirmationArmed = false;
+    this.safeRitualUsedThisSession = false;
+    this.safeRitualInProgress = false;
     this.discoveredMonsters = new Set<DiscoveryKey>();
     this.onboardingHintsSeen = new Set<OnboardingHintId>();
     this.upgradeLevels = this.createInitialUpgradeLevels();

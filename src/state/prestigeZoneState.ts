@@ -65,6 +65,14 @@ export function getPrestigeReward(farmSlots: readonly FarmSlotState[]): number {
   return getPrestigeEssenceReward(farmSlots);
 }
 
+export function canPerformSafeRitual(farmSlots: readonly FarmSlotState[], alreadyUsedThisSession: boolean): boolean {
+  return !alreadyUsedThisSession && getSafeRitualReward(farmSlots) > 0;
+}
+
+export function getSafeRitualReward(farmSlots: readonly FarmSlotState[]): number {
+  return getPrestigeReward(farmSlots);
+}
+
 export function createInitialUnlockedZones(defaultZoneId: ZoneId): Set<ZoneId> {
   return new Set<ZoneId>([defaultZoneId]);
 }
