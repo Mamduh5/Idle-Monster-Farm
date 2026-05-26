@@ -18,6 +18,13 @@ import {
 import { TapFarmView } from '../ui/TapFarmView';
 import { ToastView, type ToastVariant } from '../ui/ToastView';
 import { EXPANSION_UNLOCK_COST, STARTING_EGG_COST } from '../data/economy';
+import {
+  EXPEDITION_DEFINITIONS,
+  EXPEDITION_IDS,
+  type ExpeditionDefinition,
+  type ExpeditionId,
+  type ExpeditionReward,
+} from '../data/expeditions';
 import { MISSION_DEFINITIONS, type MissionDefinition, type MissionId, type MissionReward } from '../data/missions';
 import { ORDER_DEFINITIONS, type OrderDefinition, type OrderId, type OrderReward } from '../data/orders';
 import {
@@ -66,6 +73,13 @@ import {
   isOrderComplete as isOrderCompleteState,
   isOrderUnlocked as isOrderUnlockedState,
 } from '../state/orderState';
+import {
+  canClaimExpedition,
+  getExpeditionPower,
+  getExpeditionStatus,
+  getSanitizedClaimedExpeditionIds as getSanitizedClaimedExpeditionIdsFromState,
+  type ExpeditionStatus,
+} from '../state/expeditionState';
 import {
   applyUpgradePurchase,
   createInitialUpgradeLevels as createInitialUpgradeLevelState,
@@ -184,7 +198,7 @@ const THEME = {
 
 type MonsterDragZone = Phaser.GameObjects.Zone;
 type UiLayoutMode = 'mobile' | 'desktop';
-type ModalKind = 'compendium' | 'upgrade-shop' | 'goals' | 'orders' | 'default';
+type ModalKind = 'compendium' | 'upgrade-shop' | 'goals' | 'orders' | 'expedition' | 'default';
 type CoinBug = {
   id: number;
   container: Phaser.GameObjects.Container;
@@ -291,6 +305,7 @@ export class FarmScene extends Phaser.Scene {
   private zonePanel?: Phaser.GameObjects.Container;
   private missionsPanel?: Phaser.GameObjects.Container;
   private ordersPanel?: Phaser.GameObjects.Container;
+  private expeditionPanel?: Phaser.GameObjects.Container;
   private upgradeShopPanel?: Phaser.GameObjects.Container;
   private prestigePanel?: Phaser.GameObjects.Container;
   private modalOverlay?: Phaser.GameObjects.Rectangle;
@@ -304,6 +319,7 @@ export class FarmScene extends Phaser.Scene {
   private completedMissionIds = new Set<MissionId>();
   private claimedMissionIds = new Set<MissionId>();
   private claimedOrderIds = new Set<OrderId>();
+  private claimedExpeditionIds = new Set<ExpeditionId>();
   private unlockedZones = createInitialUnlockedZones(GRASS_FARM_ZONE_ID);
   private currentZone: ZoneId = GRASS_FARM_ZONE_ID;
   private hasPrestigedOnce = false;
@@ -316,6 +332,7 @@ export class FarmScene extends Phaser.Scene {
   private upgradeShopPageIndex = 0;
   private missionsPageIndex = 0;
   private ordersPageIndex = 0;
+  private expeditionPageIndex = 0;
   private upgradeBuyMode: UpgradeBuyMode = 'x1';
   private lastBlockedOutsideTapToastAt = 0;
   private lastHiddenAt: number | null = null;
@@ -458,6 +475,7 @@ export class FarmScene extends Phaser.Scene {
     this.zonePanel = undefined;
     this.missionsPanel = undefined;
     this.ordersPanel = undefined;
+    this.expeditionPanel = undefined;
     this.upgradeShopPanel = undefined;
     this.prestigePanel = undefined;
     this.navigationMenuPanelView.destroy();
@@ -472,6 +490,7 @@ export class FarmScene extends Phaser.Scene {
     this.completedMissionIds = new Set<MissionId>();
     this.claimedMissionIds = new Set<MissionId>();
     this.claimedOrderIds = new Set<OrderId>();
+    this.claimedExpeditionIds = new Set<ExpeditionId>();
     this.unlockedZones = createInitialUnlockedZones(GRASS_FARM_ZONE_ID);
     this.currentZone = GRASS_FARM_ZONE_ID;
     this.hasPrestigedOnce = false;
@@ -485,6 +504,7 @@ export class FarmScene extends Phaser.Scene {
     this.upgradeShopPageIndex = 0;
     this.missionsPageIndex = 0;
     this.ordersPageIndex = 0;
+    this.expeditionPageIndex = 0;
     this.upgradeBuyMode = 'x1';
     this.lastBlockedOutsideTapToastAt = 0;
     this.lastHiddenAt = null;
@@ -952,6 +972,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
+    this.closeExpeditionPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -963,6 +984,7 @@ export class FarmScene extends Phaser.Scene {
       { label: this.t('ui.menu.upgrades'), openPanel: () => this.openUpgradeShopPanel() },
       { label: this.t('ui.menu.goals'), openPanel: () => this.openMissionsPanel() },
       { label: this.t('ui.menu.orders'), openPanel: () => this.openOrdersPanel() },
+      { label: this.t('ui.menu.expedition'), openPanel: () => this.openExpeditionPanel() },
       { label: this.t('ui.menu.prestige'), openPanel: () => this.openPrestigePanel() },
       { label: this.t('ui.menu.zone'), openPanel: () => this.openZonePanel() },
       { label: this.t('ui.menu.compendium'), openPanel: () => this.openCompendiumPanel() },
@@ -1048,7 +1070,7 @@ export class FarmScene extends Phaser.Scene {
 
     if (mode === 'mobile') {
       const inset = 12;
-      const isListModal = kind === 'compendium' || kind === 'upgrade-shop' || kind === 'goals' || kind === 'orders';
+      const isListModal = kind === 'compendium' || kind === 'upgrade-shop' || kind === 'goals' || kind === 'orders' || kind === 'expedition';
       const mobileMaxWidth = isListModal ? 390 : preferredWidth;
 
       return getInsetPanelSize(
@@ -1177,6 +1199,7 @@ export class FarmScene extends Phaser.Scene {
       || this.zonePanel
       || this.missionsPanel
       || this.ordersPanel
+      || this.expeditionPanel
       || this.upgradeShopPanel
       || this.prestigePanel
       || this.navigationMenuPanelView.isOpen()
@@ -1225,6 +1248,11 @@ export class FarmScene extends Phaser.Scene {
 
     if (this.ordersPanel) {
       this.closeOrdersPanel();
+      return;
+    }
+
+    if (this.expeditionPanel) {
+      this.closeExpeditionPanel();
       return;
     }
 
@@ -1433,6 +1461,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
+    this.closeExpeditionPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -1639,6 +1668,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
+    this.closeExpeditionPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -1754,6 +1784,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
+    this.closeExpeditionPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -1922,6 +1953,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closeZonePanel();
     this.closeOrdersPanel();
+    this.closeExpeditionPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -2065,6 +2097,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
+    this.closeExpeditionPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -2321,6 +2354,245 @@ export class FarmScene extends Phaser.Scene {
     });
   }
 
+  private toggleExpeditionPanel(): void {
+    if (this.expeditionPanel) {
+      this.closeExpeditionPanel();
+      return;
+    }
+
+    this.openExpeditionPanel();
+  }
+
+  private openExpeditionPanel(): void {
+    this.closeExpeditionPanel();
+    this.closeNavigationMenuPanel();
+    this.closeCompendiumPanel();
+    this.closeSettingsPanel();
+    this.closeHelpPanel();
+    this.closeZonePanel();
+    this.closeMissionsPanel();
+    this.closeOrdersPanel();
+    this.closeUpgradeShopPanel();
+    this.closePrestigePanel();
+    this.closeEconomyDebugPanel();
+    this.cancelActiveDrag();
+    this.clearSelectedSlot();
+    this.showModalOverlay();
+
+    const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
+    const { width: panelWidth, height: panelHeight } = this.getModalSize('expedition', 560, 540);
+    const rowGap = panelWidth < 420 ? 70 : 74;
+    const rowHeight = Math.min(66, rowGap - 8);
+    const firstRowY = -panelHeight / 2 + 132;
+    const bodyHeight = panelHeight - 186;
+    const rowsPerPage = this.getRowsPerPage(rowGap, bodyHeight, EXPEDITION_DEFINITIONS.length, 5, 5);
+    const pageCount = this.getPageCount(EXPEDITION_DEFINITIONS.length, rowsPerPage);
+    const pageIndex = Phaser.Math.Clamp(this.expeditionPageIndex, 0, pageCount - 1);
+    const pageExpeditions = EXPEDITION_DEFINITIONS.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage);
+
+    this.expeditionPageIndex = pageIndex;
+
+    panel.setDepth(24);
+    addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
+
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.expedition.title'), {
+      color: THEME.text,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: getPanelTitleFontSize(panelWidth),
+      fontStyle: 'bold',
+    }));
+
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 54, this.t('ui.expedition.description'), {
+      color: THEME.mutedText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: panelWidth < 390 ? '12px' : '13px',
+      fixedWidth: panelWidth - 48,
+      wordWrap: {
+        width: panelWidth - 48,
+        useAdvancedWrap: true,
+      },
+    }));
+
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 92, this.t('ui.expedition.power', {
+      amount: this.getCurrentExpeditionPower(),
+    }), {
+      color: '#fff4a8',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: panelWidth < 390 ? '15px' : '17px',
+      fontStyle: 'bold',
+    }));
+
+    this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closeExpeditionPanel(), {
+      stopPropagation: true,
+    });
+
+    pageExpeditions.forEach((expedition, index) => {
+      this.addExpeditionRow(panel, expedition, firstRowY + index * rowGap, panelWidth, rowHeight);
+    });
+
+    this.addPaginationControls(panel, panelWidth, panelHeight, pageIndex, pageCount, (nextPageIndex) => {
+      this.expeditionPageIndex = nextPageIndex;
+      this.openExpeditionPanel();
+    });
+
+    this.expeditionPanel = panel;
+  }
+
+  private addExpeditionRow(
+    panel: Phaser.GameObjects.Container,
+    expedition: ExpeditionDefinition,
+    rowY: number,
+    panelWidth: number,
+    rowHeight: number,
+  ): Phaser.GameObjects.Text {
+    const status = this.getExpeditionStatus(expedition);
+    const canClaim = status === 'ready';
+    const isClaimed = status === 'claimed';
+    const isCompactPanel = panelWidth < 420 || rowHeight < 64;
+    const rowTop = rowY - rowHeight / 2;
+    const rowWidth = panelWidth - 48;
+    const leftX = -panelWidth / 2 + 42;
+    const leftTextWidth = panelWidth - (isCompactPanel ? 166 : 196);
+
+    panel.add(this.add.rectangle(0, rowY, rowWidth, rowHeight, isClaimed ? 0x29362f : THEME.panelAlt, 0.92)
+      .setStrokeStyle(2, canClaim ? THEME.slot : THEME.lockedBorder, 0.72));
+
+    panel.add(this.add.text(leftX, rowTop + 7, this.getLocalizedExpeditionName(expedition), {
+      color: isClaimed ? '#cdebb3' : THEME.text,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '13px' : '15px',
+      fontStyle: 'bold',
+      wordWrap: {
+        width: leftTextWidth,
+      },
+    }));
+
+    panel.add(this.add.text(leftX, rowTop + (isCompactPanel ? 27 : 29), this.t('ui.expedition.requiredPower', {
+      amount: expedition.requiredPower,
+    }), {
+      color: canClaim ? '#fff4a8' : THEME.mutedText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '11px' : '12px',
+      wordWrap: {
+        width: leftTextWidth,
+      },
+    }));
+
+    panel.add(this.add.text(leftX, rowTop + (isCompactPanel ? 44 : 47), this.t('common.reward', {
+      reward: this.getExpeditionRewardText(expedition.reward),
+    }), {
+      color: canClaim ? '#fff4a8' : THEME.mutedText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '11px' : '12px',
+      wordWrap: {
+        width: leftTextWidth,
+      },
+    }));
+
+    const actionText = this.add.text(panelWidth / 2 - 42, rowY, this.getExpeditionStatusText(status), {
+      color: isClaimed ? '#cdebb3' : '#ffffff',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '11px' : '13px',
+      fontStyle: 'bold',
+      backgroundColor: `#${(canClaim ? THEME.buttonHover : THEME.lockedInner).toString(16).padStart(6, '0')}`,
+      padding: {
+        x: isCompactPanel ? 7 : 10,
+        y: 5,
+      },
+    }).setOrigin(1, 0.5);
+
+    if (canClaim) {
+      actionText
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+          pointer.event?.stopPropagation();
+          this.playButtonClickSound();
+          this.claimExpeditionReward(expedition.id);
+        });
+    }
+
+    panel.add(actionText);
+    return actionText;
+  }
+
+  private closeExpeditionPanel(): void {
+    if (this.expeditionPanel) {
+      this.expeditionPanel.destroy();
+      this.expeditionPanel = undefined;
+      this.hideModalOverlay();
+    }
+  }
+
+  private refreshExpeditionPanel(): void {
+    if (this.expeditionPanel) {
+      this.openExpeditionPanel();
+    }
+  }
+
+  private getExpeditionDefinition(expeditionId: ExpeditionId): ExpeditionDefinition | undefined {
+    return EXPEDITION_DEFINITIONS.find((expedition) => expedition.id === expeditionId);
+  }
+
+  private getLocalizedExpeditionName(expedition: ExpeditionDefinition): string {
+    return this.t(`expedition.${expedition.id}.name`);
+  }
+
+  private getCurrentExpeditionPower(): number {
+    return getExpeditionPower(this.farmSlots);
+  }
+
+  private getExpeditionStatus(expedition: ExpeditionDefinition): ExpeditionStatus {
+    return getExpeditionStatus(expedition, this.farmSlots, this.claimedExpeditionIds);
+  }
+
+  private getExpeditionStatusText(status: ExpeditionStatus): string {
+    if (status === 'claimed') {
+      return this.t('ui.expedition.claimed');
+    }
+
+    if (status === 'ready') {
+      return this.t('ui.expedition.claim');
+    }
+
+    return this.t('ui.expedition.needPower');
+  }
+
+  private claimExpeditionReward(expeditionId: ExpeditionId): void {
+    const expedition = this.getExpeditionDefinition(expeditionId);
+
+    if (!expedition || !canClaimExpedition(expedition, this.farmSlots, this.claimedExpeditionIds)) {
+      return;
+    }
+
+    if (expedition.reward.type === 'coins') {
+      this.currency.coins = this.sanitizeCoins(this.currency.coins + expedition.reward.amount);
+    } else {
+      this.monsterEssence = sanitizePrestigeIntegerState(this.monsterEssence + expedition.reward.amount);
+      this.syncZoneUnlockFromPrestigeProgress();
+    }
+
+    this.claimedExpeditionIds.add(expeditionId);
+    this.skipSavingUntilProgress = false;
+    this.updateHud();
+    this.saveProgress();
+    this.refreshExpeditionPanel();
+    this.showToast(this.t('toast.expeditionCleared', {
+      reward: this.getExpeditionRewardText(expedition.reward),
+    }), 'success');
+  }
+
+  private getExpeditionRewardText(reward: ExpeditionReward): string {
+    if (reward.type === 'coins') {
+      return this.t('common.coins', {
+        amount: this.formatCoinAmount(reward.amount),
+      });
+    }
+
+    return this.t('common.essence', {
+      amount: reward.amount,
+    });
+  }
+
   private toggleEconomyDebugPanel(): void {
     if (this.economyDebugPanel) {
       this.closeEconomyDebugPanel();
@@ -2339,6 +2611,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
+    this.closeExpeditionPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.clearSelectedSlot();
@@ -2436,6 +2709,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
+    this.closeExpeditionPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
     this.cancelActiveDrag();
@@ -2607,6 +2881,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
+    this.closeExpeditionPanel();
     this.closeUpgradeShopPanel();
     this.closeEconomyDebugPanel();
     this.cancelActiveDrag();
@@ -4465,6 +4740,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
+    this.closeExpeditionPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -5054,6 +5330,7 @@ export class FarmScene extends Phaser.Scene {
     this.completedMissionIds = loadedSets.completedMissionIds;
     this.claimedMissionIds = loadedSets.claimedMissionIds;
     this.claimedOrderIds = loadedSets.claimedOrderIds;
+    this.claimedExpeditionIds = getSanitizedClaimedExpeditionIdsFromState(saveData.claimedExpeditionIds, EXPEDITION_IDS);
     this.syncMissionStateFromCurrentProgress(false);
     this.unlockedZones = getSanitizedUnlockedZones(saveData.unlockedZones, ZONE_IDS, GRASS_FARM_ZONE_ID);
     this.currentZone = saveData.currentZone;
@@ -5134,6 +5411,7 @@ export class FarmScene extends Phaser.Scene {
       completedMissionIds: this.completedMissionIds,
       claimedMissionIds: this.claimedMissionIds,
       claimedOrderIds: this.claimedOrderIds,
+      claimedExpeditionIds: this.claimedExpeditionIds,
       unlockedZones: this.unlockedZones,
       currentZone: this.currentZone,
       hasPrestigedOnce: this.hasPrestigedOnce,
@@ -5175,6 +5453,7 @@ export class FarmScene extends Phaser.Scene {
     this.completedMissionIds = new Set<MissionId>();
     this.claimedMissionIds = new Set<MissionId>();
     this.claimedOrderIds = new Set<OrderId>();
+    this.claimedExpeditionIds = new Set<ExpeditionId>();
     this.unlockedZones = createInitialUnlockedZones(GRASS_FARM_ZONE_ID);
     this.currentZone = GRASS_FARM_ZONE_ID;
     this.hasPrestigedOnce = false;
@@ -5211,6 +5490,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
+    this.closeExpeditionPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeNavigationMenuPanel();
@@ -5254,6 +5534,7 @@ export class FarmScene extends Phaser.Scene {
       || this.completedMissionIds.size > 0
       || this.claimedMissionIds.size > 0
       || this.claimedOrderIds.size > 0
+      || this.claimedExpeditionIds.size > 0
       || Object.values(this.missionProgress).some((progress) => progress > 0)
       || this.farmSlots.some((slot) => slot.monster !== null)
     );

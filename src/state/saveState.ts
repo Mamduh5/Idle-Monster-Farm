@@ -1,5 +1,6 @@
 import type { MissionId } from '../data/missions';
 import type { OrderId } from '../data/orders';
+import type { ExpeditionId } from '../data/expeditions';
 import type { UpgradeId } from '../data/upgrades';
 import type { ZoneId } from '../data/zones';
 import type {
@@ -33,6 +34,7 @@ export type SaveSourceState = {
   completedMissionIds: ReadonlySet<MissionId>;
   claimedMissionIds: ReadonlySet<MissionId>;
   claimedOrderIds: ReadonlySet<OrderId>;
+  claimedExpeditionIds: ReadonlySet<ExpeditionId>;
   unlockedZones: ReadonlySet<ZoneId>;
   currentZone: ZoneId;
   hasPrestigedOnce: boolean;
@@ -43,6 +45,7 @@ export type LoadedSceneStateFragments = {
   completedMissionIds: Set<MissionId>;
   claimedMissionIds: Set<MissionId>;
   claimedOrderIds: Set<OrderId>;
+  claimedExpeditionIds: Set<ExpeditionId>;
 };
 
 export function createLocalSaveData(sourceState: SaveSourceState): LocalSaveData {
@@ -62,6 +65,7 @@ export function createLocalSaveData(sourceState: SaveSourceState): LocalSaveData
     completedMissionIds: Array.from(sourceState.completedMissionIds),
     claimedMissionIds: Array.from(sourceState.claimedMissionIds),
     claimedOrderIds: Array.from(sourceState.claimedOrderIds),
+    claimedExpeditionIds: Array.from(sourceState.claimedExpeditionIds),
     unlockedZones: Array.from(sourceState.unlockedZones),
     currentZone: sourceState.currentZone,
     hasPrestigedOnce: sourceState.hasPrestigedOnce,
@@ -113,5 +117,6 @@ export function createLoadedSetsFromSave(saveData: LocalSaveData): LoadedSceneSt
     completedMissionIds,
     claimedMissionIds,
     claimedOrderIds: new Set(saveData.claimedOrderIds),
+    claimedExpeditionIds: new Set(saveData.claimedExpeditionIds),
   };
 }
