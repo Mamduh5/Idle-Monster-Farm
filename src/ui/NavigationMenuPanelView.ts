@@ -48,7 +48,7 @@ export class NavigationMenuPanelView {
     const { fontFamily, theme } = this.options;
     const layout = this.options.getLayout();
     const preferredPanelWidth = layout.isNarrow ? 260 : 280;
-    const preferredPanelHeight = 398;
+    const preferredPanelHeight = Math.max(220, 96 + menuItems.length * 40);
     const { width: panelWidth, height: panelHeight } = getPanelSize(this.scene.scale, preferredPanelWidth, preferredPanelHeight);
     const panelX = layout.isNarrow
       ? Math.min(this.scene.scale.width - layout.margin - panelWidth / 2, Math.max(layout.margin + panelWidth / 2, layout.menuX - panelWidth / 2))

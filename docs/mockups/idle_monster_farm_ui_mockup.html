@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Idle Monster Farm UI Direction</title>
+  <style>
+    :root {
+      --bg: #172b1d;
+      --grass: #71be64;
+      --grass-dark: #4e8d48;
+      --panel: #173c27;
+      --panel-2: #215737;
+      --panel-3: #2f6b45;
+      --gold: #fff0a8;
+      --cream: #f7ffe8;
+      --muted: #cde5c2;
+      --danger: #8f3044;
+      --purple: #49395d;
+      --line: #f4e6a6;
+      --shadow: rgba(8, 34, 17, .45);
+      --button: #2f6b45;
+      --button-hot: #3f8c61;
+      --orange: #a96528;
+      --blue: #4b84c4;
+      --pink: #b956bf;
+      --dragon: #6740a6;
+      --font: Arial, Tahoma, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top left, #2b5a37 0, #102318 45%, #0b1710 100%);
+      color: var(--cream);
+      font-family: var(--font);
+    }
+    .page {
+      padding: 28px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      letter-spacing: -.03em;
+    }
+    .intro {
+      max-width: 980px;
+      color: var(--muted);
+      margin-bottom: 24px;
+      line-height: 1.45;
+    }
+    .frames {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(320px, 390px));
+      gap: 24px;
+      align-items: start;
+    }
+    .frame-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .frame-title {
+      color: var(--gold);
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+    }
+    .phone {
+      width: 390px;
+      height: 844px;
+      border-radius: 34px;
+      background: #0c160f;
+      padding: 10px;
+      box-shadow: 0 30px 80px rgba(0,0,0,.55), inset 0 0 0 2px rgba(255,255,255,.08);
+    }
+    .screen {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      border-radius: 26px;
+      background:
+        radial-gradient(circle at 65% 12%, rgba(255,255,255,.22) 0 8%, transparent 9%),
+        linear-gradient(#9bd7f2 0 25%, #6fbd64 25% 100%);
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.1);
+    }
+    .sky-hill {
+      position: absolute; inset: 155px -50px auto -50px; height: 110px;
+      background: #5da957; border-radius: 50%; opacity: .9;
+    }
+    .ground-dots span {
+      position: absolute; width: 42px; height: 14px; border-radius: 999px; background: rgba(90, 151, 70, .45);
+    }
+    .panel {
+      position: absolute;
+      background: rgba(23, 60, 39, .94);
+      border: 2px solid rgba(244,230,166,.74);
+      border-radius: 18px;
+      box-shadow: 0 6px 0 rgba(20,53,31,.38), 0 18px 36px rgba(20,53,31,.22);
+    }
+    .hud {
+      left: 14px; right: 82px; top: 14px; height: 66px; padding: 10px 14px;
+    }
+    .hud .coins { color: var(--gold); font-weight: 900; font-size: 19px; }
+    .hud .income { color: #d9f6ba; font-weight: 800; font-size: 13px; margin-top: 3px; }
+    .utility-menu {
+      position: absolute; right: 14px; top: 16px;
+      background: #49395d; border: 2px solid rgba(244,230,166,.55); color: #fff;
+      border-radius: 14px; padding: 8px 10px; font-weight: 900; font-size: 13px;
+      box-shadow: 0 4px 0 rgba(20,53,31,.3);
+    }
+    .next-battle {
+      left: 14px; right: 14px; top: 92px; height: 92px; padding: 12px 14px;
+      display: flex; gap: 12px; align-items: center;
+      background: linear-gradient(135deg, rgba(73,57,93,.96), rgba(31,75,51,.96));
+    }
+    .boss-badge {
+      width: 60px; height: 60px; border-radius: 18px;
+      background: radial-gradient(circle at 45% 35%, #ffdf9c, #8a4b2e 70%);
+      border: 2px solid #fff0a8; position: relative; flex: none;
+      box-shadow: inset 0 -8px 0 rgba(0,0,0,.12);
+    }
+    .boss-badge:before, .boss-badge:after {
+      content: ""; position: absolute; top: 14px; width: 9px; height: 9px; border-radius: 50%; background: #173c27;
+    }
+    .boss-badge:before { left: 18px; } .boss-badge:after { right: 18px; }
+    .card-title { color: #fff; font-size: 15px; font-weight: 900; margin-bottom: 3px; }
+    .card-sub { color: var(--muted); font-size: 12px; line-height: 1.2; }
+    .battle-cta {
+      margin-left: auto; align-self: stretch; min-width: 74px; border-radius: 14px;
+      background: #d88b2f; color: #fff; display: grid; place-items: center; font-weight: 900;
+      box-shadow: inset 0 -4px 0 rgba(0,0,0,.18);
+    }
+    .farm-grid {
+      position: absolute; left: 67px; top: 215px; width: 256px; height: 256px;
+      display: grid; grid-template-columns: repeat(3, 72px); grid-auto-rows: 72px; gap: 10px;
+    }
+    .cell {
+      background: #a4dc72; border: 3px solid #3f8c43; border-radius: 18px;
+      box-shadow: inset 0 6px 0 rgba(255,255,255,.22), 4px 5px 0 rgba(20,53,31,.25);
+      position: relative;
+    }
+    .monster {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -47%);
+      width: 45px; height: 34px; border-radius: 50% 50% 45% 45%; background: #8ee26c;
+      border: 3px solid #2e733f; box-shadow: inset 0 7px 0 rgba(255,255,255,.28);
+    }
+    .monster:before, .monster:after { content: ""; position: absolute; top: 12px; width: 5px; height: 5px; background: #14351f; border-radius: 50%; }
+    .monster:before { left: 13px; } .monster:after { right: 13px; }
+    .monster.mush { width: 48px; height: 28px; border-radius: 50% 50% 36% 36%; background: #f2656b; border-color: #7b2c35; top: 45%; }
+    .monster.mush:after { right: 14px; }
+    .monster.spore { width: 44px; height: 44px; border-radius: 50%; background: #b956bf; border-color: #613170; }
+    .action-bar {
+      position: absolute; left: 14px; right: 14px; bottom: 118px; height: 76px;
+      border-radius: 22px; padding: 8px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+      background: rgba(23, 60, 39, .92); border: 2px solid rgba(244,230,166,.72);
+      box-shadow: 0 8px 0 rgba(20,53,31,.35);
+    }
+    .nav-btn {
+      border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: #2f6b45; color: #fff; font-weight: 900; font-size: 11px; gap: 4px;
+      box-shadow: inset 0 -4px 0 rgba(0,0,0,.16);
+    }
+    .nav-btn .ico { font-size: 20px; line-height: 1; }
+    .nav-btn.hot { background: #d88b2f; }
+    .nav-btn.ritual { background: #7554c8; }
+    .bottom-controls {
+      position: absolute; left: 14px; right: 14px; bottom: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    }
+    .tap, .hatch {
+      height: 86px; border-radius: 22px; border: 3px solid rgba(244,230,166,.82); padding: 12px;
+      box-shadow: 0 7px 0 rgba(20,53,31,.35); font-weight: 900;
+    }
+    .tap { background: #2f6b45; } .hatch { background: #49395d; }
+    .big { font-size: 18px; margin-bottom: 4px; }
+    .small { font-size: 11px; color: var(--muted); }
+    .battle-screen {
+      background: linear-gradient(#8ecded 0 22%, #365b68 22% 54%, #2f6b45 54% 100%);
+    }
+    .battle-header { left: 14px; right: 14px; top: 14px; height: 74px; padding: 11px 14px; }
+    .title-xl { font-size: 20px; font-weight: 950; color: #fff; }
+    .subtitle { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .enemy-area { position: absolute; top: 120px; left: 0; right: 0; text-align: center; }
+    .enemy-name { font-size: 17px; font-weight: 950; color: var(--gold); text-shadow: 0 2px 0 rgba(0,0,0,.22); }
+    .hp-wrap { width: 276px; height: 22px; margin: 8px auto 0; border-radius: 999px; background: #193323; border: 2px solid #f4e6a6; overflow: hidden; }
+    .hp-fill { height: 100%; width: 62%; background: linear-gradient(90deg, #8f3044, #ff786b); box-shadow: inset 0 3px 0 rgba(255,255,255,.2); }
+    .enemy {
+      position: relative; width: 130px; height: 128px; margin: 22px auto 0;
+      filter: drop-shadow(0 10px 0 rgba(20,53,31,.25));
+    }
+    .dragon-body { position: absolute; inset: 36px 22px 18px; border-radius: 52% 48% 44% 44%; background: #7554c8; border: 4px solid #342052; }
+    .dragon-head { position: absolute; left: 34px; top: 10px; width: 62px; height: 58px; border-radius: 50%; background: #8e67da; border: 4px solid #342052; }
+    .dragon-wing { position: absolute; top: 44px; width: 45px; height: 55px; background: #b956bf; border: 3px solid #342052; opacity:.9; }
+    .dragon-wing.l { left: 0; border-radius: 90% 20% 70% 30%; transform: rotate(-22deg); }
+    .dragon-wing.r { right: 0; border-radius: 20% 90% 30% 70%; transform: rotate(22deg); }
+    .damage { position: absolute; right: 90px; top: 220px; color: #fff0a8; font-size: 24px; font-weight: 950; transform: rotate(-8deg); text-shadow: 0 3px 0 #8f3044; }
+    .team-panel { left: 14px; right: 14px; bottom: 128px; height: 190px; padding: 12px; }
+    .team-title { font-weight: 950; color: #fff; margin-bottom: 8px; }
+    .team-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .team-card { height: 92px; border-radius: 17px; background: #a4dc72; border: 2px solid #3f8c43; position: relative; padding-top: 8px; text-align: center; color: #173c27; font-weight: 900; font-size: 11px; }
+    .team-card .monster { top: 44px; }
+    .team-card .pow { position: absolute; bottom: 8px; left: 0; right: 0; }
+    .fight-bar { position: absolute; left: 14px; right: 14px; bottom: 18px; display:grid; grid-template-columns: 1.2fr .8fr; gap: 12px; }
+    .fight-btn { height: 88px; border-radius: 24px; background: #d88b2f; border: 3px solid #fff0a8; display:grid; place-items:center; font-size: 22px; font-weight: 950; box-shadow: 0 7px 0 rgba(20,53,31,.35), inset 0 -5px 0 rgba(0,0,0,.15); }
+    .reward-box { height: 88px; border-radius: 22px; background: #173c27; border: 2px solid #f4e6a6; padding: 12px; font-weight: 900; color: #fff; }
+    .quest-screen { background: linear-gradient(#9bd7f2 0 18%, #6fbd64 18% 100%); }
+    .quests-panel { left: 14px; right: 14px; top: 96px; bottom: 18px; padding: 14px; }
+    .tab-row { display:grid; grid-template-columns: repeat(3,1fr); gap: 7px; margin: 12px 0; }
+    .tab { background:#2f6b45; border-radius: 13px; padding: 9px 4px; text-align:center; font-weight:900; font-size: 12px; }
+    .tab.on { background:#d88b2f; color:#fff; }
+    .quest-item { display:grid; grid-template-columns: 46px 1fr 74px; gap: 10px; align-items:center; min-height: 78px; border-radius: 17px; background:#215737; border: 2px solid rgba(244,230,166,.45); padding: 9px; margin-bottom: 10px; }
+    .quest-icon { width: 44px; height:44px; border-radius: 15px; background:#a4dc72; display:grid; place-items:center; font-size:22px; }
+    .quest-title { font-weight:950; font-size: 13px; color:#fff; }
+    .quest-desc { font-size: 11px; color: var(--muted); margin-top:3px; line-height:1.18; }
+    .claim { background:#3f8c61; border-radius: 12px; padding: 10px 4px; text-align:center; font-size: 11px; font-weight:950; }
+    .claim.lock { background:#45584d; color:#b8c7bd; }
+    .claim.gold { background:#d88b2f; }
+    @media (max-width: 1240px) { .frames { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <h1>Idle Monster Farm — Gameplay-first UI direction</h1>
+    <div class="intro">Main idea: stop hiding gameplay inside a settings-like Menu. Put Shop, Battle, Quests, and Ritual on the farm screen. Make Battle a real visual screen with enemy HP and monster attacks, while Goals/Orders/old Expedition-style claims become one Quest Board.</div>
+
+    <section class="frames">
+      <div class="frame-wrap">
+        <div class="frame-title">01 Main Farm — gameplay buttons visible</div>
+        <div class="phone"><div class="screen">
+          <div class="sky-hill"></div>
+          <div class="ground-dots"><span style="left:32px;top:508px"></span><span style="right:38px;top:565px"></span><span style="left:150px;top:190px"></span></div>
+          <div class="panel hud"><div class="coins">Coins: 1.42K</div><div class="income">+38/sec · Power 126</div></div>
+          <div class="utility-menu">☰</div>
+          <div class="panel next-battle">
+            <div class="boss-badge"></div>
+            <div><div class="card-title">Next Battle: Baby Wyvern</div><div class="card-sub">Need Power 180 · Your Power 126<br/>Merge stronger monsters to win.</div></div>
+            <div class="battle-cta">Fight</div>
+          </div>
+          <div class="farm-grid">
+            <div class="cell"><div class="monster"></div></div><div class="cell"><div class="monster mush"></div></div><div class="cell"></div>
+            <div class="cell"><div class="monster spore"></div></div><div class="cell"><div class="monster"></div></div><div class="cell"></div>
+            <div class="cell"></div><div class="cell"><div class="monster mush"></div></div><div class="cell"></div>
+          </div>
+          <div class="action-bar">
+            <div class="nav-btn"><div class="ico">🛒</div>Shop</div>
+            <div class="nav-btn hot"><div class="ico">⚔</div>Battle</div>
+            <div class="nav-btn"><div class="ico">📜</div>Quests</div>
+            <div class="nav-btn ritual"><div class="ico">✨</div>Ritual</div>
+          </div>
+          <div class="bottom-controls"><div class="tap"><div class="big">Tap Farm</div><div class="small">Combo 8 · Burst 12/20</div></div><div class="hatch"><div class="big">Hatch Egg</div><div class="small">Cost: 260 coins</div></div></div>
+        </div></div>
+      </div>
+
+      <div class="frame-wrap">
+        <div class="frame-title">02 Battle Training — real fighting moment</div>
+        <div class="phone"><div class="screen battle-screen">
+          <div class="panel battle-header"><div class="title-xl">Monster Battle</div><div class="subtitle">Auto-fight stages with your strongest farm monsters.</div></div>
+          <div class="enemy-area">
+            <div class="enemy-name">Baby Wyvern</div>
+            <div class="hp-wrap"><div class="hp-fill"></div></div>
+            <div class="enemy"><div class="dragon-wing l"></div><div class="dragon-wing r"></div><div class="dragon-body"></div><div class="dragon-head"></div></div>
+          </div>
+          <div class="damage">-54</div>
+          <div class="panel team-panel">
+            <div class="team-title">Your Team · Power 126 / 180</div>
+            <div class="team-row">
+              <div class="team-card">Lv 4 Slime<div class="monster"></div><div class="pow">42 power</div></div>
+              <div class="team-card">Lv 3 Spore<div class="monster spore"></div><div class="pow">51 power</div></div>
+              <div class="team-card">Lv 2 Mushroom<div class="monster mush"></div><div class="pow">33 power</div></div>
+            </div>
+            <div class="subtitle" style="margin-top:12px">Not enough power yet. Merge monsters to finish this fight.</div>
+          </div>
+          <div class="fight-bar"><div class="fight-btn">Fight Again</div><div class="reward-box">Reward<br/><span style="color:var(--gold);font-size:18px">+1 Essence</span></div></div>
+        </div></div>
+      </div>
+
+      <div class="frame-wrap">
+        <div class="frame-title">03 Quest Board — goals/orders/claims grouped</div>
+        <div class="phone"><div class="screen quest-screen">
+          <div class="panel hud"><div class="coins">Quest Board</div><div class="income">Everything claim-based lives here.</div></div>
+          <div class="utility-menu">×</div>
+          <div class="panel quests-panel">
+            <div class="title-xl">Quests</div>
+            <div class="subtitle">Farm goals, monster orders, and cleared battle rewards.</div>
+            <div class="tab-row"><div class="tab on">Goals</div><div class="tab">Orders</div><div class="tab">Rewards</div></div>
+            <div class="quest-item"><div class="quest-icon">🥚</div><div><div class="quest-title">Hatch 3 monsters</div><div class="quest-desc">2 / 3 complete · Reward 25 coins</div></div><div class="claim lock">Need<br/>1 more</div></div>
+            <div class="quest-item"><div class="quest-icon">🧬</div><div><div class="quest-title">Merge 1 pair</div><div class="quest-desc">Complete · Reward 40 coins</div></div><div class="claim">Claim</div></div>
+            <div class="quest-item"><div class="quest-icon">🍄</div><div><div class="quest-title">Discover Mushroom</div><div class="quest-desc">Find your first Mushroom family monster.</div></div><div class="claim lock">Locked</div></div>
+            <div class="quest-item"><div class="quest-icon">⚔</div><div><div class="quest-title">Training Dummy cleared</div><div class="quest-desc">Battle reward ready · 50 coins</div></div><div class="claim gold">Claim</div></div>
+            <div class="quest-item"><div class="quest-icon">✨</div><div><div class="quest-title">First Ritual</div><div class="quest-desc">Perform a Ritual or Safe Ritual.</div></div><div class="claim lock">Later</div></div>
+          </div>
+        </div></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { MonsterRenderer, type MonsterVisual } from '../rendering/MonsterRenderer';
+import { GameplayActionBarView, type GameplayActionBarAction } from '../ui/GameplayActionBarView';
 import { HatchPanelView } from '../ui/HatchPanelView';
 import { HudView } from '../ui/HudView';
 import { NavigationControlView } from '../ui/NavigationControlView';
@@ -181,6 +182,9 @@ const THEME = {
   button: 0x2f6b45,
   buttonHover: 0x3c8156,
   buttonWarm: 0x7b5628,
+  buttonWarmHover: 0x9a6a22,
+  buttonRitual: 0x6740a6,
+  buttonRitualHover: 0x7e5ed0,
   danger: 0x8f3044,
   success: 0x3f8c43,
   warning: 0x9a6a22,
@@ -253,6 +257,11 @@ type FarmSceneLayout = {
   tapFarmY: number;
   tapFarmWidth: number;
   tapFarmHeight: number;
+  actionBarX: number;
+  actionBarY: number;
+  actionBarWidth: number;
+  actionBarHeight: number;
+  actionBarButtonGap: number;
   hatchX: number;
   hatchY: number;
   hatchWidth: number;
@@ -260,6 +269,7 @@ type FarmSceneLayout = {
 };
 
 export class FarmScene extends Phaser.Scene {
+  private readonly gameplayActionBarView: GameplayActionBarView;
   private readonly hatchPanelView: HatchPanelView;
   private readonly hudView: HudView;
   private readonly monsterRenderer: MonsterRenderer;
@@ -378,6 +388,16 @@ export class FarmScene extends Phaser.Scene {
 
   constructor() {
     super('FarmScene');
+    this.gameplayActionBarView = new GameplayActionBarView(this, {
+      fontFamily: UI_FONT_FAMILY,
+      getLayout: () => this.getLayout(),
+      isModalOpen: () => this.isModalOpen(),
+      onAction: (action) => this.handleGameplayActionBarAction(action),
+      onButtonClickSound: () => this.playButtonClickSound(),
+      onHoverBlocked: () => this.resetFarmControlHoverState(),
+      t: (key, params) => this.t(key, params),
+      theme: THEME,
+    });
     this.hatchPanelView = new HatchPanelView(this, {
       fontFamily: UI_FONT_FAMILY,
       formatCoinAmount: (amount) => this.formatCoinAmount(amount),
@@ -525,6 +545,7 @@ export class FarmScene extends Phaser.Scene {
     this.orderWidgetView.destroy();
     this.expansionContainer = undefined;
     this.tapFarmView.destroy();
+    this.gameplayActionBarView.destroy();
     this.clearTapFarmReactionStack();
     this.navigationControlView.destroy();
     this.currentEggCost = STARTING_EGG_COST;
@@ -542,6 +563,7 @@ export class FarmScene extends Phaser.Scene {
     this.createOrderWidget();
     this.createHatchArea();
     this.createTapFarmArea();
+    this.createGameplayActionBar();
     this.createNavigationControl();
     this.createEconomyDebugControl();
     this.registerKeyboardShortcuts();
@@ -586,6 +608,7 @@ export class FarmScene extends Phaser.Scene {
     this.createOrderWidget();
     this.createHatchArea();
     this.createTapFarmArea();
+    this.createGameplayActionBar();
     this.createNavigationControl();
     this.createEconomyDebugControl();
 
@@ -681,20 +704,26 @@ export class FarmScene extends Phaser.Scene {
     const tapFarmGap = isNarrow ? (height < 680 ? 6 : 8) : 10;
     const tapFarmX = hatchX;
     const tapFarmY = hatchY - tapFarmHeight - tapFarmGap;
+    const actionBarWidth = isNarrow ? Math.min(width - margin * 2, 366) : 420;
+    const actionBarHeight = isNarrow ? (height < 680 ? 54 : 60) : 64;
+    const actionBarButtonGap = isNarrow ? 6 : 8;
+    const actionBarToTapGap = isNarrow ? (height < 680 ? 6 : 8) : 12;
+    const actionBarX = (width - actionBarWidth) / 2;
+    const actionBarY = tapFarmY - actionBarHeight - actionBarToTapGap;
     const gridTopGap = isNarrow ? (height < 680 ? 6 : 10) : 0;
     const gridToExpansionLabelGap = isNarrow ? (height < 680 ? 8 : 12) : 20;
     const expansionLabelToRowGap = isNarrow ? (height < 680 ? 18 : 24) : 34;
-    const expansionToTapGap = isNarrow ? (height < 680 ? 6 : 8) : 12;
+    const expansionToActionGap = isNarrow ? (height < 680 ? 6 : 8) : 12;
     const minGridStartY = topContentBottom + gridTopGap;
     const widthLimitedCellSize = Math.floor((width - margin * 2 - (GRID_COLUMNS - 1) * gridGap) / GRID_COLUMNS);
-    const availableStackHeight = Math.max(0, tapFarmY - minGridStartY);
+    const availableStackHeight = Math.max(0, actionBarY - minGridStartY);
     const heightLimitedCellSize = Math.floor(
       (
         availableStackHeight
         - (GRID_ROWS - 1) * gridGap
         - gridToExpansionLabelGap
         - expansionLabelToRowGap
-        - expansionToTapGap
+        - expansionToActionGap
       ) / (GRID_ROWS + EXPANSION_ROWS),
     );
     const mobileMinimumCellSize = height < 560 ? 48 : 52;
@@ -705,7 +734,7 @@ export class FarmScene extends Phaser.Scene {
     const gridWidth = GRID_COLUMNS * cellSize + (GRID_COLUMNS - 1) * gridGap;
     const gridHeight = GRID_ROWS * cellSize + (GRID_ROWS - 1) * gridGap;
     const expansionHeight = gridToExpansionLabelGap + expansionLabelToRowGap + cellSize;
-    const maxGridStartY = tapFarmY - gridHeight - expansionHeight - expansionToTapGap;
+    const maxGridStartY = actionBarY - gridHeight - expansionHeight - expansionToActionGap;
     const gridStartY = isNarrow
       ? Math.max(minGridStartY, Math.min(minGridStartY, maxGridStartY))
       : 126;
@@ -743,6 +772,11 @@ export class FarmScene extends Phaser.Scene {
       tapFarmY,
       tapFarmWidth,
       tapFarmHeight,
+      actionBarX,
+      actionBarY,
+      actionBarWidth,
+      actionBarHeight,
+      actionBarButtonGap,
       hatchX,
       hatchY,
       hatchWidth,
@@ -939,8 +973,36 @@ export class FarmScene extends Phaser.Scene {
     this.updateTapFarmUi();
   }
 
+  private createGameplayActionBar(): void {
+    this.gameplayActionBarView.create();
+  }
+
   private createNavigationControl(): void {
     this.navigationControlView.createMenuControl();
+  }
+
+  private handleGameplayActionBarAction(action: GameplayActionBarAction): void {
+    if (this.isModalOpen()) {
+      return;
+    }
+
+    if (action === 'shop') {
+      this.openUpgradeShopPanel();
+      return;
+    }
+
+    if (action === 'battle') {
+      this.openExpeditionPanel();
+      return;
+    }
+
+    if (action === 'quests') {
+      this.openMissionsPanel();
+      return;
+    }
+
+    this.prestigeConfirmationArmed = false;
+    this.openPrestigePanel();
   }
 
   private createEconomyDebugControl(): void {
@@ -981,15 +1043,10 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const menuItems: NavigationMenuPanelItem[] = [
-      { label: this.t('ui.menu.upgrades'), openPanel: () => this.openUpgradeShopPanel() },
-      { label: this.t('ui.menu.goals'), openPanel: () => this.openMissionsPanel() },
-      { label: this.t('ui.menu.orders'), openPanel: () => this.openOrdersPanel() },
-      { label: this.t('ui.menu.expedition'), openPanel: () => this.openExpeditionPanel() },
-      { label: this.t('ui.menu.prestige'), openPanel: () => this.openPrestigePanel() },
-      { label: this.t('ui.menu.zone'), openPanel: () => this.openZonePanel() },
-      { label: this.t('ui.menu.compendium'), openPanel: () => this.openCompendiumPanel() },
-      { label: this.t('ui.menu.help'), openPanel: () => this.openHelpPanel() },
       { label: this.t('ui.menu.settings'), openPanel: () => this.openSettingsPanel() },
+      { label: this.t('ui.menu.help'), openPanel: () => this.openHelpPanel() },
+      { label: this.t('ui.menu.compendium'), openPanel: () => this.openCompendiumPanel() },
+      { label: this.t('ui.menu.zone'), openPanel: () => this.openZonePanel() },
     ];
 
     this.navigationMenuPanelView.create(menuItems);
@@ -1052,6 +1109,7 @@ export class FarmScene extends Phaser.Scene {
     this.createOrderWidget();
     this.createHatchArea();
     this.createTapFarmArea();
+    this.createGameplayActionBar();
     this.createNavigationControl();
     this.updateHud();
     this.openSettingsPanel();
@@ -1284,6 +1342,7 @@ export class FarmScene extends Phaser.Scene {
     this.resetFarmControlHoverState();
     this.hatchPanelView.setModalOpenVisualState(isOpen);
     this.tapFarmView.setModalOpenVisualState(isOpen);
+    this.gameplayActionBarView.setModalOpenVisualState(isOpen);
     this.orderWidgetView.setModalOpenVisualState(isOpen);
     this.navigationControlView.setModalOpenVisualState(isOpen);
   }
@@ -1291,6 +1350,7 @@ export class FarmScene extends Phaser.Scene {
   private resetFarmControlHoverState(): void {
     this.hatchPanelView.resetHoverState();
     this.tapFarmView.resetHoverState();
+    this.gameplayActionBarView.resetHoverState();
     this.navigationControlView.resetHoverState();
   }
 
@@ -1419,6 +1479,7 @@ export class FarmScene extends Phaser.Scene {
       new Phaser.Geom.Rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight),
       new Phaser.Geom.Rectangle(layout.orderWidgetX, layout.orderWidgetY, layout.orderWidgetWidth, layout.orderWidgetHeight),
       new Phaser.Geom.Rectangle(layout.tapFarmX, layout.tapFarmY, layout.tapFarmWidth, layout.tapFarmHeight),
+      new Phaser.Geom.Rectangle(layout.actionBarX, layout.actionBarY, layout.actionBarWidth, layout.actionBarHeight),
       new Phaser.Geom.Rectangle(layout.hatchX, layout.hatchY, layout.hatchWidth, layout.hatchHeight),
       new Phaser.Geom.Rectangle(
         layout.expansionStartX - 8,
