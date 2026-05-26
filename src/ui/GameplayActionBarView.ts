@@ -164,10 +164,11 @@ export class GameplayActionBarView {
 
     this.drawButtonBackground(visual, fill, x, y, width, height);
     container.add(graphics);
-    this.addButtonIcon(container, button.action, x + width / 2, y + height * 0.35, height);
+    this.addButtonIcon(container, button.action, x + width / 2, y + height * (this.options.getLayout().isNarrow ? 0.34 : 0.35), height);
 
-    const labelFontSize = width < 76 ? '10px' : this.options.getLayout().isNarrow ? '11px' : '13px';
-    container.add(this.scene.add.text(x + width / 2, y + height - 7, this.options.t(button.labelKey), {
+    const layout = this.options.getLayout();
+    const labelFontSize = width < 76 ? '10px' : layout.isNarrow ? '11px' : '13px';
+    container.add(this.scene.add.text(x + width / 2, y + height - (layout.isNarrow ? 6 : 7), this.options.t(button.labelKey), {
       align: 'center',
       color: theme.text,
       fixedWidth: width,
@@ -248,7 +249,7 @@ export class GameplayActionBarView {
     buttonHeight: number,
   ): void {
     const icon = this.scene.add.graphics();
-    const size = Math.max(13, Math.min(19, buttonHeight * 0.28));
+    const size = Math.max(12, Math.min(this.options.getLayout().isNarrow ? 15 : 19, buttonHeight * 0.26));
     const accent = action === 'battle'
       ? 0xffd28a
       : action === 'ritual'

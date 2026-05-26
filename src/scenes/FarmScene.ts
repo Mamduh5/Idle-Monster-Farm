@@ -694,36 +694,36 @@ export class FarmScene extends Phaser.Scene {
     const orderWidgetX = width - margin - orderWidgetWidth;
     const orderWidgetY = isNarrow ? menuY + 38 : menuY + 44;
     const topContentBottom = isNarrow ? Math.max(statsY + statsHeight, menuBottom) : 126;
+    const bottomSafePadding = isNarrow ? (height < 700 ? 14 : 18) : 18;
+    const actionBarWidth = isNarrow ? Math.min(width - margin * 2, 366) : 420;
+    const actionBarHeight = isNarrow ? (height < 680 ? 58 : 64) : 64;
+    const actionBarButtonGap = isNarrow ? 6 : 8;
+    const actionBarX = (width - actionBarWidth) / 2;
+    const actionBarY = height - bottomSafePadding - actionBarHeight;
     const hatchWidth = Math.min(260, width - margin * 2);
-    const hatchHeight = 76;
-    const bottomSafePadding = isNarrow ? (height < 700 ? 24 : 18) : 18;
+    const hatchHeight = isNarrow ? (height < 680 ? 66 : 70) : 76;
+    const hatchToActionGap = isNarrow ? (height < 680 ? 6 : 8) : 10;
     const hatchX = isNarrow ? (width - hatchWidth) / 2 : width - hatchWidth - margin;
-    const hatchY = height - hatchHeight - bottomSafePadding;
+    const hatchY = actionBarY - hatchToActionGap - hatchHeight;
     const tapFarmWidth = hatchWidth;
-    const tapFarmHeight = isNarrow ? 42 : 46;
-    const tapFarmGap = isNarrow ? (height < 680 ? 6 : 8) : 10;
+    const tapFarmHeight = isNarrow ? (height < 680 ? 38 : 42) : 46;
+    const tapFarmGap = isNarrow ? 6 : 10;
     const tapFarmX = hatchX;
     const tapFarmY = hatchY - tapFarmHeight - tapFarmGap;
-    const actionBarWidth = isNarrow ? Math.min(width - margin * 2, 366) : 420;
-    const actionBarHeight = isNarrow ? (height < 680 ? 54 : 60) : 64;
-    const actionBarButtonGap = isNarrow ? 6 : 8;
-    const actionBarToTapGap = isNarrow ? (height < 680 ? 6 : 8) : 12;
-    const actionBarX = (width - actionBarWidth) / 2;
-    const actionBarY = tapFarmY - actionBarHeight - actionBarToTapGap;
     const gridTopGap = isNarrow ? (height < 680 ? 6 : 10) : 0;
     const gridToExpansionLabelGap = isNarrow ? (height < 680 ? 8 : 12) : 20;
     const expansionLabelToRowGap = isNarrow ? (height < 680 ? 18 : 24) : 34;
-    const expansionToActionGap = isNarrow ? (height < 680 ? 6 : 8) : 12;
+    const expansionToControlsGap = isNarrow ? (height < 680 ? 6 : 8) : 12;
     const minGridStartY = topContentBottom + gridTopGap;
     const widthLimitedCellSize = Math.floor((width - margin * 2 - (GRID_COLUMNS - 1) * gridGap) / GRID_COLUMNS);
-    const availableStackHeight = Math.max(0, actionBarY - minGridStartY);
+    const availableStackHeight = Math.max(0, tapFarmY - minGridStartY);
     const heightLimitedCellSize = Math.floor(
       (
         availableStackHeight
         - (GRID_ROWS - 1) * gridGap
         - gridToExpansionLabelGap
         - expansionLabelToRowGap
-        - expansionToActionGap
+        - expansionToControlsGap
       ) / (GRID_ROWS + EXPANSION_ROWS),
     );
     const mobileMinimumCellSize = height < 560 ? 48 : 52;
@@ -734,7 +734,7 @@ export class FarmScene extends Phaser.Scene {
     const gridWidth = GRID_COLUMNS * cellSize + (GRID_COLUMNS - 1) * gridGap;
     const gridHeight = GRID_ROWS * cellSize + (GRID_ROWS - 1) * gridGap;
     const expansionHeight = gridToExpansionLabelGap + expansionLabelToRowGap + cellSize;
-    const maxGridStartY = actionBarY - gridHeight - expansionHeight - expansionToActionGap;
+    const maxGridStartY = tapFarmY - gridHeight - expansionHeight - expansionToControlsGap;
     const gridStartY = isNarrow
       ? Math.max(minGridStartY, Math.min(minGridStartY, maxGridStartY))
       : 126;
