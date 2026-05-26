@@ -33,6 +33,20 @@ import {
   setSlotMonster,
 } from '../state/farmSlotState';
 import {
+  clampCompendiumPageIndex,
+  discoverMonster as discoverMonsterInState,
+  getCompendiumListItems,
+  getCompendiumPageCount,
+  getCompendiumPageFamilies,
+  getCompendiumPageItems,
+  getDiscoveredMonsterCount,
+  getFamilyProgress,
+  hasDiscoveredFamily,
+  isMonsterDiscovered as isMonsterDiscoveredInState,
+  type CompendiumListItem,
+  type DiscoveryKey,
+} from '../state/discoveryState';
+import {
   canIncrementMission,
   createInitialMissionProgress as createInitialMissionProgressState,
   getIncrementedMissionProgress,
@@ -43,13 +57,11 @@ import {
 } from '../state/missionState';
 import {
   canClaimOrder,
-  getMonsterDiscoveryKey,
   getOrderDefinition as getOrderDefinitionFromState,
   getOrderStatus,
   getRecommendedOrder as getRecommendedOrderFromState,
   isOrderComplete as isOrderCompleteState,
   isOrderUnlocked as isOrderUnlockedState,
-  type MonsterDiscoveryKey,
 } from '../state/orderState';
 import {
   applyUpgradePurchase,
@@ -191,18 +203,8 @@ const THEME = {
 };
 
 type MonsterDragZone = Phaser.GameObjects.Zone;
-type DiscoveryKey = MonsterDiscoveryKey;
 type UiLayoutMode = 'mobile' | 'desktop';
 type ModalKind = 'compendium' | 'upgrade-shop' | 'goals' | 'orders' | 'default';
-type CompendiumListItem =
-  | {
-    type: 'family';
-    family: MonsterFamily;
-  }
-  | {
-    type: 'monster';
-    monster: MonsterDefinition;
-  };
 type CoinBug = {
   id: number;
   container: Phaser.GameObjects.Container;
@@ -3819,7 +3821,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private syncMissionStateFromCurrentProgress(showCompletionToast = false): void {
-    if (Array.from(this.discoveredMonsters).some((discoveryKey) => discoveryKey.startsWith('Mushroom:'))
+    if (hasDiscoveredFamily(this.discoveredMonsters, 'Mushroom')
       || this.farmSlots.some((slot) => slot.monster?.family === 'Mushroom')) {
       this.completeMission('discover-mushroom', showCompletionToast);
     }
@@ -4340,7 +4342,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private discoverMonster(monster: MonsterDefinition): void {
-    this.discoveredMonsters.add(this.getDiscoveryKey(monster.family, monster.level));
+    this.discoveredMonsters = discoverMonsterInState(this.discoveredMonsters, monster);
     this.refreshCompendiumPanel();
     this.refreshOrdersPanel();
     this.refreshOrderWidget();
@@ -4394,12 +4396,8 @@ export class FarmScene extends Phaser.Scene {
     });
   }
 
-  private getDiscoveryKey(family: MonsterFamily, level: number): DiscoveryKey {
-    return getMonsterDiscoveryKey(family, level);
-  }
-
   private isMonsterDiscovered(monster: MonsterDefinition): boolean {
-    return this.discoveredMonsters.has(this.getDiscoveryKey(monster.family, monster.level));
+    return isMonsterDiscoveredInState(this.discoveredMonsters, monster);
   }
 
   private toggleCompendiumPanel(): void {
@@ -4428,16 +4426,7 @@ export class FarmScene extends Phaser.Scene {
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
     const familyOrder: MonsterFamily[] = ['Slime', 'Mushroom', 'Spore'];
-    const groupedDefinitions = familyOrder.map((family) => ({
-      family,
-      definitions: MONSTER_DEFINITIONS
-        .filter((definition) => definition.family === family)
-        .sort((first, second) => first.level - second.level),
-    }));
-    const listItems = groupedDefinitions.flatMap<CompendiumListItem>((group) => [
-      { type: 'family', family: group.family },
-      ...group.definitions.map((monster) => ({ type: 'monster' as const, monster })),
-    ]);
+    const listItems = getCompendiumListItems(MONSTER_DEFINITIONS, familyOrder);
     const { width: panelWidth, height: panelHeight } = this.getModalSize('compendium', 640, 640);
     const rowGap = panelWidth < 390 ? 34 : 38;
     const rowHeight = Math.min(34, rowGap - 3);
@@ -4445,9 +4434,9 @@ export class FarmScene extends Phaser.Scene {
     const bodyBottomY = panelHeight / 2 - 72;
     const bodyHeight = Math.max(rowGap, bodyBottomY - bodyTopY);
     const rowsPerPage = this.getRowsPerPage(rowGap, bodyHeight, listItems.length, 8, 12);
-    const pageCount = this.getPageCount(listItems.length, rowsPerPage);
-    const pageIndex = Phaser.Math.Clamp(this.compendiumPageIndex, 0, pageCount - 1);
-    const pageItems = listItems.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage);
+    const pageCount = getCompendiumPageCount(listItems, rowsPerPage);
+    const pageIndex = clampCompendiumPageIndex(this.compendiumPageIndex, pageCount);
+    const pageItems = getCompendiumPageItems(listItems, pageIndex, rowsPerPage);
     const visibleRowsHeight = Math.max(rowHeight, (pageItems.length - 1) * rowGap + rowHeight);
     const firstRowY = bodyTopY + Math.max(0, (bodyHeight - visibleRowsHeight) / 2);
 
@@ -4494,20 +4483,16 @@ export class FarmScene extends Phaser.Scene {
     panelHeight: number,
     pageItems: CompendiumListItem[],
   ): void {
-    const discoveredCount = MONSTER_DEFINITIONS.filter((monster) => this.isMonsterDiscovered(monster)).length;
+    const familyOrder: MonsterFamily[] = ['Slime', 'Mushroom', 'Spore'];
+    const discoveredCount = getDiscoveredMonsterCount(MONSTER_DEFINITIONS, this.discoveredMonsters);
     const pageSubtitle = this.getCompendiumPageSubtitle(pageItems);
     const summaryY = -panelHeight / 2 + 54;
-    const familyProgress = (['Slime', 'Mushroom', 'Spore'] as MonsterFamily[])
-      .map((family) => {
-        const familyMonsters = MONSTER_DEFINITIONS.filter((monster) => monster.family === family);
-        const familyDiscovered = familyMonsters.filter((monster) => this.isMonsterDiscovered(monster)).length;
-
-        return this.t('ui.compendium.familyProgress', {
-          family: this.getLocalizedFamilyName(family),
-          discovered: familyDiscovered,
-          total: familyMonsters.length,
-        });
-      })
+    const familyProgress = getFamilyProgress(MONSTER_DEFINITIONS, this.discoveredMonsters, familyOrder)
+      .map((progress) => this.t('ui.compendium.familyProgress', {
+        family: this.getLocalizedFamilyName(progress.family),
+        discovered: progress.discovered,
+        total: progress.total,
+      }))
       .join('  |  ');
 
     panel.add(this.add.text(-panelWidth / 2 + 24, summaryY, pageSubtitle, {
@@ -4532,8 +4517,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getCompendiumPageSubtitle(pageItems: CompendiumListItem[]): string {
-    const visibleFamilies = Array.from(new Set(pageItems
-      .map((item) => (item.type === 'family' ? item.family : item.monster.family))));
+    const visibleFamilies = getCompendiumPageFamilies(pageItems);
 
     if (visibleFamilies.length === 1) {
       return this.t('ui.compendium.familyCollection', {

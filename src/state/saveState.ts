@@ -7,10 +7,13 @@ import type {
   SavedMonsterDiscovery,
   SavedMonsterSlot,
 } from '../systems/saveSystem';
-import type { MonsterDiscoveryKey } from './orderState';
+import {
+  createDiscoveryKey,
+  parseDiscoveryKey,
+  type DiscoveryKey,
+} from './discoveryState';
 import type {
   FarmSlotState,
-  MonsterFamily,
   OnboardingHintId,
 } from '../types/game-state';
 
@@ -19,7 +22,7 @@ export type SaveSourceState = {
   coins: number;
   farmSlots: readonly FarmSlotState[];
   lastActiveAt: number;
-  discoveredMonsters: ReadonlySet<MonsterDiscoveryKey>;
+  discoveredMonsters: ReadonlySet<DiscoveryKey>;
   upgrades: Record<UpgradeId, number>;
   monsterEssence: number;
   essencePowerLevel: number;
@@ -79,24 +82,22 @@ export function createSavedGrid(farmSlots: readonly FarmSlotState[]): SavedMonst
 }
 
 export function createSavedDiscoveries(
-  discoveredMonsters: ReadonlySet<MonsterDiscoveryKey>,
+  discoveredMonsters: ReadonlySet<DiscoveryKey>,
 ): SavedMonsterDiscovery[] {
   return Array.from(discoveredMonsters).map((discoveryKey) => {
-    const [family, level] = discoveryKey.split(':');
+    const { family, level } = parseDiscoveryKey(discoveryKey);
 
     return {
-      family: family as MonsterFamily,
-      level: Number(level),
+      family,
+      level,
     };
   });
 }
 
 export function createDiscoveryKeys(
   savedDiscoveries: readonly SavedMonsterDiscovery[],
-): Set<MonsterDiscoveryKey> {
-  return new Set(savedDiscoveries.map((discovery) => (
-    `${discovery.family}:${discovery.level}` as MonsterDiscoveryKey
-  )));
+): Set<DiscoveryKey> {
+  return new Set(savedDiscoveries.map((discovery) => createDiscoveryKey(discovery.family, discovery.level)));
 }
 
 export function createLoadedSetsFromSave(saveData: LocalSaveData): LoadedSceneStateFragments {

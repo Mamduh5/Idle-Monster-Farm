@@ -1,12 +1,8 @@
 import type { OrderDefinition, OrderId } from '../data/orders';
-import type { FarmSlotState, MonsterFamily } from '../types/game-state';
+import type { FarmSlotState } from '../types/game-state';
+import { createDiscoveryKey, type DiscoveryKey } from './discoveryState';
 
 export type OrderStatus = 'done' | 'locked' | 'claim' | 'in-progress';
-export type MonsterDiscoveryKey = `${MonsterFamily}:${number}`;
-
-export function getMonsterDiscoveryKey(family: MonsterFamily, level: number): MonsterDiscoveryKey {
-  return `${family}:${level}`;
-}
 
 export function getOrderDefinition(
   orderDefinitions: readonly OrderDefinition[],
@@ -17,14 +13,14 @@ export function getOrderDefinition(
 
 export function isOrderUnlocked(
   order: OrderDefinition,
-  discoveredMonsters: ReadonlySet<MonsterDiscoveryKey>,
+  discoveredMonsters: ReadonlySet<DiscoveryKey>,
 ): boolean {
   if (!order.unlockCondition) {
     return true;
   }
 
   if (order.unlockCondition.type === 'discovered') {
-    return discoveredMonsters.has(getMonsterDiscoveryKey(order.unlockCondition.family, order.unlockCondition.level));
+    return discoveredMonsters.has(createDiscoveryKey(order.unlockCondition.family, order.unlockCondition.level));
   }
 
   return false;
@@ -33,7 +29,7 @@ export function isOrderUnlocked(
 export function isOrderComplete(
   order: OrderDefinition,
   farmSlots: readonly FarmSlotState[],
-  discoveredMonsters: ReadonlySet<MonsterDiscoveryKey>,
+  discoveredMonsters: ReadonlySet<DiscoveryKey>,
 ): boolean {
   return isOrderUnlocked(order, discoveredMonsters) && farmSlots.some((slot) => (
     slot.monster?.family === order.requiredFamily
@@ -44,7 +40,7 @@ export function isOrderComplete(
 export function getOrderStatus(
   order: OrderDefinition,
   farmSlots: readonly FarmSlotState[],
-  discoveredMonsters: ReadonlySet<MonsterDiscoveryKey>,
+  discoveredMonsters: ReadonlySet<DiscoveryKey>,
   claimedOrderIds: ReadonlySet<OrderId>,
 ): OrderStatus {
   if (claimedOrderIds.has(order.id)) {
@@ -65,7 +61,7 @@ export function getOrderStatus(
 export function canClaimOrder(
   order: OrderDefinition,
   farmSlots: readonly FarmSlotState[],
-  discoveredMonsters: ReadonlySet<MonsterDiscoveryKey>,
+  discoveredMonsters: ReadonlySet<DiscoveryKey>,
   claimedOrderIds: ReadonlySet<OrderId>,
 ): boolean {
   return getOrderStatus(order, farmSlots, discoveredMonsters, claimedOrderIds) === 'claim';
@@ -74,7 +70,7 @@ export function canClaimOrder(
 export function getRecommendedOrder(
   orderDefinitions: readonly OrderDefinition[],
   farmSlots: readonly FarmSlotState[],
-  discoveredMonsters: ReadonlySet<MonsterDiscoveryKey>,
+  discoveredMonsters: ReadonlySet<DiscoveryKey>,
   claimedOrderIds: ReadonlySet<OrderId>,
 ): OrderDefinition | undefined {
   return orderDefinitions.find((order) => !claimedOrderIds.has(order.id) && isOrderComplete(order, farmSlots, discoveredMonsters))
