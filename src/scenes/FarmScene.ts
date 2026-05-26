@@ -76,9 +76,17 @@ import {
 } from '../state/orderState';
 import {
   canClaimExpedition,
-  getExpeditionPower,
+  getBattleDamageTicks,
+  getBattlePower,
+  getBattleResult,
+  getBattleStageStatus,
+  getCurrentBattleStage,
+  getEnemyHpAfterBattle,
+  canClaimBattleReward,
   getExpeditionStatus,
+  getMonsterBattlePower,
   getSanitizedClaimedExpeditionIds as getSanitizedClaimedExpeditionIdsFromState,
+  getTopBattleMonsters,
   type ExpeditionStatus,
 } from '../state/expeditionState';
 import {
@@ -343,6 +351,8 @@ export class FarmScene extends Phaser.Scene {
   private missionsPageIndex = 0;
   private ordersPageIndex = 0;
   private expeditionPageIndex = 0;
+  private battleAnimationEvents: Phaser.Time.TimerEvent[] = [];
+  private battleAnimationInProgress = false;
   private upgradeBuyMode: UpgradeBuyMode = 'x1';
   private lastBlockedOutsideTapToastAt = 0;
   private lastHiddenAt: number | null = null;
@@ -525,6 +535,8 @@ export class FarmScene extends Phaser.Scene {
     this.missionsPageIndex = 0;
     this.ordersPageIndex = 0;
     this.expeditionPageIndex = 0;
+    this.clearBattleAnimationEvents();
+    this.battleAnimationInProgress = false;
     this.upgradeBuyMode = 'x1';
     this.lastBlockedOutsideTapToastAt = 0;
     this.lastHiddenAt = null;
@@ -2447,16 +2459,10 @@ export class FarmScene extends Phaser.Scene {
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
     const { width: panelWidth, height: panelHeight } = this.getModalSize('expedition', 560, 540);
-    const rowGap = panelWidth < 420 ? 70 : 74;
-    const rowHeight = Math.min(66, rowGap - 8);
-    const firstRowY = -panelHeight / 2 + 132;
-    const bodyHeight = panelHeight - 186;
-    const rowsPerPage = this.getRowsPerPage(rowGap, bodyHeight, EXPEDITION_DEFINITIONS.length, 5, 5);
-    const pageCount = this.getPageCount(EXPEDITION_DEFINITIONS.length, rowsPerPage);
-    const pageIndex = Phaser.Math.Clamp(this.expeditionPageIndex, 0, pageCount - 1);
-    const pageExpeditions = EXPEDITION_DEFINITIONS.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage);
-
-    this.expeditionPageIndex = pageIndex;
+    const stage = getCurrentBattleStage(EXPEDITION_DEFINITIONS, this.claimedExpeditionIds);
+    const isCompactPanel = panelWidth < 420;
+    const contentLeft = -panelWidth / 2 + 24;
+    const contentWidth = panelWidth - 48;
 
     panel.setDepth(24);
     addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
@@ -2492,16 +2498,433 @@ export class FarmScene extends Phaser.Scene {
       stopPropagation: true,
     });
 
-    pageExpeditions.forEach((expedition, index) => {
-      this.addExpeditionRow(panel, expedition, firstRowY + index * rowGap, panelWidth, rowHeight);
-    });
+    if (!stage) {
+      panel.add(this.add.text(contentLeft, -panelHeight / 2 + 86, this.t('ui.expedition.allClaimed'), {
+        color: THEME.mutedText,
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: isCompactPanel ? '13px' : '15px',
+        fixedWidth: contentWidth,
+        wordWrap: { width: contentWidth },
+      }));
+      this.expeditionPanel = panel;
+      return;
+    }
 
-    this.addPaginationControls(panel, panelWidth, panelHeight, pageIndex, pageCount, (nextPageIndex) => {
-      this.expeditionPageIndex = nextPageIndex;
-      this.openExpeditionPanel();
-    });
+    this.addBattleTrainingContent(panel, stage, panelWidth, panelHeight);
 
     this.expeditionPanel = panel;
+  }
+
+  private addBattleTrainingContent(
+    panel: Phaser.GameObjects.Container,
+    stage: ExpeditionDefinition,
+    panelWidth: number,
+    panelHeight: number,
+  ): void {
+    const isCompactPanel = panelWidth < 420;
+    const contentLeft = -panelWidth / 2 + 24;
+    const contentWidth = panelWidth - 48;
+    const stageStatus = getBattleStageStatus(stage, this.farmSlots, this.claimedExpeditionIds);
+    const isClaimed = stageStatus === 'claimed';
+    const battlePower = this.getCurrentExpeditionPower();
+    const finalHp = isClaimed ? 0 : getEnemyHpAfterBattle(battlePower, stage.requiredPower);
+    const initialHpRatio = isClaimed ? 0 : 1;
+    const teamMonsters = getTopBattleMonsters(this.farmSlots, 3);
+    const arenaTop = -panelHeight / 2 + (isCompactPanel ? 96 : 104);
+    const arenaHeight = Math.min(isCompactPanel ? 204 : 224, panelHeight * 0.38);
+    const arenaCenterY = arenaTop + arenaHeight / 2;
+    const playerX = -panelWidth * 0.23;
+    const enemyX = panelWidth * 0.24;
+    const enemyY = arenaCenterY + (isCompactPanel ? 6 : 0);
+    const hpWidth = Math.min(isCompactPanel ? 138 : 170, contentWidth * 0.48);
+    const hpY = arenaTop + 16;
+
+    panel.add(this.add.text(contentLeft, -panelHeight / 2 + 54, this.getLocalizedExpeditionName(stage), {
+      color: THEME.goldText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '17px' : '19px',
+      fontStyle: 'bold',
+      fixedWidth: contentWidth,
+    }));
+
+    panel.add(this.add.rectangle(0, arenaCenterY, contentWidth, arenaHeight, 0x102a1c, 0.42)
+      .setStrokeStyle(2, THEME.panelBorder, 0.34));
+
+    panel.add(this.add.text(playerX, arenaTop + 14, this.t('ui.battle.yourTeam'), {
+      color: THEME.text,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '12px' : '13px',
+      fontStyle: 'bold',
+    }).setOrigin(0.5));
+
+    panel.add(this.add.text(enemyX, arenaTop + 14, this.t('ui.battle.enemy'), {
+      color: THEME.text,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '12px' : '13px',
+      fontStyle: 'bold',
+    }).setOrigin(0.5));
+
+    const hpTrack = this.add.rectangle(enemyX - hpWidth / 2, hpY + 14, hpWidth, 12, 0x14231a, 0.9)
+      .setOrigin(0)
+      .setStrokeStyle(1, THEME.panelBorder, 0.76);
+    const hpFill = this.add.rectangle(enemyX - hpWidth / 2 + 2, hpY + 16, Math.max(1, hpWidth - 4), 8, 0xd9574f, 0.96)
+      .setOrigin(0, 0.5)
+      .setScale(initialHpRatio, 1);
+    const hpText = this.add.text(enemyX, hpY - 2, this.t('ui.battle.enemyHp', {
+      current: finalHp,
+      max: stage.requiredPower,
+    }), {
+      color: THEME.mutedText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '10px' : '11px',
+    }).setOrigin(0.5);
+    panel.add([hpTrack, hpFill, hpText]);
+
+    this.addBattleTeamVisuals(panel, teamMonsters, playerX, arenaCenterY, isCompactPanel);
+    const enemyContainer = this.add.container(enemyX, enemyY);
+    this.addBattleEnemyVisual(enemyContainer, stage, isCompactPanel ? 0.86 : 1);
+    panel.add(enemyContainer);
+
+    const damageText = this.add.text(enemyX + (isCompactPanel ? 38 : 48), enemyY - 40, '', {
+      color: '#fff0a8',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '21px' : '25px',
+      fontStyle: 'bold',
+      stroke: '#8f3044',
+      strokeThickness: 4,
+    }).setOrigin(0.5).setAlpha(0);
+    panel.add(damageText);
+
+    const powerY = arenaTop + arenaHeight + (isCompactPanel ? 12 : 14);
+    panel.add(this.add.text(contentLeft, powerY, this.t('ui.battle.yourPower', {
+      amount: battlePower,
+    }), {
+      color: '#fff4a8',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '13px' : '15px',
+      fontStyle: 'bold',
+    }));
+    panel.add(this.add.text(contentLeft + contentWidth, powerY, this.t('ui.battle.enemyPower', {
+      amount: stage.requiredPower,
+    }), {
+      color: THEME.mutedText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '13px' : '15px',
+      fontStyle: 'bold',
+    }).setOrigin(1, 0));
+
+    const resultText = this.add.text(0, powerY + (isCompactPanel ? 26 : 30), isClaimed ? this.t('ui.battle.claimed') : this.t('ui.battle.ready'), {
+      align: 'center',
+      color: isClaimed ? '#cdebb3' : THEME.mutedText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '13px' : '15px',
+      fontStyle: 'bold',
+      fixedWidth: contentWidth,
+      wordWrap: { width: contentWidth },
+    }).setOrigin(0.5, 0);
+    panel.add(resultText);
+
+    const buttonY = panelHeight / 2 - (isCompactPanel ? 38 : 44);
+    const buttonHeight = isCompactPanel ? 34 : 38;
+    const buttonGap = 10;
+    const buttonWidth = Math.min(isCompactPanel ? 126 : 150, (contentWidth - buttonGap) / 2);
+    const fightButton = this.addBattleButton(
+      panel,
+      -buttonWidth / 2 - buttonGap / 2,
+      buttonY,
+      buttonWidth,
+      buttonHeight,
+      this.t('ui.battle.fight'),
+      isClaimed ? THEME.lockedInner : THEME.buttonWarm,
+      isClaimed ? '#9ca79f' : '#ffffff',
+      () => {
+        this.startBattleTrainingAnimation({
+          battlePower,
+          damageText,
+          enemyContainer,
+          fightButton,
+          hpFill,
+          hpText,
+          resultText,
+          stage,
+          claimButton,
+        });
+      },
+      !isClaimed,
+    );
+
+    const claimButton = this.addBattleButton(
+      panel,
+      buttonWidth / 2 + buttonGap / 2,
+      buttonY,
+      buttonWidth,
+      buttonHeight,
+      isClaimed ? this.t('ui.battle.claimed') : this.t('ui.battle.claimReward'),
+      isClaimed ? THEME.lockedInner : THEME.buttonHover,
+      isClaimed ? '#cdebb3' : '#ffffff',
+      () => {
+        this.claimExpeditionReward(stage.id);
+      },
+      !isClaimed,
+    );
+    claimButton.setVisible(isClaimed);
+
+    if (isClaimed) {
+      hpText.setText(this.t('ui.battle.enemyHp', {
+        current: 0,
+        max: stage.requiredPower,
+      }));
+    }
+  }
+
+  private addBattleTeamVisuals(
+    panel: Phaser.GameObjects.Container,
+    monsters: MonsterInstance[],
+    centerX: number,
+    centerY: number,
+    isCompactPanel: boolean,
+  ): void {
+    if (monsters.length === 0) {
+      panel.add(this.add.text(centerX, centerY, this.t('ui.battle.noTeam'), {
+        align: 'center',
+        color: THEME.mutedText,
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: isCompactPanel ? '11px' : '13px',
+        fixedWidth: isCompactPanel ? 108 : 130,
+        wordWrap: { width: isCompactPanel ? 108 : 130 },
+      }).setOrigin(0.5));
+      return;
+    }
+
+    const spacing = isCompactPanel ? 38 : 46;
+    const cardWidth = isCompactPanel ? 34 : 40;
+    const cardHeight = isCompactPanel ? 52 : 60;
+    const startX = centerX - spacing * (monsters.length - 1) / 2;
+
+    monsters.forEach((monster, index) => {
+      const x = startX + index * spacing;
+      const cardY = centerY + (isCompactPanel ? 20 : 24);
+
+      panel.add(this.add.rectangle(x, cardY, cardWidth, cardHeight, THEME.slot, 0.88)
+        .setStrokeStyle(2, THEME.slotBorder, 0.72));
+      this.monsterRenderer.addMonsterVisual(panel, monster, x, cardY - (isCompactPanel ? 8 : 10), isCompactPanel ? 0.38 : 0.44);
+      panel.add(this.add.text(x, cardY + cardHeight / 2 - 11, this.t('common.levelShort', {
+        level: monster.level,
+      }), {
+        align: 'center',
+        color: '#173c27',
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: isCompactPanel ? '9px' : '10px',
+        fontStyle: 'bold',
+      }).setOrigin(0.5));
+      panel.add(this.add.text(x, cardY + cardHeight / 2, getMonsterBattlePower(monster).toString(), {
+        align: 'center',
+        color: '#173c27',
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: isCompactPanel ? '8px' : '9px',
+        fontStyle: 'bold',
+      }).setOrigin(0.5));
+    });
+  }
+
+  private addBattleEnemyVisual(
+    container: Phaser.GameObjects.Container,
+    stage: ExpeditionDefinition,
+    scale: number,
+  ): void {
+    const shadow = this.add.ellipse(0, 36 * scale, 82 * scale, 18 * scale, THEME.shadow, 0.24);
+    container.add(shadow);
+
+    if (stage.id === 'training-dummy') {
+      container.add(this.add.rectangle(0, 4 * scale, 24 * scale, 62 * scale, 0x9b7446, 0.96)
+        .setStrokeStyle(3, 0x5b3a21, 0.85));
+      container.add(this.add.circle(0, -34 * scale, 20 * scale, 0xc68a4c, 0.96)
+        .setStrokeStyle(3, 0x5b3a21, 0.85));
+      container.add(this.add.rectangle(0, -4 * scale, 64 * scale, 10 * scale, 0xc68a4c, 0.96)
+        .setStrokeStyle(2, 0x5b3a21, 0.75));
+      return;
+    }
+
+    if (stage.id === 'wobbly-sprout') {
+      container.add(this.add.ellipse(0, 12 * scale, 44 * scale, 48 * scale, 0x75c85b, 0.96)
+        .setStrokeStyle(3, 0x2f6d35, 0.85));
+      container.add(this.add.ellipse(-16 * scale, -18 * scale, 22 * scale, 36 * scale, 0x9de06f, 0.9).setAngle(-26));
+      container.add(this.add.ellipse(17 * scale, -18 * scale, 22 * scale, 36 * scale, 0x9de06f, 0.9).setAngle(26));
+      return;
+    }
+
+    if (stage.id === 'forest-guardian') {
+      container.add(this.add.rectangle(0, 8 * scale, 44 * scale, 70 * scale, 0x76512d, 0.96)
+        .setStrokeStyle(3, 0x3d2615, 0.86));
+      container.add(this.add.circle(-22 * scale, -24 * scale, 28 * scale, 0x4f944b, 0.95));
+      container.add(this.add.circle(18 * scale, -32 * scale, 32 * scale, 0x5da957, 0.95));
+      container.add(this.add.circle(0, -46 * scale, 28 * scale, 0x6fbd64, 0.95));
+      return;
+    }
+
+    if (stage.id === 'ancient-stump') {
+      container.add(this.add.ellipse(0, 5 * scale, 62 * scale, 74 * scale, 0x7a5734, 0.96)
+        .setStrokeStyle(4, 0x3d2615, 0.86));
+      container.add(this.add.ellipse(0, -24 * scale, 52 * scale, 20 * scale, 0xb58650, 0.94)
+        .setStrokeStyle(2, 0x3d2615, 0.7));
+      container.add(this.add.circle(-13 * scale, 1 * scale, 4 * scale, 0x14351f));
+      container.add(this.add.circle(13 * scale, 1 * scale, 4 * scale, 0x14351f));
+      return;
+    }
+
+    const dragonScale = stage.id === 'tiny-dragon' ? 1.12 * scale : scale;
+    const bodyColor = stage.id === 'tiny-dragon' ? 0x5a54c8 : 0x7554c8;
+    container.add(this.add.ellipse(0, 12 * dragonScale, 58 * dragonScale, 44 * dragonScale, bodyColor, 0.96)
+      .setStrokeStyle(3, 0x342052, 0.9));
+    container.add(this.add.circle(0, -24 * dragonScale, 28 * dragonScale, 0x8e67da, 0.96)
+      .setStrokeStyle(3, 0x342052, 0.9));
+    container.add(this.add.triangle(-36 * dragonScale, 5 * dragonScale, 0, 20 * dragonScale, -28 * dragonScale, -28 * dragonScale, 16 * dragonScale, -10 * dragonScale, 0xb956bf, 0.9)
+      .setStrokeStyle(2, 0x342052, 0.78));
+    container.add(this.add.triangle(36 * dragonScale, 5 * dragonScale, 0, 20 * dragonScale, 28 * dragonScale, -28 * dragonScale, -16 * dragonScale, -10 * dragonScale, 0xb956bf, 0.9)
+      .setStrokeStyle(2, 0x342052, 0.78));
+  }
+
+  private addBattleButton(
+    panel: Phaser.GameObjects.Container,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    label: string,
+    backgroundColor: number,
+    textColor: string,
+    onClick: () => void,
+    enabled: boolean,
+  ): Phaser.GameObjects.Text {
+    const button = this.add.text(x, y, label, {
+      align: 'center',
+      backgroundColor: `#${backgroundColor.toString(16).padStart(6, '0')}`,
+      color: textColor,
+      fixedWidth: width,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: width < 135 ? '13px' : '15px',
+      fontStyle: 'bold',
+      padding: {
+        y: Math.max(6, Math.floor((height - 20) / 2)),
+      },
+    }).setOrigin(0.5);
+
+    if (enabled) {
+      button
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+          pointer.event?.stopPropagation();
+          this.playButtonClickSound();
+          onClick();
+        });
+    }
+
+    panel.add(button);
+    return button;
+  }
+
+  private startBattleTrainingAnimation(options: {
+    battlePower: number;
+    claimButton: Phaser.GameObjects.Text;
+    damageText: Phaser.GameObjects.Text;
+    enemyContainer: Phaser.GameObjects.Container;
+    fightButton: Phaser.GameObjects.Text;
+    hpFill: Phaser.GameObjects.Rectangle;
+    hpText: Phaser.GameObjects.Text;
+    resultText: Phaser.GameObjects.Text;
+    stage: ExpeditionDefinition;
+  }): void {
+    if (this.battleAnimationInProgress || this.claimedExpeditionIds.has(options.stage.id)) {
+      return;
+    }
+
+    this.clearBattleAnimationEvents();
+    this.battleAnimationInProgress = true;
+    options.claimButton.setVisible(false);
+    options.fightButton.disableInteractive();
+    options.fightButton.setAlpha(0.62);
+    options.resultText.setColor(THEME.mutedText);
+    options.resultText.setText(this.t('ui.battle.fighting'));
+    options.hpFill.setScale(1, 1);
+    options.hpText.setText(this.t('ui.battle.enemyHp', {
+      current: options.stage.requiredPower,
+      max: options.stage.requiredPower,
+    }));
+
+    const tickCount = 4;
+    const damageTicks = getBattleDamageTicks(options.battlePower, options.stage.requiredPower, tickCount);
+    const finalHp = getEnemyHpAfterBattle(options.battlePower, options.stage.requiredPower);
+    let currentHp = options.stage.requiredPower;
+
+    damageTicks.forEach((damage, index) => {
+      const event = this.time.delayedCall(220 + index * 260, () => {
+        currentHp = index === damageTicks.length - 1
+          ? finalHp
+          : Math.max(finalHp, currentHp - damage);
+        const hpRatio = Phaser.Math.Clamp(currentHp / options.stage.requiredPower, 0, 1);
+
+        this.tweens.add({
+          duration: 180,
+          ease: 'Sine.easeOut',
+          scaleX: hpRatio,
+          targets: options.hpFill,
+        });
+        options.hpText.setText(this.t('ui.battle.enemyHp', {
+          current: currentHp,
+          max: options.stage.requiredPower,
+        }));
+
+        if (damage > 0) {
+          options.damageText.setText(`-${damage}`);
+          options.damageText.setAlpha(1);
+          options.damageText.setY(options.enemyContainer.y - 40);
+          this.tweens.add({
+            alpha: 0,
+            duration: 360,
+            ease: 'Sine.easeOut',
+            targets: options.damageText,
+            y: options.enemyContainer.y - 64,
+          });
+        }
+
+        this.tweens.add({
+          duration: 90,
+          ease: 'Sine.easeOut',
+          scaleX: 1.06,
+          scaleY: 0.94,
+          targets: options.enemyContainer,
+          yoyo: true,
+        });
+      });
+      this.battleAnimationEvents.push(event);
+    });
+
+    const finishEvent = this.time.delayedCall(220 + tickCount * 260 + 160, () => {
+      const result = getBattleResult(options.battlePower, options.stage.requiredPower);
+
+      this.battleAnimationInProgress = false;
+      options.fightButton.setAlpha(1);
+      options.fightButton.setInteractive({ useHandCursor: true });
+
+      if (result === 'victory') {
+        options.resultText.setColor('#fff4a8');
+        options.resultText.setText(this.t('ui.battle.victory'));
+        options.claimButton.setVisible(canClaimBattleReward(options.stage, this.farmSlots, this.claimedExpeditionIds));
+        return;
+      }
+
+      options.resultText.setColor('#fff4a8');
+      options.resultText.setText(this.t('ui.battle.needMorePower'));
+    });
+    this.battleAnimationEvents.push(finishEvent);
+  }
+
+  private clearBattleAnimationEvents(): void {
+    this.battleAnimationEvents.forEach((event) => {
+      event.remove(false);
+    });
+    this.battleAnimationEvents = [];
+    this.battleAnimationInProgress = false;
   }
 
   private addExpeditionRow(
@@ -2583,6 +3006,7 @@ export class FarmScene extends Phaser.Scene {
 
   private closeExpeditionPanel(): void {
     if (this.expeditionPanel) {
+      this.clearBattleAnimationEvents();
       this.expeditionPanel.destroy();
       this.expeditionPanel = undefined;
       this.hideModalOverlay();
@@ -2604,7 +3028,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getCurrentExpeditionPower(): number {
-    return getExpeditionPower(this.farmSlots);
+    return getBattlePower(this.farmSlots);
   }
 
   private getExpeditionStatus(expedition: ExpeditionDefinition): ExpeditionStatus {
