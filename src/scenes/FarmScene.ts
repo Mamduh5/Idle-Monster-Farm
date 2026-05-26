@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { MonsterRenderer, type MonsterVisual } from '../rendering/MonsterRenderer';
 import { HatchPanelView } from '../ui/HatchPanelView';
 import { HudView } from '../ui/HudView';
+import { TapFarmView } from '../ui/TapFarmView';
 import { ToastView, type ToastVariant } from '../ui/ToastView';
 import { EXPANSION_UNLOCK_COST, STARTING_EGG_COST } from '../data/economy';
 import { MISSION_DEFINITIONS, type MissionDefinition, type MissionId, type MissionReward } from '../data/missions';
@@ -222,6 +223,7 @@ export class FarmScene extends Phaser.Scene {
   private readonly hatchPanelView: HatchPanelView;
   private readonly hudView: HudView;
   private readonly monsterRenderer: MonsterRenderer;
+  private readonly tapFarmView: TapFarmView;
   private readonly toastView: ToastView;
   private currency: CurrencyState = {
     coins: STARTING_COINS,
@@ -231,10 +233,6 @@ export class FarmScene extends Phaser.Scene {
   private farmGridContainer?: Phaser.GameObjects.Container;
   private orderWidgetContainer?: Phaser.GameObjects.Container;
   private expansionContainer?: Phaser.GameObjects.Container;
-  private tapFarmContainer?: Phaser.GameObjects.Container;
-  private tapFarmPanel?: Phaser.GameObjects.Rectangle;
-  private tapFarmStatusText?: Phaser.GameObjects.Text;
-  private tapFarmEnergyFill?: Phaser.GameObjects.Rectangle;
   private tapFarmReactionContainer?: Phaser.GameObjects.Container;
   private tapFarmReactionTween?: Phaser.Tweens.Tween;
   private tapFarmReactionHideTween?: Phaser.Tweens.Tween;
@@ -361,6 +359,18 @@ export class FarmScene extends Phaser.Scene {
       theme: THEME,
     });
     this.monsterRenderer = new MonsterRenderer(this, UI_FONT_FAMILY, SHOW_DEBUG_PANEL);
+    this.tapFarmView = new TapFarmView(this, {
+      fontFamily: UI_FONT_FAMILY,
+      getLayout: () => this.getLayout(),
+      getTapFarmEnergyRatio: () => this.getTapFarmEnergyRatio(),
+      getTapFarmStatusText: () => this.getTapFarmStatusText(),
+      isDraggingMonster: () => this.activeDragSlotId !== null,
+      isModalOpen: () => this.isModalOpen(),
+      onHoverBlocked: () => this.resetFarmControlHoverState(),
+      onTapFarmClick: (pointer) => this.handleTapFarm(pointer),
+      t: (key, params) => this.t(key, params),
+      theme: THEME,
+    });
     this.toastView = new ToastView(this, {
       fontFamily: UI_FONT_FAMILY,
       getLayout: () => this.getLayout(),
@@ -430,10 +440,7 @@ export class FarmScene extends Phaser.Scene {
     this.hudView.destroy();
     this.orderWidgetContainer = undefined;
     this.expansionContainer = undefined;
-    this.tapFarmContainer = undefined;
-    this.tapFarmPanel = undefined;
-    this.tapFarmStatusText = undefined;
-    this.tapFarmEnergyFill = undefined;
+    this.tapFarmView.destroy();
     this.clearTapFarmReactionStack();
     this.menuControlsContainer = undefined;
     this.menuButtons = [];
@@ -952,97 +959,7 @@ export class FarmScene extends Phaser.Scene {
 
   private createTapFarmArea(): void {
     this.clearTapFarmReactionStack();
-    this.tapFarmContainer?.destroy();
-
-    const layout = this.getLayout();
-    const x = layout.tapFarmX;
-    const y = layout.tapFarmY;
-    const panelWidth = layout.tapFarmWidth;
-    const panelHeight = layout.tapFarmHeight;
-    const tapFarmContainer = this.add.container(0, 0);
-
-    tapFarmContainer.add(this.add.rectangle(x + 3, y + 4, panelWidth, panelHeight, THEME.shadow, 0.28)
-      .setOrigin(0));
-
-    const tapFarmPanel = this.add.rectangle(x, y, panelWidth, panelHeight, 0x2f6b45, 0.94)
-      .setOrigin(0)
-      .setStrokeStyle(2, THEME.panelBorder, 0.78);
-    this.tapFarmPanel = tapFarmPanel;
-    tapFarmContainer.add(tapFarmPanel);
-
-    const coinX = x + 28;
-    const centerY = y + panelHeight / 2;
-    tapFarmContainer.add(this.add.circle(coinX + 1, centerY + 1, 12, THEME.shadow, 0.22));
-    tapFarmContainer.add(this.add.circle(coinX, centerY, 12, 0xf3d06b, 0.96)
-      .setStrokeStyle(2, 0x8a6221, 0.9));
-    tapFarmContainer.add(this.add.text(coinX, centerY, '+', {
-      color: '#6b4a16',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: layout.isNarrow ? '15px' : '17px',
-      fontStyle: 'bold',
-    }).setOrigin(0.5));
-
-    tapFarmContainer.add(this.add.text(x + 50, y + 8, this.t('ui.tapFarm.label'), {
-      color: '#ffffff',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: layout.isNarrow ? '17px' : '19px',
-      fontStyle: 'bold',
-      fixedWidth: panelWidth - 64,
-    }));
-
-    this.tapFarmStatusText = this.add.text(x + 50, y + panelHeight - 18, '', {
-      color: '#d9f6ba',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: layout.isNarrow ? '11px' : '12px',
-      fontStyle: 'bold',
-      fixedWidth: panelWidth - 64,
-    });
-    tapFarmContainer.add(this.tapFarmStatusText);
-
-    const energyTrackWidth = Math.max(58, panelWidth - 184);
-    const energyTrackX = x + panelWidth - energyTrackWidth - 14;
-    const energyTrackY = y + panelHeight - 10;
-    tapFarmContainer.add(this.add.rectangle(energyTrackX, energyTrackY, energyTrackWidth, 5, 0x14351f, 0.84)
-      .setOrigin(0)
-      .setStrokeStyle(1, 0xf4e6a6, 0.4));
-
-    this.tapFarmEnergyFill = this.add.rectangle(energyTrackX, energyTrackY, energyTrackWidth, 5, 0xf3d06b, 0.96)
-      .setOrigin(0);
-    tapFarmContainer.add(this.tapFarmEnergyFill);
-
-    tapFarmPanel
-      .setInteractive({ useHandCursor: true })
-      .on(
-        'pointerdown',
-        (
-          pointer: Phaser.Input.Pointer,
-          _localX: number,
-          _localY: number,
-          event: Phaser.Types.Input.EventData,
-        ) => {
-          event.stopPropagation();
-          pointer.event?.stopPropagation();
-
-          if (this.isModalOpen() || this.activeDragSlotId !== null) {
-            return;
-          }
-
-          this.handleTapFarm(pointer);
-        },
-      )
-      .on('pointerover', () => {
-        if (this.isModalOpen()) {
-          this.resetFarmControlHoverState();
-          return;
-        }
-
-        tapFarmPanel.setFillStyle(THEME.buttonHover, 0.98);
-      })
-      .on('pointerout', () => {
-        tapFarmPanel.setFillStyle(THEME.button, 0.94);
-      });
-
-    this.tapFarmContainer = tapFarmContainer;
+    this.tapFarmView.create();
     this.updateTapFarmUi();
   }
 
@@ -1578,7 +1495,7 @@ export class FarmScene extends Phaser.Scene {
   private setModalOpenVisualState(isOpen: boolean): void {
     this.resetFarmControlHoverState();
     this.hatchPanelView.setModalOpenVisualState(isOpen);
-    this.tapFarmPanel?.setAlpha(isOpen ? 0.82 : 1);
+    this.tapFarmView.setModalOpenVisualState(isOpen);
     this.orderWidgetContainer?.setAlpha(isOpen ? 0.72 : 1);
 
     this.menuButtons.forEach(({ text }) => {
@@ -1588,7 +1505,7 @@ export class FarmScene extends Phaser.Scene {
 
   private resetFarmControlHoverState(): void {
     this.hatchPanelView.resetHoverState();
-    this.tapFarmPanel?.setFillStyle(THEME.button, 0.94);
+    this.tapFarmView.resetHoverState();
 
     this.menuButtons.forEach(({ text, defaultBackgroundColor }) => {
       text.setBackgroundColor(defaultBackgroundColor);
@@ -5997,29 +5914,31 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private updateTapFarmUi(): void {
+    this.tapFarmView.refresh();
+  }
+
+  private getTapFarmStatusText(): string {
     const energy = Phaser.Math.Clamp(Math.floor(this.tapFarmEnergy), 0, TAP_FARM_BURST_THRESHOLD);
-    const progress = energy / TAP_FARM_BURST_THRESHOLD;
     const activeCombo = this.getActiveTapFarmCombo();
 
     if (activeCombo >= 2) {
-      this.tapFarmStatusText?.setText(this.t('ui.tapFarm.comboStatus', {
+      return this.t('ui.tapFarm.comboStatus', {
         combo: activeCombo,
         multiplier: this.formatTapFarmComboMultiplier(this.getTapFarmComboMultiplier(activeCombo)),
-      }));
-    } else {
-      this.tapFarmStatusText?.setText(this.t('ui.tapFarm.status', {
-        amount: this.formatSignedCoinAmount(this.getTapFarmReward()),
-        energy,
-        goal: TAP_FARM_BURST_THRESHOLD,
-      }));
+      });
     }
 
-    if (this.tapFarmEnergyFill) {
-      const energyTrackWidth = Math.max(58, this.getLayout().tapFarmWidth - 184);
+    return this.t('ui.tapFarm.status', {
+      amount: this.formatSignedCoinAmount(this.getTapFarmReward()),
+      energy,
+      goal: TAP_FARM_BURST_THRESHOLD,
+    });
+  }
 
-      this.tapFarmEnergyFill.setVisible(progress > 0);
-      this.tapFarmEnergyFill.setDisplaySize(energyTrackWidth * progress, 5);
-    }
+  private getTapFarmEnergyRatio(): number {
+    const energy = Phaser.Math.Clamp(Math.floor(this.tapFarmEnergy), 0, TAP_FARM_BURST_THRESHOLD);
+
+    return energy / TAP_FARM_BURST_THRESHOLD;
   }
 
   private formatTapFarmComboMultiplier(multiplier: number): string {
