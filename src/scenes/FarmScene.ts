@@ -52,6 +52,17 @@ import {
   type MonsterDiscoveryKey,
 } from '../state/orderState';
 import {
+  applyUpgradePurchase,
+  createInitialUpgradeLevels as createInitialUpgradeLevelState,
+  getSanitizedUpgradeLevels as getSanitizedUpgradeLevelsFromState,
+  getUpgradeCostForLevel as getUpgradeCostForLevelFromState,
+  getUpgradeLevel as getUpgradeLevelFromState,
+  getUpgradePurchasePreview as getUpgradePurchasePreviewFromState,
+  isUpgradeMaxed,
+  type UpgradeBuyMode,
+  type UpgradePurchasePreview,
+} from '../state/upgradeState';
+import {
   BABY_SLIME,
   BUTTON_MUSHROOM,
   getMonsterDefinition,
@@ -59,7 +70,6 @@ import {
   MONSTER_DEFINITIONS,
 } from '../data/monsters';
 import {
-  getUpgradeCost,
   UPGRADE_DEFINITIONS,
   type UpgradeDefinition,
   type UpgradeId,
@@ -180,12 +190,6 @@ type MonsterDragZone = Phaser.GameObjects.Zone;
 type DiscoveryKey = MonsterDiscoveryKey;
 type UiLayoutMode = 'mobile' | 'desktop';
 type ModalKind = 'compendium' | 'upgrade-shop' | 'goals' | 'orders' | 'default';
-type UpgradeBuyMode = 'x1' | 'x10' | 'x50' | 'max';
-type UpgradePurchasePreview = {
-  levels: number;
-  totalCost: number;
-  nextCost: number;
-};
 type CompendiumListItem =
   | {
     type: 'family';
@@ -3906,78 +3910,32 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private createInitialUpgradeLevels(): Record<UpgradeId, number> {
-    return Object.fromEntries(
-      UPGRADE_DEFINITIONS.map((upgrade) => [upgrade.id, 0]),
-    ) as Record<UpgradeId, number>;
+    return createInitialUpgradeLevelState(UPGRADE_DEFINITIONS);
   }
 
   private getUpgradeLevel(upgradeId: UpgradeId): number {
-    const upgrade = UPGRADE_DEFINITIONS.find((definition) => definition.id === upgradeId);
-    const level = this.upgradeLevels[upgradeId] ?? 0;
-
-    if (!upgrade || !Number.isFinite(level)) {
-      return 0;
-    }
-
-    return Phaser.Math.Clamp(Math.floor(level), 0, upgrade.maxLevel);
+    return getUpgradeLevelFromState(UPGRADE_DEFINITIONS, this.upgradeLevels, upgradeId);
   }
 
   private getSanitizedUpgradeLevels(): Record<UpgradeId, number> {
-    return Object.fromEntries(
-      UPGRADE_DEFINITIONS.map((upgrade) => [upgrade.id, this.getUpgradeLevel(upgrade.id)]),
-    ) as Record<UpgradeId, number>;
+    return getSanitizedUpgradeLevelsFromState(UPGRADE_DEFINITIONS, this.upgradeLevels);
   }
 
   private getUpgradeCostForLevel(upgrade: UpgradeDefinition, level: number): number {
-    return getUpgradeCost(upgrade, this.sanitizeUpgradeLevel(level, upgrade.maxLevel));
+    return getUpgradeCostForLevelFromState(upgrade, level);
   }
 
   private getUpgradeBuyModeLabel(mode: UpgradeBuyMode): string {
     return mode === 'max' ? this.t('ui.upgrades.max') : mode;
   }
 
-  private getUpgradeBuyModeLimit(mode: UpgradeBuyMode): number {
-    if (mode === 'max') {
-      return Number.POSITIVE_INFINITY;
-    }
-
-    return Number.parseInt(mode.slice(1), 10);
-  }
-
   private getUpgradePurchasePreview(upgrade: UpgradeDefinition, currentLevel: number): UpgradePurchasePreview {
-    const sanitizedLevel = this.sanitizeUpgradeLevel(currentLevel, upgrade.maxLevel);
-    const nextCost = this.getUpgradeCostForLevel(upgrade, sanitizedLevel);
-    const maxLevelsToBuy = this.getUpgradeBuyModeLimit(this.upgradeBuyMode);
-    let levels = 0;
-    let totalCost = 0;
-
-    while (
-      sanitizedLevel + levels < upgrade.maxLevel
-      && levels < maxLevelsToBuy
-    ) {
-      const levelCost = this.getUpgradeCostForLevel(upgrade, sanitizedLevel + levels);
-
-      if (levelCost <= 0 || this.currency.coins < totalCost + levelCost) {
-        break;
-      }
-
-      totalCost += levelCost;
-      levels += 1;
-    }
-
-    return {
-      levels,
-      totalCost,
-      nextCost,
-    };
-  }
-
-  private sanitizeUpgradeLevel(level: number, maxLevel: number): number {
-    if (!Number.isFinite(level) || level < 0) {
-      return 0;
-    }
-
-    return Phaser.Math.Clamp(Math.floor(level), 0, maxLevel);
+    return getUpgradePurchasePreviewFromState(
+      upgrade,
+      currentLevel,
+      this.currency.coins,
+      this.upgradeBuyMode,
+    );
   }
 
   private buyUpgrade(upgradeId: UpgradeId): void {
@@ -3989,7 +3947,7 @@ export class FarmScene extends Phaser.Scene {
 
     const currentLevel = this.getUpgradeLevel(upgradeId);
 
-    if (currentLevel >= upgrade.maxLevel) {
+    if (isUpgradeMaxed(upgrade, currentLevel)) {
       return;
     }
 
@@ -4001,7 +3959,10 @@ export class FarmScene extends Phaser.Scene {
     }
 
     this.currency.coins = this.sanitizeCoins(this.currency.coins - purchasePreview.totalCost);
-    this.upgradeLevels[upgradeId] = currentLevel + purchasePreview.levels;
+    this.upgradeLevels = applyUpgradePurchase({
+      ...this.upgradeLevels,
+      [upgradeId]: currentLevel,
+    }, upgradeId, purchasePreview.levels);
     this.hatchCooldownMs = Math.min(this.hatchCooldownMs, this.getHatchCooldownMs());
     this.completeMission('buy-upgrade-1');
     this.hideFarmMessage();
