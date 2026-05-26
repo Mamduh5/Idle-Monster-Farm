@@ -1,5 +1,5 @@
 import type { ZoneId } from '../data/zones';
-import type { FarmSlotState } from '../types/game-state';
+import type { FarmSlotState, MonsterInstance } from '../types/game-state';
 
 export type EssencePowerPurchaseResult =
   | {
@@ -20,6 +20,27 @@ export type ZoneUnlockSyncResult = {
   currentZone: ZoneId;
   hasPrestigedOnce: boolean;
 };
+
+export type RitualSacrificeCandidate = {
+  slotId: number;
+  monster: MonsterInstance;
+  ritualPower: number;
+};
+
+export type RitualCompletionResult =
+  | {
+    success: true;
+    sacrificeSlotId: number;
+    sacrificeMonster: MonsterInstance;
+    rewardEssence: number;
+    nextTotalRitualsPerformed: number;
+    nextRequirement: number;
+    nextIncomeMultiplier: number;
+  }
+  | {
+    success: false;
+    reason: 'not-enough-ritual-power' | 'missing-sacrifice';
+  };
 
 const RITUAL_ESSENCE_REWARD = 1;
 const RITUAL_INCOME_BOOST_PER_COMPLETION = 0.1;
@@ -87,7 +108,7 @@ export function getRitualRequirement(totalRitualsPerformed: number): number {
 }
 
 export function canPerformRitual(farmSlots: readonly FarmSlotState[], totalRitualsPerformed: number): boolean {
-  return getFarmRitualPower(farmSlots) >= getRitualRequirement(totalRitualsPerformed);
+  return getRitualSacrificeCandidate(farmSlots, totalRitualsPerformed) !== undefined;
 }
 
 export function getRitualIncomeMultiplier(totalRitualsPerformed: number): number {
@@ -101,12 +122,50 @@ export function getPrestigeReward(
   return canPerformRitual(farmSlots, totalRitualsPerformed) ? RITUAL_ESSENCE_REWARD : 0;
 }
 
+export function getRitualSacrificeCandidate(
+  farmSlots: readonly FarmSlotState[],
+  totalRitualsPerformed: number,
+): RitualSacrificeCandidate | undefined {
+  const requirement = getRitualRequirement(totalRitualsPerformed);
+
+  return farmSlots.reduce<RitualSacrificeCandidate | undefined>((bestCandidate, slot) => {
+    if (!slot.monster) {
+      return bestCandidate;
+    }
+
+    const ritualPower = getMonsterRitualPower(slot.monster);
+
+    if (ritualPower < requirement) {
+      return bestCandidate;
+    }
+
+    const candidate: RitualSacrificeCandidate = {
+      slotId: slot.id,
+      monster: slot.monster,
+      ritualPower,
+    };
+
+    if (!bestCandidate) {
+      return candidate;
+    }
+
+    if (candidate.ritualPower !== bestCandidate.ritualPower) {
+      return candidate.ritualPower > bestCandidate.ritualPower ? candidate : bestCandidate;
+    }
+
+    if (candidate.monster.level !== bestCandidate.monster.level) {
+      return candidate.monster.level > bestCandidate.monster.level ? candidate : bestCandidate;
+    }
+
+    return candidate.slotId < bestCandidate.slotId ? candidate : bestCandidate;
+  }, undefined);
+}
+
 export function canPerformSafeRitual(
   farmSlots: readonly FarmSlotState[],
-  alreadyUsedThisSession: boolean,
   totalRitualsPerformed: number,
 ): boolean {
-  return !alreadyUsedThisSession && getSafeRitualReward(farmSlots, totalRitualsPerformed) > 0;
+  return getSafeRitualReward(farmSlots, totalRitualsPerformed) > 0;
 }
 
 export function getSafeRitualReward(
@@ -114,6 +173,39 @@ export function getSafeRitualReward(
   totalRitualsPerformed: number,
 ): number {
   return getPrestigeReward(farmSlots, totalRitualsPerformed);
+}
+
+export function getRitualCompletionResult(
+  farmSlots: readonly FarmSlotState[],
+  totalRitualsPerformed: number,
+): RitualCompletionResult {
+  const sacrificeCandidate = getRitualSacrificeCandidate(farmSlots, totalRitualsPerformed);
+
+  if (!sacrificeCandidate && getFarmRitualPower(farmSlots) < getRitualRequirement(totalRitualsPerformed)) {
+    return {
+      success: false,
+      reason: 'not-enough-ritual-power',
+    };
+  }
+
+  if (!sacrificeCandidate) {
+    return {
+      success: false,
+      reason: 'missing-sacrifice',
+    };
+  }
+
+  const nextTotalRitualsPerformed = sanitizePrestigeInteger(totalRitualsPerformed + 1);
+
+  return {
+    success: true,
+    sacrificeSlotId: sacrificeCandidate.slotId,
+    sacrificeMonster: sacrificeCandidate.monster,
+    rewardEssence: RITUAL_ESSENCE_REWARD,
+    nextTotalRitualsPerformed,
+    nextRequirement: getRitualRequirement(nextTotalRitualsPerformed),
+    nextIncomeMultiplier: getRitualIncomeMultiplier(nextTotalRitualsPerformed),
+  };
 }
 
 export function createInitialUnlockedZones(defaultZoneId: ZoneId): Set<ZoneId> {

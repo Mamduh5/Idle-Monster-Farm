@@ -100,7 +100,7 @@ import {
   type UpgradeBuyMode,
   type UpgradePurchasePreview,
 } from '../state/upgradeState';
-import { canAffordEssencePower, canPerformRitual, canPerformSafeRitual, canSwitchToZone, createInitialUnlockedZones, getEssencePowerPurchaseResult, getFarmRitualPower, getPrestigeReward, getRitualIncomeMultiplier, getRitualRequirement, getSafeRitualReward, getSanitizedUnlockedZones, getZoneSelectionStatus, sanitizePrestigeInteger as sanitizePrestigeIntegerState, syncZoneUnlockFromPrestigeProgress as syncZoneUnlockFromPrestigeProgressState } from '../state/prestigeZoneState';
+import { canAffordEssencePower, canPerformRitual, canPerformSafeRitual, canSwitchToZone, createInitialUnlockedZones, getEssencePowerPurchaseResult, getFarmRitualPower, getRitualCompletionResult, getRitualIncomeMultiplier, getRitualRequirement, getRitualSacrificeCandidate, getSanitizedUnlockedZones, getZoneSelectionStatus, sanitizePrestigeInteger as sanitizePrestigeIntegerState, syncZoneUnlockFromPrestigeProgress as syncZoneUnlockFromPrestigeProgressState, type RitualCompletionResult } from '../state/prestigeZoneState';
 import {
   createLoadedSetsFromSave,
   createLocalSaveData,
@@ -307,6 +307,7 @@ export class FarmScene extends Phaser.Scene {
   private gridGap = GRID_GAP;
   private currentEggCost = STARTING_EGG_COST;
   private monsterEssence = 0;
+  // Legacy save field name; this now represents the visible Hatch Blessing level.
   private essencePowerLevel = 0;
   private totalRitualsPerformed = 0;
   private expansionUnlocked = false;
@@ -344,7 +345,6 @@ export class FarmScene extends Phaser.Scene {
   private settings: GameSettings = loadSettings();
   private resetConfirmationArmed = false;
   private prestigeConfirmationArmed = false;
-  private safeRitualUsedThisSession = false;
   private safeRitualInProgress = false;
   private compendiumPageIndex = 0;
   private upgradeShopPageIndex = 0;
@@ -528,7 +528,6 @@ export class FarmScene extends Phaser.Scene {
     this.syncAudioSettings();
     this.resetConfirmationArmed = false;
     this.prestigeConfirmationArmed = false;
-    this.safeRitualUsedThisSession = false;
     this.safeRitualInProgress = false;
     this.compendiumPageIndex = 0;
     this.upgradeShopPageIndex = 0;
@@ -3200,6 +3199,8 @@ export class FarmScene extends Phaser.Scene {
   private getEconomyDebugText(): string {
     const cooldownMs = this.getHatchCooldownMs();
     const remainingMs = Math.max(0, cooldownMs - this.hatchCooldownMs);
+    const ritualRequirement = getRitualRequirement(this.totalRitualsPerformed);
+    const hatchBlessingBonus = getHatchBlessingTierBonus(this.essencePowerLevel);
     const hatchState = this.isHatchReady()
       ? 'Ready'
       : `${(remainingMs / MILLISECONDS_PER_SECOND).toFixed(1)}s remaining`;
@@ -3210,6 +3211,10 @@ export class FarmScene extends Phaser.Scene {
     return [
       `Egg cost: ${this.getEffectiveEggCost()} effective / ${this.currentEggCost} raw`,
       `Income/sec: ${this.formatCoinAmount(this.getTotalIncomePerSecond())}`,
+      `Rituals performed: ${this.totalRitualsPerformed}`,
+      `Ritual Power: ${getFarmRitualPower(this.farmSlots)} / ${ritualRequirement}`,
+      `Ritual income: x${this.getPrestigeIncomeMultiplier().toFixed(2)}`,
+      `Hatch Blessing: Lv ${this.essencePowerLevel} (+1 ${Math.round(hatchBlessingBonus.plusOneChance * 100)}% / +2 ${Math.round(hatchBlessingBonus.plusTwoChance * 100)}% / +3 ${Math.round(hatchBlessingBonus.plusThreeChance * 100)}%)`,
       `Hatch cooldown: ${(cooldownMs / MILLISECONDS_PER_SECOND).toFixed(1)}s`,
       `Hatch state: ${hatchState}`,
       `Offline cap: ${this.formatDuration(this.getOfflineCapSeconds())}`,
@@ -3420,11 +3425,12 @@ export class FarmScene extends Phaser.Scene {
     const { width: panelWidth, height: panelHeight } = getPanelSize(this.scale, 430, 460);
     const ritualPower = getFarmRitualPower(this.farmSlots);
     const ritualRequirement = getRitualRequirement(this.totalRitualsPerformed);
-    const reward = getPrestigeReward(this.farmSlots, this.totalRitualsPerformed);
+    const sacrificeCandidate = getRitualSacrificeCandidate(this.farmSlots, this.totalRitualsPerformed);
+    const completionResult = getRitualCompletionResult(this.farmSlots, this.totalRitualsPerformed);
+    const reward = completionResult.success ? completionResult.rewardEssence : 0;
     const canPrestige = canPerformRitual(this.farmSlots, this.totalRitualsPerformed);
     const canSafeRitual = canPerformSafeRitual(
       this.farmSlots,
-      this.safeRitualUsedThisSession,
       this.totalRitualsPerformed,
     )
       && !this.safeRitualInProgress;
@@ -3479,7 +3485,8 @@ export class FarmScene extends Phaser.Scene {
     }));
 
     panel.add(this.add.text(contentX + Math.floor(contentWidth / 2), -panelHeight / 2 + 130, this.t('ui.prestige.ritualIncome', {
-      multiplier: this.getPrestigeIncomeMultiplier().toFixed(2),
+      current: this.getPrestigeIncomeMultiplier().toFixed(2),
+      next: getRitualIncomeMultiplier(this.totalRitualsPerformed + 1).toFixed(2),
     }), {
       color: '#f7ffe8',
       fontFamily: UI_FONT_FAMILY,
@@ -3499,7 +3506,22 @@ export class FarmScene extends Phaser.Scene {
       },
     }));
 
-    panel.add(this.add.text(contentX, -panelHeight / 2 + 182, this.t('ui.prestige.reward', {
+    const sacrificeText = sacrificeCandidate
+      ? this.t('ui.prestige.sacrifice', {
+        monster: sacrificeCandidate.monster.name,
+        level: sacrificeCandidate.monster.level,
+      })
+      : this.t('ui.prestige.noSacrifice');
+
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 182, sacrificeText, {
+      color: sacrificeCandidate ? '#cdebb3' : '#9ca79f',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: panelWidth < 390 ? '13px' : '14px',
+      fontStyle: 'bold',
+      fixedWidth: contentWidth,
+    }));
+
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 206, this.t('ui.prestige.reward', {
       amount: reward,
     }), {
       color: canPrestige ? '#fff4a8' : '#9ca79f',
@@ -3509,22 +3531,22 @@ export class FarmScene extends Phaser.Scene {
       fixedWidth: contentWidth,
     }));
 
-    panel.add(this.add.text(contentX, -panelHeight / 2 + 208, this.t('ui.prestige.permanentPower'), {
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 232, this.t('ui.prestige.permanentPower'), {
       color: THEME.mutedText,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: '13px',
+      fontSize: panelWidth < 390 ? '12px' : '13px',
       wordWrap: {
         width: contentWidth,
       },
     }));
 
-    this.addEssencePowerSection(panel, panelWidth, panelHeight, canBuyEssencePower);
+    this.addHatchBlessingSection(panel, panelWidth, panelHeight, canBuyEssencePower);
     this.addPrestigeAction(panel, panelWidth, panelHeight, canPrestige, canSafeRitual);
 
     this.prestigePanel = panel;
   }
 
-  private addEssencePowerSection(
+  private addHatchBlessingSection(
     panel: Phaser.GameObjects.Container,
     panelWidth: number,
     panelHeight: number,
@@ -3537,7 +3559,7 @@ export class FarmScene extends Phaser.Scene {
     panel.add(this.add.rectangle(0, y, rowWidth, 74, THEME.panelAlt, 0.92)
       .setStrokeStyle(2, canBuyEssencePower ? THEME.slot : THEME.lockedBorder, 0.78));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, y - 27, this.t('ui.prestige.essencePower'), {
+    panel.add(this.add.text(-panelWidth / 2 + 42, y - 27, this.t('ui.prestige.hatchBlessing'), {
       color: '#f7ffe8',
       fontFamily: UI_FONT_FAMILY,
       fontSize: panelWidth < 390 ? '15px' : '17px',
@@ -3589,7 +3611,7 @@ export class FarmScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
         this.playButtonClickSound();
-        this.buyEssencePower();
+        this.buyHatchBlessing();
       });
 
     panel.add(buyText);
@@ -3689,9 +3711,9 @@ export class FarmScene extends Phaser.Scene {
         void this.trySafeRitual();
       });
 
-    const safeDetail = this.safeRitualUsedThisSession
-      ? this.t('ui.prestige.safeUsed')
-      : this.t('ui.prestige.safeDetail');
+    const safeDetail = this.safeRitualInProgress
+      ? this.t('ui.prestige.safePending')
+      : this.t('ui.prestige.safeDetailSacrifice');
 
     panel.add(this.add.text(safeX, actionY + 23, safeDetail, {
       color: canSafeRitual ? '#cdebb3' : '#9ca79f',
@@ -4819,7 +4841,7 @@ export class FarmScene extends Phaser.Scene {
       : this.t('toast.upgradePurchasedLevels', { count: purchasePreview.levels }), 'success');
   }
 
-  private buyEssencePower(): void {
+  private buyHatchBlessing(): void {
     const purchaseResult = getEssencePowerPurchaseResult(
       this.monsterEssence,
       this.essencePowerLevel,
@@ -4839,14 +4861,14 @@ export class FarmScene extends Phaser.Scene {
     this.updateHud();
     this.saveProgress();
     this.openPrestigePanel();
-    this.showToast(this.t('toast.essencePowerUpgraded'), 'success');
+    this.showToast(this.t('toast.hatchBlessingUpgraded'), 'success');
   }
 
   private tryPrestige(): void {
-    const reward = getPrestigeReward(this.farmSlots, this.totalRitualsPerformed);
+    const ritualResult = getRitualCompletionResult(this.farmSlots, this.totalRitualsPerformed);
 
-    if (reward <= 0) {
-      this.showToast(this.t('toast.prestigeRequirement'), 'warning');
+    if (!ritualResult.success) {
+      this.showRitualBlockedToast(ritualResult);
       return;
     }
 
@@ -4856,21 +4878,16 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    this.performPrestigeReset(reward);
+    this.performPrestigeReset(ritualResult);
     this.openPrestigePanel();
-    this.showToast(this.t('toast.prestigeComplete', { amount: reward }), 'success');
+    this.showToast(this.t('toast.prestigeComplete', { amount: ritualResult.rewardEssence }), 'success');
   }
 
   private async trySafeRitual(): Promise<void> {
-    const reward = getSafeRitualReward(this.farmSlots, this.totalRitualsPerformed);
+    const ritualResult = getRitualCompletionResult(this.farmSlots, this.totalRitualsPerformed);
 
-    if (reward <= 0) {
-      this.showToast(this.t('toast.prestigeRequirement'), 'warning');
-      return;
-    }
-
-    if (!canPerformSafeRitual(this.farmSlots, this.safeRitualUsedThisSession, this.totalRitualsPerformed)) {
-      this.showToast(this.t('toast.safeRitualUsed'), 'warning');
+    if (!ritualResult.success) {
+      this.showRitualBlockedToast(ritualResult);
       return;
     }
 
@@ -4891,24 +4908,30 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    const latestReward = getSafeRitualReward(this.farmSlots, this.totalRitualsPerformed);
+    const latestRitualResult = getRitualCompletionResult(this.farmSlots, this.totalRitualsPerformed);
 
-    if (latestReward <= 0) {
+    if (!latestRitualResult.success) {
       this.openPrestigePanel();
-      this.showToast(this.t('toast.prestigeRequirement'), 'warning');
+      this.showRitualBlockedToast(latestRitualResult);
       return;
     }
 
-    this.performSafeRitualReward(latestReward);
+    this.performSafeRitualReward(latestRitualResult);
     this.openPrestigePanel();
-    this.showToast(this.t('toast.safeRitualComplete', { amount: latestReward }), 'success');
+    this.showToast(this.t('toast.safeRitualComplete', { amount: latestRitualResult.rewardEssence }), 'success');
   }
 
-  private performSafeRitualReward(essenceReward: number): void {
-    this.monsterEssence = sanitizePrestigeIntegerState(this.monsterEssence + essenceReward);
-    this.totalRitualsPerformed = sanitizePrestigeIntegerState(this.totalRitualsPerformed + 1);
+  private showRitualBlockedToast(ritualResult: Extract<RitualCompletionResult, { success: false }>): void {
+    this.showToast(this.t(ritualResult.reason === 'missing-sacrifice'
+      ? 'toast.ritualMissingSacrifice'
+      : 'toast.prestigeRequirement'), 'warning');
+  }
+
+  private performSafeRitualReward(ritualResult: Extract<RitualCompletionResult, { success: true }>): void {
+    this.consumeRitualSacrifice(ritualResult.sacrificeSlotId);
+    this.monsterEssence = sanitizePrestigeIntegerState(this.monsterEssence + ritualResult.rewardEssence);
+    this.totalRitualsPerformed = ritualResult.nextTotalRitualsPerformed;
     this.hasPrestigedOnce = true;
-    this.safeRitualUsedThisSession = true;
     this.syncZoneUnlockFromPrestigeProgress();
     this.skipSavingUntilProgress = false;
     this.prestigeConfirmationArmed = false;
@@ -4919,9 +4942,17 @@ export class FarmScene extends Phaser.Scene {
     this.saveProgress();
   }
 
-  private performPrestigeReset(essenceReward: number): void {
-    this.monsterEssence += essenceReward;
-    this.totalRitualsPerformed = sanitizePrestigeIntegerState(this.totalRitualsPerformed + 1);
+  private consumeRitualSacrifice(slotId: number): void {
+    this.clearSelectedSlot();
+    this.cancelActiveDrag();
+    this.farmSlots = clearSlotMonster(this.farmSlots, slotId);
+    this.clearMonsterVisual(slotId);
+  }
+
+  private performPrestigeReset(ritualResult: Extract<RitualCompletionResult, { success: true }>): void {
+    this.consumeRitualSacrifice(ritualResult.sacrificeSlotId);
+    this.monsterEssence += ritualResult.rewardEssence;
+    this.totalRitualsPerformed = ritualResult.nextTotalRitualsPerformed;
     this.hasPrestigedOnce = true;
     this.syncZoneUnlockFromPrestigeProgress();
     this.currency.coins = STARTING_COINS;
@@ -6030,7 +6061,6 @@ export class FarmScene extends Phaser.Scene {
     this.skipSavingUntilProgress = true;
     this.resetConfirmationArmed = false;
     this.prestigeConfirmationArmed = false;
-    this.safeRitualUsedThisSession = false;
     this.safeRitualInProgress = false;
     this.discoveredMonsters = new Set<DiscoveryKey>();
     this.onboardingHintsSeen = new Set<OnboardingHintId>();
