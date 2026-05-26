@@ -5,6 +5,12 @@ import { HudView } from '../ui/HudView';
 import { NavigationControlView } from '../ui/NavigationControlView';
 import { NavigationMenuPanelView, type NavigationMenuPanelItem } from '../ui/NavigationMenuPanelView';
 import { OrderWidgetView } from '../ui/OrderWidgetView';
+import {
+  addPanelBackground,
+  getInsetPanelSize,
+  getPanelSize,
+  getPanelTitleFontSize,
+} from '../ui/PanelChrome';
 import { TapFarmView } from '../ui/TapFarmView';
 import { ToastView, type ToastVariant } from '../ui/ToastView';
 import { EXPANSION_UNLOCK_COST, STARTING_EGG_COST } from '../data/economy';
@@ -365,13 +371,8 @@ export class FarmScene extends Phaser.Scene {
       theme: THEME,
     });
     this.navigationMenuPanelView = new NavigationMenuPanelView(this, {
-      addPanelBackground: (panel, width, height) => {
-        this.addPanelBackground(panel, width, height);
-      },
       fontFamily: UI_FONT_FAMILY,
       getLayout: () => this.getLayout(),
-      getPanelSize: (preferredWidth, preferredHeight) => this.getPanelSize(preferredWidth, preferredHeight),
-      getPanelTitleFontSize: (panelWidth, desktopSize) => this.getPanelTitleFontSize(panelWidth, desktopSize),
       onButtonClickSound: () => this.playButtonClickSound(),
       onClose: () => this.closeNavigationMenuPanel(),
       t: (key, params) => this.t(key, params),
@@ -1006,13 +1007,6 @@ export class FarmScene extends Phaser.Scene {
     this.showToast(this.t('toast.languageChanged'), 'success');
   }
 
-  private getPanelSize(preferredWidth: number, preferredHeight: number): { width: number; height: number } {
-    return {
-      width: Math.min(preferredWidth, this.scale.width - 24),
-      height: Math.min(preferredHeight, this.scale.height - 24),
-    };
-  }
-
   private getUiLayoutMode(): UiLayoutMode {
     const { width, height } = this.scale;
     const touchConstrained = navigator.maxTouchPoints > 0 && (width < 900 || height < 760);
@@ -1028,46 +1022,17 @@ export class FarmScene extends Phaser.Scene {
       const isListModal = kind === 'compendium' || kind === 'upgrade-shop' || kind === 'goals' || kind === 'orders';
       const mobileMaxWidth = isListModal ? 390 : preferredWidth;
 
-      return {
-        width: Math.min(mobileMaxWidth, this.scale.width - inset * 2),
-        height: isListModal
-          ? this.scale.height - inset * 2
-          : Math.min(preferredHeight, this.scale.height - inset * 2),
-      };
+      return getInsetPanelSize(
+        this.scale,
+        mobileMaxWidth,
+        isListModal ? this.scale.height : preferredHeight,
+        inset,
+      );
     }
 
     const inset = 36;
 
-    return {
-      width: Math.min(preferredWidth, this.scale.width - inset * 2),
-      height: Math.min(preferredHeight, this.scale.height - inset * 2),
-    };
-  }
-
-  private getPanelTitleFontSize(panelWidth: number, desktopSize = 24): string {
-    return `${panelWidth < 390 ? Math.min(desktopSize, 21) : desktopSize}px`;
-  }
-
-  private addPanelBackground(
-    panel: Phaser.GameObjects.Container,
-    width: number,
-    height: number,
-    fill = THEME.panel,
-    border = THEME.panelBorder,
-  ): Phaser.GameObjects.Rectangle {
-    panel.add(this.add.rectangle(4, 5, width, height, THEME.shadow, 0.25));
-
-    const panelBackground = this.add.rectangle(0, 0, width, height, fill, 0.97)
-      .setStrokeStyle(3, border, 0.78)
-      .setInteractive();
-
-    panelBackground.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      pointer.event.stopPropagation();
-    });
-
-    panel.add(panelBackground);
-
-    return panelBackground;
+    return getInsetPanelSize(this.scale, preferredWidth, preferredHeight, inset);
   }
 
   private getRowsPerPage(rowGap: number, bodyHeight: number, totalRows: number, mobilePreferredRows: number, desktopPreferredRows: number): number {
@@ -1455,16 +1420,16 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = this.getPanelSize(360, 360);
+    const { width: panelWidth, height: panelHeight } = getPanelSize(this.scale, 360, 360);
 
     panel.setDepth(25);
 
-    this.addPanelBackground(panel, panelWidth, panelHeight);
+    addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
 
     panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.settings.title'), {
       color: THEME.text,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: this.getPanelTitleFontSize(panelWidth),
+      fontSize: getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
@@ -1680,16 +1645,16 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = this.getPanelSize(500, 430);
+    const { width: panelWidth, height: panelHeight } = getPanelSize(this.scale, 500, 430);
 
     panel.setDepth(26);
 
-    this.addPanelBackground(panel, panelWidth, panelHeight);
+    addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
 
     panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.help.title'), {
       color: THEME.text,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: this.getPanelTitleFontSize(panelWidth),
+      fontSize: getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
@@ -1814,18 +1779,18 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = this.getPanelSize(460, 360);
+    const { width: panelWidth, height: panelHeight } = getPanelSize(this.scale, 460, 360);
     const firstRowY = -panelHeight / 2 + 104;
     const rowGap = Math.min(96, Math.max(78, (panelHeight - 128) / ZONE_DEFINITIONS.length));
     const rowHeight = Math.min(84, rowGap - 8);
 
     panel.setDepth(24);
-    this.addPanelBackground(panel, panelWidth, panelHeight);
+    addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
 
     panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.zone.title'), {
       color: THEME.text,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: this.getPanelTitleFontSize(panelWidth),
+      fontSize: getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
@@ -2010,12 +1975,12 @@ export class FarmScene extends Phaser.Scene {
     this.missionsPageIndex = pageIndex;
 
     panel.setDepth(24);
-    this.addPanelBackground(panel, panelWidth, panelHeight);
+    addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
 
     panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.goals.title'), {
       color: THEME.text,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: this.getPanelTitleFontSize(panelWidth),
+      fontSize: getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
@@ -2172,12 +2137,12 @@ export class FarmScene extends Phaser.Scene {
     this.ordersPageIndex = pageIndex;
 
     panel.setDepth(24);
-    this.addPanelBackground(panel, panelWidth, panelHeight);
+    addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
 
     panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.orders.title'), {
       color: THEME.text,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: this.getPanelTitleFontSize(panelWidth),
+      fontSize: getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
@@ -2452,16 +2417,16 @@ export class FarmScene extends Phaser.Scene {
     this.clearSelectedSlot();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = this.getPanelSize(390, 310);
+    const { width: panelWidth, height: panelHeight } = getPanelSize(this.scale, 390, 310);
 
     panel.setDepth(28);
 
-    this.addPanelBackground(panel, panelWidth, panelHeight, 0x2f2818, THEME.panelBorder);
+    addPanelBackground(this, panel, panelWidth, panelHeight, THEME, 0x2f2818, THEME.panelBorder);
 
     panel.add(this.add.text(-panelWidth / 2 + 20, -panelHeight / 2 + 18, 'Economy Debug', {
       color: '#fff4a8',
       fontFamily: UI_FONT_FAMILY,
-      fontSize: this.getPanelTitleFontSize(panelWidth, 22),
+      fontSize: getPanelTitleFontSize(panelWidth, 22),
       fontStyle: 'bold',
     }));
 
@@ -2579,12 +2544,12 @@ export class FarmScene extends Phaser.Scene {
 
     panel.setDepth(24);
 
-    this.addPanelBackground(panel, panelWidth, panelHeight);
+    addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
 
     panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.upgrades.title'), {
       color: THEME.text,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: this.getPanelTitleFontSize(panelWidth),
+      fontSize: getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
@@ -2755,18 +2720,18 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = this.getPanelSize(430, 390);
+    const { width: panelWidth, height: panelHeight } = getPanelSize(this.scale, 430, 390);
     const reward = this.getPrestigeEssenceReward();
     const canPrestige = reward > 0;
     const canBuyEssencePower = this.monsterEssence >= ESSENCE_POWER_COST;
 
     panel.setDepth(24);
-    this.addPanelBackground(panel, panelWidth, panelHeight);
+    addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
 
     panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.prestige.title'), {
       color: THEME.text,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: this.getPanelTitleFontSize(panelWidth),
+      fontSize: getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
@@ -4656,12 +4621,12 @@ export class FarmScene extends Phaser.Scene {
     this.compendiumPageIndex = pageIndex;
 
     panel.setDepth(20);
-    this.addPanelBackground(panel, panelWidth, panelHeight);
+    addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
 
     panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.compendium.title'), {
       color: THEME.text,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: this.getPanelTitleFontSize(panelWidth, 22),
+      fontSize: getPanelTitleFontSize(panelWidth, 22),
       fontStyle: 'bold',
     }));
 

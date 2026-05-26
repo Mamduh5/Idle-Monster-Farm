@@ -1,4 +1,10 @@
 import Phaser from 'phaser';
+import {
+  addPanelBackground,
+  getPanelSize,
+  getPanelTitleFontSize,
+  type PanelChromeTheme,
+} from './PanelChrome';
 
 type NavigationMenuLayout = {
   isNarrow: boolean;
@@ -7,10 +13,9 @@ type NavigationMenuLayout = {
   menuY: number;
 };
 
-type NavigationMenuTheme = {
+type NavigationMenuTheme = PanelChromeTheme & {
   button: number;
   buttonHover: number;
-  panelBorder: number;
   text: string;
 };
 
@@ -20,11 +25,8 @@ export type NavigationMenuPanelItem = {
 };
 
 type NavigationMenuPanelViewOptions = {
-  addPanelBackground: (panel: Phaser.GameObjects.Container, width: number, height: number) => void;
   fontFamily: string;
   getLayout: () => NavigationMenuLayout;
-  getPanelSize: (preferredWidth: number, preferredHeight: number) => { width: number; height: number };
-  getPanelTitleFontSize: (panelWidth: number, desktopSize?: number) => string;
   onButtonClickSound: () => void;
   onClose: () => void;
   t: (key: string, params?: Record<string, string | number>) => string;
@@ -46,7 +48,7 @@ export class NavigationMenuPanelView {
     const layout = this.options.getLayout();
     const preferredPanelWidth = layout.isNarrow ? 260 : 280;
     const preferredPanelHeight = 398;
-    const { width: panelWidth, height: panelHeight } = this.options.getPanelSize(preferredPanelWidth, preferredPanelHeight);
+    const { width: panelWidth, height: panelHeight } = getPanelSize(this.scene.scale, preferredPanelWidth, preferredPanelHeight);
     const panelX = layout.isNarrow
       ? Math.min(this.scene.scale.width - layout.margin - panelWidth / 2, Math.max(layout.margin + panelWidth / 2, layout.menuX - panelWidth / 2))
       : this.scene.scale.width - layout.margin - panelWidth / 2;
@@ -57,12 +59,12 @@ export class NavigationMenuPanelView {
     const panel = this.scene.add.container(panelX, panelY);
 
     panel.setDepth(26);
-    this.options.addPanelBackground(panel, panelWidth, panelHeight);
+    addPanelBackground(this.scene, panel, panelWidth, panelHeight, theme);
 
     panel.add(this.scene.add.text(-panelWidth / 2 + 22, -panelHeight / 2 + 18, this.options.t('ui.menu'), {
       color: theme.text,
       fontFamily,
-      fontSize: this.options.getPanelTitleFontSize(panelWidth, 23),
+      fontSize: getPanelTitleFontSize(panelWidth, 23),
       fontStyle: 'bold',
     }));
 
