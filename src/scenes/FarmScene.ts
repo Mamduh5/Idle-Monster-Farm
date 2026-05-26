@@ -32,6 +32,7 @@ import {
   moveSlotMonster as moveFarmSlotMonster,
   setSlotMonster,
 } from '../state/farmSlotState';
+import { chooseCoinBugSpawnPosition, COIN_BUG_FAILED_SPAWN_RETRY_MS, COIN_BUG_HITBOX_SIZE, COIN_BUG_MAX_ACTIVE, COIN_BUG_MAX_LIFETIME_MS, COIN_BUG_MIN_DISTANCE_FROM_OTHER_BUGS, COIN_BUG_MIN_LIFETIME_MS, COIN_BUG_MIN_REWARD, COIN_BUG_PICKUP_RADIUS_DESKTOP, COIN_BUG_PICKUP_RADIUS_MOBILE, COIN_BUG_REWARD_SECONDS, COIN_BUG_SPAWN_ATTEMPTS, COIN_BUG_SPAWN_MAX_MS, COIN_BUG_SPAWN_MIN_MS, getActiveCoinBugCount as getActiveCoinBugStateCount, getCoinBugPickupRadius as getCoinBugPickupRadiusFromState, getCoinBugRewardAmount, getCoinBugRewardBase, getNextCoinBugSpawnState, getPointDistance, getRandomDelayMs, getRandomLifetimeMs, shouldAttemptCoinBugSpawn, shouldExpireCoinBug, updateCoinBugLifetime } from '../state/coinBugState';
 import {
   clampCompendiumPageIndex,
   discoverMonster as discoverMonsterInState,
@@ -47,6 +48,7 @@ import {
   type DiscoveryKey,
 } from '../state/discoveryState';
 import { canAffordHatch as canAffordHatchInState, getAppliedAwayHatchCooldown, getCappedHatchCooldown, getHatchAttemptState, getHatchCooldownDurationForState, getHatchCost, getHatchedMonsterDefinition, getMushroomHatchChanceForState, getNextHatchCostAfterSuccess, getUpdatedHatchCooldown, isHatchReady as isHatchReadyInState } from '../state/hatchState';
+import { getActiveTapFarmCombo as getActiveTapFarmComboFromState, getBaseTapFarmReward, getClampedTapFarmEnergy, getTapFarmComboMultiplier as getTapFarmComboMultiplierFromState, getTapFarmComboTimeoutResult, getTapFarmEnergyRatio as getTapFarmEnergyRatioFromState, getTapFarmRewardAmount, getTapFarmTapResult, resetTapFarmEnergy, TAP_FARM_BURST_THRESHOLD, TAP_FARM_COMBO_MAX_MULTIPLIER, TAP_FARM_COMBO_TIMEOUT_MS, TAP_FARM_COOLDOWN_MS, TAP_FARM_DEFAULT_CONFIG, TAP_FARM_MIN_REWARD, TAP_FARM_REWARD_SECONDS } from '../state/tapFarmState';
 import {
   canIncrementMission,
   createInitialMissionProgress as createInitialMissionProgressState,
@@ -109,14 +111,12 @@ import {
 } from '../systems/saveSystem';
 import {
   calculateOfflineCoins,
-  getCoinBugReward as getProgressionCoinBugReward,
   getEffectiveMonsterIncome,
   getFamilyIncomeMultiplier,
   getOfflineCapSeconds,
   getOrderCoinReward,
   getPrestigeIncomeMultiplier,
   getSporeIncomeMultiplier,
-  getTapFarmReward as getProgressionTapFarmReward,
   getTotalIncomePerSecond,
   HATCH_COOLDOWN_MS,
   MUSHROOM_FOREST_HATCH_CHANCE_BONUS,
@@ -148,24 +148,6 @@ const MILLISECONDS_PER_SECOND = 1000;
 const SAVE_THROTTLE_MS = 5000;
 const STARTING_COINS = STARTING_EGG_COST;
 const ESSENCE_POWER_COST = 1;
-const COIN_BUG_SPAWN_MIN_MS = 20_000;
-const COIN_BUG_SPAWN_MAX_MS = 35_000;
-const COIN_BUG_MIN_LIFETIME_MS = 8_000;
-const COIN_BUG_MAX_LIFETIME_MS = 12_000;
-const COIN_BUG_MAX_ACTIVE = 3;
-const COIN_BUG_REWARD_SECONDS = 10;
-const COIN_BUG_MIN_REWARD = 25;
-const COIN_BUG_HITBOX_SIZE = 72;
-const COIN_BUG_PICKUP_RADIUS_DESKTOP = 52;
-const COIN_BUG_PICKUP_RADIUS_MOBILE = 64;
-const TAP_FARM_REWARD_SECONDS = 0.5;
-const TAP_FARM_MIN_REWARD = 1;
-const TAP_FARM_BURST_THRESHOLD = 20;
-const TAP_FARM_BURST_REWARD_SECONDS = 10;
-const TAP_FARM_BURST_MIN_REWARD = 25;
-const TAP_FARM_COOLDOWN_MS = 90;
-const TAP_FARM_COMBO_TIMEOUT_MS = 4000;
-const TAP_FARM_COMBO_MAX_MULTIPLIER = 2.5;
 const SHOW_DEBUG_PANEL = false;
 const SHOW_MONSTER_HITBOX_DEBUG = false;
 const MODAL_OVERLAY_DEPTH = 18;
@@ -1363,7 +1345,11 @@ export class FarmScene extends Phaser.Scene {
       return null;
     }
 
-    const pickupRadius = this.getCoinBugPickupRadius();
+    const pickupRadius = getCoinBugPickupRadiusFromState(
+      this.getUiLayoutMode(),
+      COIN_BUG_PICKUP_RADIUS_DESKTOP,
+      COIN_BUG_PICKUP_RADIUS_MOBILE,
+    );
     let nearestBug: CoinBug | null = null;
     let nearestDistance = Number.POSITIVE_INFINITY;
 
@@ -1372,7 +1358,7 @@ export class FarmScene extends Phaser.Scene {
         return;
       }
 
-      const distance = Phaser.Math.Distance.Between(x, y, bug.container.x, bug.container.y);
+      const distance = getPointDistance({ x, y }, { x: bug.container.x, y: bug.container.y });
 
       if (distance > pickupRadius || distance >= nearestDistance) {
         return;
@@ -1383,12 +1369,6 @@ export class FarmScene extends Phaser.Scene {
     });
 
     return nearestBug;
-  }
-
-  private getCoinBugPickupRadius(): number {
-    return this.getUiLayoutMode() === 'mobile'
-      ? COIN_BUG_PICKUP_RADIUS_MOBILE
-      : COIN_BUG_PICKUP_RADIUS_DESKTOP;
   }
 
   private isPointerOverFarmControl(pointer: Phaser.Input.Pointer): boolean {
@@ -2821,9 +2801,9 @@ export class FarmScene extends Phaser.Scene {
         return;
       }
 
-      bug.lifetimeMs -= deltaMs;
+      bug.lifetimeMs = updateCoinBugLifetime(bug.lifetimeMs, deltaMs);
 
-      if (bug.lifetimeMs <= 0) {
+      if (shouldExpireCoinBug(bug.lifetimeMs)) {
         this.expireCoinBug(bug);
       }
     });
@@ -2831,12 +2811,14 @@ export class FarmScene extends Phaser.Scene {
     this.activeCoinBugs = this.activeCoinBugs.filter((bug) => bug.container.active);
     this.coinBugSpawnAccumulatorMs += deltaMs;
 
-    if (
-      this.coinBugSpawnAccumulatorMs < this.nextCoinBugSpawnMs
-      || this.getActiveCoinBugCount() >= COIN_BUG_MAX_ACTIVE
-      || this.isModalOpen()
-      || this.activeDragSlotId !== null
-    ) {
+    if (!shouldAttemptCoinBugSpawn({
+      spawnAccumulatorMs: this.coinBugSpawnAccumulatorMs,
+      nextSpawnDelayMs: this.nextCoinBugSpawnMs,
+      activeCoinBugCount: this.getActiveCoinBugCount(),
+      maxActiveCoinBugs: COIN_BUG_MAX_ACTIVE,
+      isModalOpen: this.isModalOpen(),
+      isDraggingMonster: this.activeDragSlotId !== null,
+    })) {
       return;
     }
 
@@ -2845,21 +2827,30 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    this.coinBugSpawnAccumulatorMs = 0;
-    this.nextCoinBugSpawnMs = 3_000;
+    const spawnState = getNextCoinBugSpawnState(false, this.nextCoinBugSpawnMs, COIN_BUG_FAILED_SPAWN_RETRY_MS);
+    this.coinBugSpawnAccumulatorMs = spawnState.spawnAccumulatorMs;
+    this.nextCoinBugSpawnMs = spawnState.nextSpawnDelayMs;
   }
 
   private getActiveCoinBugCount(): number {
-    return this.activeCoinBugs.filter((bug) => !bug.collected && bug.container.active).length;
+    return getActiveCoinBugStateCount(this.activeCoinBugs.map((bug) => ({
+      id: bug.id,
+      x: bug.container.x,
+      y: bug.container.y,
+      lifetimeMs: bug.lifetimeMs,
+      collected: bug.collected,
+      active: bug.container.active,
+    })));
   }
 
   private scheduleNextCoinBugSpawn(): void {
-    this.coinBugSpawnAccumulatorMs = 0;
-    this.nextCoinBugSpawnMs = this.getNextCoinBugSpawnDelayMs();
+    const spawnState = getNextCoinBugSpawnState(true, this.getNextCoinBugSpawnDelayMs(), COIN_BUG_FAILED_SPAWN_RETRY_MS);
+    this.coinBugSpawnAccumulatorMs = spawnState.spawnAccumulatorMs;
+    this.nextCoinBugSpawnMs = spawnState.nextSpawnDelayMs;
   }
 
   private getNextCoinBugSpawnDelayMs(): number {
-    return Phaser.Math.Between(COIN_BUG_SPAWN_MIN_MS, COIN_BUG_SPAWN_MAX_MS);
+    return getRandomDelayMs(COIN_BUG_SPAWN_MIN_MS, COIN_BUG_SPAWN_MAX_MS, Math.random());
   }
 
   private spawnCoinBug(): boolean {
@@ -2873,7 +2864,7 @@ export class FarmScene extends Phaser.Scene {
     const bug: CoinBug = {
       id: this.nextCoinBugId,
       container,
-      lifetimeMs: Phaser.Math.Between(COIN_BUG_MIN_LIFETIME_MS, COIN_BUG_MAX_LIFETIME_MS),
+      lifetimeMs: getRandomLifetimeMs(COIN_BUG_MIN_LIFETIME_MS, COIN_BUG_MAX_LIFETIME_MS, Math.random()),
       collected: false,
     };
 
@@ -2973,67 +2964,22 @@ export class FarmScene extends Phaser.Scene {
     return container;
   }
 
-  private getCoinBugSpawnPosition(): Phaser.Math.Vector2 | null {
+  private getCoinBugSpawnPosition(): { x: number; y: number } | null {
     const layout = this.getLayout();
-    const margin = layout.isNarrow ? 28 : 34;
-    const minY = Math.max(layout.statsY + layout.statsHeight + 18, layout.gridStartY - 42, 96);
-    const maxY = layout.hatchY - 34;
 
-    if (maxY <= minY) {
-      return null;
-    }
-
-    for (let attempt = 0; attempt < 80; attempt += 1) {
-      const point = new Phaser.Math.Vector2(
-        Phaser.Math.Between(margin, Math.max(margin, this.scale.width - margin)),
-        Phaser.Math.Between(minY, maxY),
-      );
-
-      if (this.isCoinBugSpawnPointSafe(point, layout)) {
-        return point;
-      }
-    }
-
-    return null;
-  }
-
-  private isCoinBugSpawnPointSafe(point: Phaser.Math.Vector2, layout: FarmSceneLayout): boolean {
-    const padding = Math.ceil(COIN_BUG_HITBOX_SIZE / 2);
-    const criticalRects = [
-      new Phaser.Geom.Rectangle(layout.hudX, layout.hudY, layout.hudWidth, layout.hudHeight),
-      new Phaser.Geom.Rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight),
-      new Phaser.Geom.Rectangle(layout.orderWidgetX, layout.orderWidgetY, layout.orderWidgetWidth, layout.orderWidgetHeight),
-      new Phaser.Geom.Rectangle(layout.tapFarmX, layout.tapFarmY, layout.tapFarmWidth, layout.tapFarmHeight),
-      new Phaser.Geom.Rectangle(layout.hatchX, layout.hatchY, layout.hatchWidth, layout.hatchHeight),
-      new Phaser.Geom.Rectangle(layout.menuX - 82, layout.menuY - 6, 92, 42),
-      new Phaser.Geom.Rectangle(this.scale.width / 2 - 120, layout.expansionLabelY - 18, 240, 36),
-    ];
-
-    if (criticalRects.some((rect) => this.isPointInsideRectWithPadding(point, rect, padding))) {
-      return false;
-    }
-
-    const slotBuffer = Math.max(52, this.cellSize * 0.84);
-
-    if (this.slotCenters.some((center) => center.x > 0 && Phaser.Math.Distance.Between(point.x, point.y, center.x, center.y) < slotBuffer)) {
-      return false;
-    }
-
-    return this.activeCoinBugs.every((bug) => (
-      bug.collected
-      || Phaser.Math.Distance.Between(point.x, point.y, bug.container.x, bug.container.y) >= 58
-    ));
-  }
-
-  private isPointInsideRectWithPadding(
-    point: Phaser.Math.Vector2,
-    rect: Phaser.Geom.Rectangle,
-    padding: number,
-  ): boolean {
-    return point.x >= rect.x - padding
-      && point.x <= rect.right + padding
-      && point.y >= rect.y - padding
-      && point.y <= rect.bottom + padding;
+    return chooseCoinBugSpawnPosition({
+      layout,
+      worldWidth: this.scale.width,
+      hitboxSize: COIN_BUG_HITBOX_SIZE,
+      cellSize: this.cellSize,
+      slotCenters: this.slotCenters,
+      existingBugPositions: this.activeCoinBugs
+        .filter((bug) => !bug.collected)
+        .map((bug) => ({ x: bug.container.x, y: bug.container.y })),
+      minDistanceFromOtherBugs: COIN_BUG_MIN_DISTANCE_FROM_OTHER_BUGS,
+      maxAttempts: COIN_BUG_SPAWN_ATTEMPTS,
+      randomInteger: (min, max) => Phaser.Math.Between(min, max),
+    });
   }
 
   private collectCoinBug(bug: CoinBug): void {
@@ -3088,25 +3034,35 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getCoinBugReward(): number {
-    const baseReward = this.sanitizeCoins(Math.max(
-      COIN_BUG_MIN_REWARD,
-      this.getTotalIncomePerSecond() * COIN_BUG_REWARD_SECONDS,
-    ));
+    const baseReward = getCoinBugRewardBase(this.getTotalIncomePerSecond(), COIN_BUG_MIN_REWARD, COIN_BUG_REWARD_SECONDS);
 
-    return getProgressionCoinBugReward(baseReward, this.getUpgradeLevel('coin-bug-value'));
+    return getCoinBugRewardAmount(baseReward, this.getUpgradeLevel('coin-bug-value'));
   }
 
   private handleTapFarm(pointer: Phaser.Input.Pointer): void {
-    if (this.time.now - this.lastTapFarmAt < TAP_FARM_COOLDOWN_MS) {
+    const tapResult = getTapFarmTapResult({
+      state: {
+        tapFarmEnergy: this.tapFarmEnergy,
+        tapFarmCombo: this.tapFarmCombo,
+        lastTapFarmAt: this.lastTapFarmAt,
+        lastTapFarmComboAt: this.lastTapFarmComboAt,
+      },
+      config: TAP_FARM_DEFAULT_CONFIG,
+      now: this.time.now,
+      totalIncomePerSecond: this.getTotalIncomePerSecond(),
+      tapPowerLevel: this.getUpgradeLevel('tap-power'),
+    });
+
+    if (!tapResult.accepted) {
       return;
     }
 
-    this.lastTapFarmAt = this.time.now;
-
-    this.incrementTapFarmCombo();
-    const reward = this.getTapFarmReward();
+    this.tapFarmEnergy = tapResult.nextState.tapFarmEnergy;
+    this.tapFarmCombo = tapResult.nextState.tapFarmCombo;
+    this.lastTapFarmAt = tapResult.nextState.lastTapFarmAt;
+    this.lastTapFarmComboAt = tapResult.nextState.lastTapFarmComboAt;
+    const reward = tapResult.tapReward;
     this.currency.coins = this.sanitizeCoins(this.currency.coins + reward);
-    this.tapFarmEnergy = Math.min(TAP_FARM_BURST_THRESHOLD, this.tapFarmEnergy + 1);
     this.hasUnsavedProgress = true;
     this.skipSavingUntilProgress = false;
     audioSystem.resume();
@@ -3115,111 +3071,64 @@ export class FarmScene extends Phaser.Scene {
     const layout = this.getLayout();
     const popupX = Number.isFinite(pointer.worldX) ? pointer.worldX : layout.tapFarmX + layout.tapFarmWidth / 2;
     const popupY = Number.isFinite(pointer.worldY) ? pointer.worldY - 10 : layout.tapFarmY;
-    const combo = this.getActiveTapFarmCombo();
+    const combo = tapResult.activeCombo;
 
     this.showFloatingCoinReward(popupX, popupY, reward);
     this.showTapFarmReactionStack(combo, false);
-    this.showTapFarmPulse(this.isTapFarmComboTierTap() ? 0xf3d06b : 0xd9f6ba);
+    this.showTapFarmPulse(tapResult.isTierTap ? 0xf3d06b : 0xd9f6ba);
     this.showTapFarmParticles(popupX, popupY, false);
 
-    if (this.tapFarmEnergy >= TAP_FARM_BURST_THRESHOLD) {
-      this.triggerFarmBurst();
+    if (tapResult.shouldBurst) {
+      this.triggerFarmBurst(tapResult.burstReward);
     }
 
     this.updateHud();
   }
 
   private getTapFarmReward(): number {
-    const baseReward = this.getBaseTapFarmReward();
+    const baseReward = getBaseTapFarmReward(this.getTotalIncomePerSecond(), TAP_FARM_MIN_REWARD, TAP_FARM_REWARD_SECONDS);
     const multiplier = this.getTapFarmComboMultiplier(this.getActiveTapFarmCombo());
 
-    return getProgressionTapFarmReward(baseReward, multiplier, this.getUpgradeLevel('tap-power'));
-  }
-
-  private getBaseTapFarmReward(): number {
-    return this.sanitizeCoins(Math.max(
-      TAP_FARM_MIN_REWARD,
-      this.getTotalIncomePerSecond() * TAP_FARM_REWARD_SECONDS,
-    ));
-  }
-
-  private incrementTapFarmCombo(): void {
-    if (this.isTapFarmComboExpired()) {
-      this.tapFarmCombo = 0;
-    }
-
-    this.tapFarmCombo += 1;
-    this.lastTapFarmComboAt = this.time.now;
+    return getTapFarmRewardAmount(baseReward, multiplier, this.getUpgradeLevel('tap-power'));
   }
 
   private updateTapFarmComboTimeout(): void {
-    if (this.tapFarmCombo <= 0 || !this.isTapFarmComboExpired()) {
+    const timeoutResult = getTapFarmComboTimeoutResult({
+      tapFarmEnergy: this.tapFarmEnergy,
+      tapFarmCombo: this.tapFarmCombo,
+      lastTapFarmAt: this.lastTapFarmAt,
+      lastTapFarmComboAt: this.lastTapFarmComboAt,
+    }, this.time.now, TAP_FARM_COMBO_TIMEOUT_MS);
+
+    if (!timeoutResult.expired) {
       return;
     }
 
-    this.tapFarmCombo = 0;
-    this.lastTapFarmComboAt = -TAP_FARM_COMBO_TIMEOUT_MS;
+    this.tapFarmCombo = timeoutResult.nextState.tapFarmCombo;
+    this.lastTapFarmComboAt = timeoutResult.nextState.lastTapFarmComboAt;
     this.hideTapFarmReactionStack();
     this.updateTapFarmUi();
   }
 
-  private isTapFarmComboExpired(): boolean {
-    return this.time.now - this.lastTapFarmComboAt > TAP_FARM_COMBO_TIMEOUT_MS;
-  }
-
   private getActiveTapFarmCombo(): number {
-    if (this.tapFarmCombo <= 0 || this.isTapFarmComboExpired()) {
-      return 0;
-    }
-
-    return this.tapFarmCombo;
+    return getActiveTapFarmComboFromState(this.tapFarmCombo, this.time.now, this.lastTapFarmComboAt, TAP_FARM_COMBO_TIMEOUT_MS);
   }
 
   private getTapFarmComboMultiplier(combo: number): number {
-    if (combo >= 70) {
-      return TAP_FARM_COMBO_MAX_MULTIPLIER;
-    }
-
-    if (combo >= 40) {
-      return 2;
-    }
-
-    if (combo >= 20) {
-      return 1.5;
-    }
-
-    if (combo >= 10) {
-      return 1.2;
-    }
-
-    return 1;
+    return getTapFarmComboMultiplierFromState(combo, TAP_FARM_COMBO_MAX_MULTIPLIER);
   }
 
-  private isTapFarmComboTierTap(): boolean {
-    return [10, 20, 40, 70].includes(this.getActiveTapFarmCombo());
-  }
-
-  private triggerFarmBurst(): void {
-    const reward = this.getTapFarmBurstReward();
+  private triggerFarmBurst(reward: number): void {
     const layout = this.getLayout();
     const x = layout.tapFarmX + layout.tapFarmWidth / 2;
     const y = layout.tapFarmY - 4;
 
-    this.tapFarmEnergy = 0;
+    this.tapFarmEnergy = resetTapFarmEnergy();
     this.currency.coins = this.sanitizeCoins(this.currency.coins + reward);
     this.showTapFarmReactionStack(this.getActiveTapFarmCombo(), true);
     this.showFarmBurstReward(x, y, reward);
     this.showTapFarmPulse(0xf3d06b);
     this.showTapFarmParticles(x, y, true);
-  }
-
-  private getTapFarmBurstReward(): number {
-    const baseReward = this.sanitizeCoins(Math.max(
-      TAP_FARM_BURST_MIN_REWARD,
-      this.getTotalIncomePerSecond() * TAP_FARM_BURST_REWARD_SECONDS,
-    ));
-
-    return getProgressionTapFarmReward(baseReward, 1, this.getUpgradeLevel('tap-power'));
   }
 
   private showTapFarmReactionStack(combo: number, isBurst: boolean): void {
@@ -4217,7 +4126,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getTapPowerMultiplier(): number {
-    return getProgressionTapFarmReward(100, 1, this.getUpgradeLevel('tap-power')) / 100;
+    return getTapFarmRewardAmount(100, 1, this.getUpgradeLevel('tap-power')) / 100;
   }
 
   private getOrderBonusMultiplier(): number {
@@ -4225,7 +4134,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getCoinBugValueMultiplier(): number {
-    return getProgressionCoinBugReward(100, this.getUpgradeLevel('coin-bug-value')) / 100;
+    return getCoinBugRewardAmount(100, this.getUpgradeLevel('coin-bug-value')) / 100;
   }
 
   private formatDuration(seconds: number): string {
@@ -5420,7 +5329,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getTapFarmStatusText(): string {
-    const energy = Phaser.Math.Clamp(Math.floor(this.tapFarmEnergy), 0, TAP_FARM_BURST_THRESHOLD);
+    const energy = getClampedTapFarmEnergy(this.tapFarmEnergy, TAP_FARM_BURST_THRESHOLD);
     const activeCombo = this.getActiveTapFarmCombo();
 
     if (activeCombo >= 2) {
@@ -5438,9 +5347,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getTapFarmEnergyRatio(): number {
-    const energy = Phaser.Math.Clamp(Math.floor(this.tapFarmEnergy), 0, TAP_FARM_BURST_THRESHOLD);
-
-    return energy / TAP_FARM_BURST_THRESHOLD;
+    return getTapFarmEnergyRatioFromState(this.tapFarmEnergy, TAP_FARM_BURST_THRESHOLD);
   }
 
   private formatTapFarmComboMultiplier(multiplier: number): string {
