@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { MonsterRenderer, type MonsterVisual } from '../rendering/MonsterRenderer';
 import { HatchPanelView } from '../ui/HatchPanelView';
 import { HudView } from '../ui/HudView';
+import { OrderWidgetView } from '../ui/OrderWidgetView';
 import { TapFarmView } from '../ui/TapFarmView';
 import { ToastView, type ToastVariant } from '../ui/ToastView';
 import { EXPANSION_UNLOCK_COST, STARTING_EGG_COST } from '../data/economy';
@@ -223,6 +224,7 @@ export class FarmScene extends Phaser.Scene {
   private readonly hatchPanelView: HatchPanelView;
   private readonly hudView: HudView;
   private readonly monsterRenderer: MonsterRenderer;
+  private readonly orderWidgetView: OrderWidgetView;
   private readonly tapFarmView: TapFarmView;
   private readonly toastView: ToastView;
   private currency: CurrencyState = {
@@ -231,7 +233,6 @@ export class FarmScene extends Phaser.Scene {
 
   private backgroundContainer?: Phaser.GameObjects.Container;
   private farmGridContainer?: Phaser.GameObjects.Container;
-  private orderWidgetContainer?: Phaser.GameObjects.Container;
   private expansionContainer?: Phaser.GameObjects.Container;
   private tapFarmReactionContainer?: Phaser.GameObjects.Container;
   private tapFarmReactionTween?: Phaser.Tweens.Tween;
@@ -359,6 +360,22 @@ export class FarmScene extends Phaser.Scene {
       theme: THEME,
     });
     this.monsterRenderer = new MonsterRenderer(this, UI_FONT_FAMILY, SHOW_DEBUG_PANEL);
+    this.orderWidgetView = new OrderWidgetView(this, {
+      fontFamily: UI_FONT_FAMILY,
+      getLayout: () => this.getLayout(),
+      getOrderRequirementText: (order) => this.getOrderRequirementText(order),
+      getOrderRewardText: (reward) => this.getOrderRewardText(reward),
+      getOrderWidgetStatusText: (order) => this.getOrderWidgetStatusText(order),
+      getRecommendedOrder: () => this.getRecommendedOrder(),
+      isModalOpen: () => this.isModalOpen(),
+      isOrderClaimed: (orderId) => this.claimedOrderIds.has(orderId),
+      isOrderComplete: (order) => this.isOrderComplete(order),
+      onButtonClickSound: () => this.playButtonClickSound(),
+      onClaimOrder: (orderId) => this.claimOrderReward(orderId),
+      onOpenOrdersPanel: () => this.openOrdersPanel(),
+      t: (key, params) => this.t(key, params),
+      theme: THEME,
+    });
     this.tapFarmView = new TapFarmView(this, {
       fontFamily: UI_FONT_FAMILY,
       getLayout: () => this.getLayout(),
@@ -438,7 +455,7 @@ export class FarmScene extends Phaser.Scene {
     this.backgroundContainer = undefined;
     this.farmGridContainer = undefined;
     this.hudView.destroy();
-    this.orderWidgetContainer = undefined;
+    this.orderWidgetView.destroy();
     this.expansionContainer = undefined;
     this.tapFarmView.destroy();
     this.clearTapFarmReactionStack();
@@ -842,114 +859,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private createOrderWidget(): void {
-    this.orderWidgetContainer?.destroy();
-
-    const order = this.getRecommendedOrder();
-
-    if (!order) {
-      this.orderWidgetContainer = undefined;
-      return;
-    }
-
-    const layout = this.getLayout();
-    const x = layout.orderWidgetX;
-    const y = layout.orderWidgetY;
-    const width = layout.orderWidgetWidth;
-    const height = layout.orderWidgetHeight;
-    const isCompact = layout.isNarrow || width < 190;
-    const isClaimable = this.isOrderComplete(order) && !this.claimedOrderIds.has(order.id);
-    const container = this.add.container(0, 0).setDepth(7);
-
-    container.add(this.add.rectangle(x + 3, y + 4, width, height, THEME.shadow, 0.22)
-      .setOrigin(0));
-
-    const background = this.add.rectangle(x, y, width, height, isClaimable ? 0x365b32 : THEME.panel, 0.88)
-      .setOrigin(0)
-      .setStrokeStyle(2, isClaimable ? THEME.slot : THEME.panelBorder, 0.72)
-      .setInteractive({ useHandCursor: true });
-
-    background.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      pointer.event?.stopPropagation();
-
-      if (this.isModalOpen()) {
-        return;
-      }
-
-      this.playButtonClickSound();
-      this.openOrdersPanel();
-    });
-
-    container.add(background);
-
-    container.add(this.add.text(x + 10, y + 6, this.t('ui.orderWidget.title'), {
-      color: isClaimable ? '#fff4a8' : THEME.goldText,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompact ? '12px' : '13px',
-      fontStyle: 'bold',
-      fixedWidth: width - 20,
-    }));
-
-    container.add(this.add.text(x + 10, y + (isCompact ? 23 : 25), this.getOrderRequirementText(order), {
-      color: THEME.text,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompact ? '11px' : '12px',
-      fontStyle: 'bold',
-      fixedWidth: isClaimable ? width - 68 : width - 20,
-      wordWrap: {
-        width: isClaimable ? width - 68 : width - 20,
-      },
-    }));
-
-    container.add(this.add.text(x + 10, y + (isCompact ? 43 : 47), this.t('ui.orderWidget.reward', {
-      reward: this.getOrderRewardText(order.reward),
-    }), {
-      color: isClaimable ? '#fff4a8' : THEME.mutedText,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompact ? '10px' : '11px',
-      fixedWidth: isClaimable ? width - 70 : width - 20,
-      wordWrap: {
-        width: isClaimable ? width - 70 : width - 20,
-      },
-    }));
-
-    container.add(this.add.text(x + 10, y + height - 18, this.getOrderWidgetStatusText(order), {
-      color: isClaimable ? '#d9f6ba' : '#cdebb3',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompact ? '10px' : '11px',
-      fontStyle: 'bold',
-      fixedWidth: isClaimable ? width - 70 : width - 20,
-    }));
-
-    if (isClaimable) {
-      const claimText = this.add.text(x + width - 10, y + height / 2 + 8, this.t('ui.orders.claim'), {
-        color: '#ffffff',
-        fontFamily: UI_FONT_FAMILY,
-        fontSize: isCompact ? '11px' : '12px',
-        fontStyle: 'bold',
-        backgroundColor: `#${THEME.buttonHover.toString(16).padStart(6, '0')}`,
-        padding: {
-          x: isCompact ? 7 : 9,
-          y: 5,
-        },
-      }).setOrigin(1, 0.5);
-
-      claimText
-        .setInteractive({ useHandCursor: true })
-        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-          pointer.event?.stopPropagation();
-
-          if (this.isModalOpen()) {
-            return;
-          }
-
-          this.playButtonClickSound();
-          this.claimOrderReward(order.id);
-        });
-
-      container.add(claimText);
-    }
-
-    this.orderWidgetContainer = container;
+    this.orderWidgetView.create();
   }
 
   private createHatchArea(): void {
@@ -1496,7 +1406,7 @@ export class FarmScene extends Phaser.Scene {
     this.resetFarmControlHoverState();
     this.hatchPanelView.setModalOpenVisualState(isOpen);
     this.tapFarmView.setModalOpenVisualState(isOpen);
-    this.orderWidgetContainer?.setAlpha(isOpen ? 0.72 : 1);
+    this.orderWidgetView.setModalOpenVisualState(isOpen);
 
     this.menuButtons.forEach(({ text }) => {
       text.setAlpha(isOpen ? 0.72 : 1);
