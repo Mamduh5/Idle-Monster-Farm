@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { MonsterRenderer, type MonsterVisual } from '../rendering/MonsterRenderer';
 import { HatchPanelView } from '../ui/HatchPanelView';
 import { HudView } from '../ui/HudView';
+import { NavigationControlView } from '../ui/NavigationControlView';
 import { OrderWidgetView } from '../ui/OrderWidgetView';
 import { TapFarmView } from '../ui/TapFarmView';
 import { ToastView, type ToastVariant } from '../ui/ToastView';
@@ -137,10 +138,6 @@ type MonsterDragZone = Phaser.GameObjects.Zone;
 type DiscoveryKey = `${MonsterFamily}:${number}`;
 type UiLayoutMode = 'mobile' | 'desktop';
 type ModalKind = 'compendium' | 'upgrade-shop' | 'goals' | 'orders' | 'default';
-type MenuButtonVisual = {
-  text: Phaser.GameObjects.Text;
-  defaultBackgroundColor: string;
-};
 type NavigationMenuItem = {
   label: string;
   openPanel: () => void;
@@ -224,6 +221,7 @@ export class FarmScene extends Phaser.Scene {
   private readonly hatchPanelView: HatchPanelView;
   private readonly hudView: HudView;
   private readonly monsterRenderer: MonsterRenderer;
+  private readonly navigationControlView: NavigationControlView;
   private readonly orderWidgetView: OrderWidgetView;
   private readonly tapFarmView: TapFarmView;
   private readonly toastView: ToastView;
@@ -239,14 +237,12 @@ export class FarmScene extends Phaser.Scene {
   private tapFarmReactionHideTween?: Phaser.Tweens.Tween;
   private tapFarmReactionHideEvent?: Phaser.Time.TimerEvent;
   private tapFarmReactionEffects: Phaser.GameObjects.GameObject[] = [];
-  private menuControlsContainer?: Phaser.GameObjects.Container;
   private activeCoinBugs: CoinBug[] = [];
   private farmSlots: FarmSlotState[] = [];
   private slotCenters: Phaser.Math.Vector2[] = [];
   private monsterVisuals: Array<MonsterVisual | null> = [];
   private monsterDragZones: Array<MonsterDragZone | null> = [];
   private hatchCooldownMs = HATCH_COOLDOWN_MS;
-  private menuButtons: MenuButtonVisual[] = [];
   private cellSize = CELL_SIZE;
   private gridGap = GRID_GAP;
   private currentEggCost = STARTING_EGG_COST;
@@ -360,6 +356,17 @@ export class FarmScene extends Phaser.Scene {
       theme: THEME,
     });
     this.monsterRenderer = new MonsterRenderer(this, UI_FONT_FAMILY, SHOW_DEBUG_PANEL);
+    this.navigationControlView = new NavigationControlView(this, {
+      fontFamily: UI_FONT_FAMILY,
+      getLayout: () => this.getLayout(),
+      isModalOpen: () => this.isModalOpen(),
+      onButtonClickSound: () => this.playButtonClickSound(),
+      onDebugClick: () => this.toggleEconomyDebugPanel(),
+      onHoverBlocked: () => this.resetFarmControlHoverState(),
+      onMenuClick: () => this.toggleNavigationMenuPanel(),
+      t: (key, params) => this.t(key, params),
+      theme: THEME,
+    });
     this.orderWidgetView = new OrderWidgetView(this, {
       fontFamily: UI_FONT_FAMILY,
       getLayout: () => this.getLayout(),
@@ -459,8 +466,7 @@ export class FarmScene extends Phaser.Scene {
     this.expansionContainer = undefined;
     this.tapFarmView.destroy();
     this.clearTapFarmReactionStack();
-    this.menuControlsContainer = undefined;
-    this.menuButtons = [];
+    this.navigationControlView.destroy();
     this.currentEggCost = STARTING_EGG_COST;
     this.monsterEssence = 0;
     this.essencePowerLevel = 0;
@@ -874,13 +880,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private createNavigationControl(): void {
-    this.menuControlsContainer?.destroy();
-    this.menuControlsContainer = this.add.container(0, 0);
-    this.menuButtons = [];
-
-    this.createMenuButton(this.t('ui.menu'), 0, () => {
-      this.toggleNavigationMenuPanel();
-    });
+    this.navigationControlView.createMenuControl();
   }
 
   private createEconomyDebugControl(): void {
@@ -888,57 +888,7 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    this.createMenuButton('Debug (D)', 1, () => {
-      this.toggleEconomyDebugPanel();
-    }, `#${THEME.buttonWarm.toString(16).padStart(6, '0')}`);
-  }
-
-  private createMenuButton(
-    label: string,
-    index: number,
-    onClick: () => void,
-    backgroundColor = `#${THEME.button.toString(16).padStart(6, '0')}`,
-  ): void {
-    const layout = this.getLayout();
-    const button = this.add.text(layout.menuX, layout.menuY + index * layout.menuGap, label, {
-      color: '#f7ffe8',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: layout.menuFontSize,
-      fontStyle: 'bold',
-      backgroundColor,
-      padding: {
-        x: 10,
-        y: 6,
-      },
-    }).setOrigin(1, 0);
-
-    this.menuButtons.push({
-      text: button,
-      defaultBackgroundColor: backgroundColor,
-    });
-    this.menuControlsContainer?.add(button);
-
-    button
-      .setInteractive({ useHandCursor: true })
-      .on('pointerover', () => {
-        if (this.isModalOpen()) {
-          this.resetFarmControlHoverState();
-          return;
-        }
-
-        button.setBackgroundColor(`#${THEME.buttonHover.toString(16).padStart(6, '0')}`);
-      })
-      .on('pointerout', () => {
-        button.setBackgroundColor(backgroundColor);
-      })
-      .on('pointerdown', () => {
-        if (this.isModalOpen()) {
-          return;
-        }
-
-        this.playButtonClickSound();
-        onClick();
-      });
+    this.navigationControlView.addDebugControl();
   }
 
   private toggleNavigationMenuPanel(): void {
@@ -1407,19 +1357,13 @@ export class FarmScene extends Phaser.Scene {
     this.hatchPanelView.setModalOpenVisualState(isOpen);
     this.tapFarmView.setModalOpenVisualState(isOpen);
     this.orderWidgetView.setModalOpenVisualState(isOpen);
-
-    this.menuButtons.forEach(({ text }) => {
-      text.setAlpha(isOpen ? 0.72 : 1);
-    });
+    this.navigationControlView.setModalOpenVisualState(isOpen);
   }
 
   private resetFarmControlHoverState(): void {
     this.hatchPanelView.resetHoverState();
     this.tapFarmView.resetHoverState();
-
-    this.menuButtons.forEach(({ text, defaultBackgroundColor }) => {
-      text.setBackgroundColor(defaultBackgroundColor);
-    });
+    this.navigationControlView.resetHoverState();
   }
 
   private registerKeyboardShortcuts(): void {
@@ -1562,7 +1506,7 @@ export class FarmScene extends Phaser.Scene {
       return true;
     }
 
-    if (this.menuButtons.some(({ text }) => text.getBounds().contains(x, y))) {
+    if (this.navigationControlView.containsPoint(x, y)) {
       return true;
     }
 
