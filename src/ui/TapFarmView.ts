@@ -48,9 +48,11 @@ export class TapFarmView {
     const y = layout.tapFarmY;
     const panelWidth = layout.tapFarmWidth;
     const panelHeight = layout.tapFarmHeight;
-    const iconRadius = layout.isNarrow ? 10 : 12;
-    const coinX = x + (layout.isNarrow ? 24 : 28);
-    const textX = x + (layout.isNarrow ? 44 : 50);
+    const isSideBySideCompact = layout.isNarrow && panelWidth < 180;
+    const iconRadius = isSideBySideCompact ? 8 : layout.isNarrow ? 10 : 12;
+    const coinX = isSideBySideCompact ? x + panelWidth - 20 : x + (layout.isNarrow ? 24 : 28);
+    const textX = isSideBySideCompact ? x + 10 : x + (layout.isNarrow ? 44 : 50);
+    const textWidth = isSideBySideCompact ? panelWidth - 20 : panelWidth - (textX - x) - 14;
     const progressHeight = layout.isNarrow ? 4 : 5;
     const tapFarmContainer = this.scene.add.container(0, 0);
 
@@ -74,25 +76,28 @@ export class TapFarmView {
       fontStyle: 'bold',
     }).setOrigin(0.5));
 
-    tapFarmContainer.add(this.scene.add.text(textX, y + (layout.isNarrow ? 5 : 8), this.options.t('ui.tapFarm.label'), {
+    tapFarmContainer.add(this.scene.add.text(textX, y + (isSideBySideCompact ? 8 : layout.isNarrow ? 5 : 8), this.options.t('ui.tapFarm.label'), {
       color: '#ffffff',
       fontFamily,
-      fontSize: layout.isNarrow ? '15px' : '19px',
+      fontSize: isSideBySideCompact ? '14px' : layout.isNarrow ? '15px' : '19px',
       fontStyle: 'bold',
-      fixedWidth: panelWidth - (textX - x) - 14,
+      fixedWidth: textWidth,
     }));
 
-    this.statusText = this.scene.add.text(textX, y + panelHeight - (layout.isNarrow ? 16 : 18), '', {
+    this.statusText = this.scene.add.text(textX, y + (isSideBySideCompact ? 34 : panelHeight - (layout.isNarrow ? 16 : 18)), '', {
       color: '#d9f6ba',
       fontFamily,
-      fontSize: layout.isNarrow ? '10px' : '12px',
+      fontSize: isSideBySideCompact ? '9px' : layout.isNarrow ? '10px' : '12px',
       fontStyle: 'bold',
-      fixedWidth: panelWidth - (textX - x) - 14,
+      fixedWidth: textWidth,
+      wordWrap: {
+        width: textWidth,
+      },
     });
     tapFarmContainer.add(this.statusText);
 
-    const energyTrackWidth = Math.max(58, panelWidth - (layout.isNarrow ? 164 : 184));
-    const energyTrackX = x + panelWidth - energyTrackWidth - 14;
+    const energyTrackWidth = isSideBySideCompact ? panelWidth - 20 : Math.max(58, panelWidth - (layout.isNarrow ? 164 : 184));
+    const energyTrackX = isSideBySideCompact ? x + 10 : x + panelWidth - energyTrackWidth - 14;
     const energyTrackY = y + panelHeight - (layout.isNarrow ? 8 : 10);
     tapFarmContainer.add(this.scene.add.rectangle(energyTrackX, energyTrackY, energyTrackWidth, progressHeight, 0x14351f, 0.84)
       .setOrigin(0)
@@ -147,8 +152,9 @@ export class TapFarmView {
 
   refresh(): void {
     const layout = this.options.getLayout();
+    const isSideBySideCompact = layout.isNarrow && layout.tapFarmWidth < 180;
     const progress = Phaser.Math.Clamp(this.options.getTapFarmEnergyRatio(), 0, 1);
-    const energyTrackWidth = Math.max(58, layout.tapFarmWidth - (layout.isNarrow ? 164 : 184));
+    const energyTrackWidth = isSideBySideCompact ? layout.tapFarmWidth - 20 : Math.max(58, layout.tapFarmWidth - (layout.isNarrow ? 164 : 184));
     const energyTrackHeight = layout.isNarrow ? 4 : 5;
 
     this.statusText?.setText(this.options.getTapFarmStatusText());

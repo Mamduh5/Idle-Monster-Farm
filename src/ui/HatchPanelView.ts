@@ -58,13 +58,14 @@ export class HatchPanelView {
     const panelHeight = layout.hatchHeight;
     const x = layout.hatchX;
     const y = layout.hatchY;
-    const eggX = x + Math.min(layout.isNarrow ? 40 : 48, panelWidth * 0.17);
+    const isSideBySideCompact = layout.isNarrow && panelWidth < 220;
+    const eggX = x + Math.min(isSideBySideCompact ? 34 : layout.isNarrow ? 40 : 48, panelWidth * 0.17);
     const eggY = y + panelHeight / 2;
-    const eggWidth = layout.isNarrow ? 36 : 44;
-    const eggHeight = layout.isNarrow ? 46 : 56;
-    const textX = x + Math.min(layout.isNarrow ? 74 : 88, panelWidth * 0.31);
-    const labelY = y + (layout.isNarrow ? 10 : 16);
-    const statusY = y + (layout.isNarrow ? 32 : 44);
+    const eggWidth = isSideBySideCompact ? 32 : layout.isNarrow ? 36 : 44;
+    const eggHeight = isSideBySideCompact ? 42 : layout.isNarrow ? 46 : 56;
+    const textX = x + Math.min(isSideBySideCompact ? 56 : layout.isNarrow ? 74 : 88, panelWidth * 0.31);
+    const labelY = y + (isSideBySideCompact ? 9 : layout.isNarrow ? 10 : 16);
+    const statusY = y + (isSideBySideCompact ? 31 : layout.isNarrow ? 32 : 44);
     const progressY = y + panelHeight - (layout.isNarrow ? 11 : 15);
     const hatchContainer = this.scene.add.container(0, 0);
 
@@ -106,7 +107,7 @@ export class HatchPanelView {
     this.labelText = this.scene.add.text(textX, labelY, this.options.t('ui.hatch.label'), {
       color: '#ffffff',
       fontFamily,
-      fontSize: layout.isNarrow ? '18px' : '24px',
+      fontSize: isSideBySideCompact ? '17px' : layout.isNarrow ? '18px' : '24px',
       fontStyle: 'bold',
       fixedWidth: panelWidth - (textX - x) - 16,
     });
@@ -115,7 +116,7 @@ export class HatchPanelView {
     this.statusText = this.scene.add.text(textX, statusY, this.options.t('ui.hatch.ready'), {
       color: '#d9d6ec',
       fontFamily,
-      fontSize: layout.isNarrow ? '11px' : '14px',
+      fontSize: isSideBySideCompact ? '10px' : layout.isNarrow ? '11px' : '14px',
       fixedWidth: panelWidth - (textX - x) - 16,
       wordWrap: {
         width: panelWidth - (textX - x) - 16,
