@@ -1,5 +1,5 @@
 import { STARTING_EGG_COST } from '../data/economy';
-import { BOSS_BATTLE_STAGE_IDS } from '../data/bossBattles';
+import { BOSS_BATTLE_DEFINITIONS, BOSS_BATTLE_STAGE_IDS } from '../data/bossBattles';
 import { MISSION_DEFINITIONS, MISSION_IDS, type MissionId } from '../data/missions';
 import { ORDER_IDS, type OrderId } from '../data/orders';
 import { UPGRADE_DEFINITIONS, type UpgradeId } from '../data/upgrades';
@@ -13,6 +13,7 @@ import {
 
 export const SAVE_STORAGE_KEY = 'idle-monster-farm-save';
 export const SAVE_VERSION = 1;
+const BOSS_DAILY_CLEAR_LIMIT = 2;
 
 export type SavedMonsterSlot = {
   family: MonsterFamily;
@@ -42,6 +43,8 @@ export type LocalSaveData = {
   claimedMissionIds: MissionId[];
   claimedOrderIds: OrderId[];
   claimedBossBattleStageIds: string[];
+  bossDailyClearCounts: Record<string, number>;
+  bossDailyClearLastResetDay: string;
   unlockedZones: ZoneId[];
   currentZone: ZoneId;
   hasPrestigedOnce: boolean;
@@ -125,6 +128,8 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
     claimedMissionIds: normalizeMissionIds(rawData.claimedMissionIds),
     claimedOrderIds: normalizeOrderIds(rawData.claimedOrderIds),
     claimedBossBattleStageIds: normalizeBossBattleStageIds(rawData.claimedBossBattleStageIds),
+    bossDailyClearCounts: normalizeBossDailyClearCounts(rawData.bossDailyClearCounts),
+    bossDailyClearLastResetDay: normalizeBossDailyClearLastResetDay(rawData.bossDailyClearLastResetDay),
     unlockedZones: normalizeUnlockedZones(rawData.unlockedZones),
     currentZone: normalizeCurrentZone(rawData.currentZone, rawData.unlockedZones),
     hasPrestigedOnce,
@@ -217,6 +222,30 @@ function normalizeBossBattleStageIds(rawStageIds: unknown): string[] {
   return Array.from(new Set(rawStageIds.filter((stageId): stageId is string => (
     typeof stageId === 'string' && BOSS_BATTLE_STAGE_IDS.includes(stageId)
   ))));
+}
+
+function normalizeBossDailyClearCounts(rawCounts: unknown): Record<string, number> {
+  const counts: Record<string, number> = {};
+
+  if (!isRecord(rawCounts)) {
+    return counts;
+  }
+
+  BOSS_BATTLE_DEFINITIONS.forEach((boss) => {
+    const count = Number(rawCounts[boss.id]);
+
+    if (!Number.isFinite(count)) {
+      return;
+    }
+
+    counts[boss.id] = Math.min(Math.max(0, Math.floor(count)), BOSS_DAILY_CLEAR_LIMIT);
+  });
+
+  return counts;
+}
+
+function normalizeBossDailyClearLastResetDay(rawDay: unknown): string {
+  return typeof rawDay === 'string' ? rawDay : '';
 }
 
 function normalizeOnboardingHints(rawHints: unknown): OnboardingHintId[] {

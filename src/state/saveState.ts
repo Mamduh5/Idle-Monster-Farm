@@ -35,6 +35,8 @@ export type SaveSourceState = {
   claimedMissionIds: ReadonlySet<MissionId>;
   claimedOrderIds: ReadonlySet<OrderId>;
   claimedBossBattleStageIds: ReadonlySet<string>;
+  bossDailyClearCounts: Record<string, number>;
+  bossDailyClearLastResetDay: string;
   unlockedZones: ReadonlySet<ZoneId>;
   currentZone: ZoneId;
   hasPrestigedOnce: boolean;
@@ -67,6 +69,8 @@ export function createLocalSaveData(sourceState: SaveSourceState): LocalSaveData
     claimedMissionIds: Array.from(sourceState.claimedMissionIds),
     claimedOrderIds: Array.from(sourceState.claimedOrderIds),
     claimedBossBattleStageIds: Array.from(sourceState.claimedBossBattleStageIds),
+    bossDailyClearCounts: { ...sourceState.bossDailyClearCounts },
+    bossDailyClearLastResetDay: sourceState.bossDailyClearLastResetDay,
     unlockedZones: Array.from(sourceState.unlockedZones),
     currentZone: sourceState.currentZone,
     hasPrestigedOnce: sourceState.hasPrestigedOnce,
