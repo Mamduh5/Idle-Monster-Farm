@@ -204,6 +204,8 @@ const HATCH_POOL_HINT_HATCH_COUNT = 3;
 const SHOW_DEBUG_PANEL = false;
 const SHOW_MONSTER_HITBOX_DEBUG = false;
 const MODAL_OVERLAY_DEPTH = 18;
+const BOSS_SELECT_PAGE_SIZE = 4;
+const BOSS_STAGE_PAGE_SIZE = 5;
 const UI_FONT_FAMILY = 'Arial, Tahoma, "Noto Sans Thai", sans-serif';
 const MONO_FONT_FAMILY = 'Consolas, monospace';
 const THEME = {
@@ -396,6 +398,8 @@ export class FarmScene extends Phaser.Scene {
   private missionsPageIndex = 0;
   private ordersPageIndex = 0;
   private expeditionPageIndex = 0;
+  private bossBattleBossPageIndex = 0;
+  private bossBattleStagePageIndex = 0;
   private selectedBossBattleBossId?: BossBattleBossId;
   private bossBattleStageIndex = 0;
   private bossBattleSession?: BattleSessionState;
@@ -2576,18 +2580,22 @@ export class FarmScene extends Phaser.Scene {
     }
 
     if (!this.selectedBossBattleBossId) {
+      this.bossBattleBossPageIndex = this.getClampedBossBattleBossPageIndex(this.bossBattleBossPageIndex);
       this.addBossBattleSelectContent(panel, panelWidth, panelHeight);
     } else {
       const boss = this.getSelectedBossBattleDefinition();
 
       if (!boss) {
         this.selectedBossBattleBossId = undefined;
+        this.bossBattleBossPageIndex = this.getClampedBossBattleBossPageIndex(0);
         this.addBossBattleSelectContent(panel, panelWidth, panelHeight);
       } else {
         if (useDefaultStage && !this.bossBattleSession) {
           this.bossBattleStageIndex = getDefaultBossStageIndexForBoss(boss, this.claimedBossBattleStageIds);
+          this.bossBattleStagePageIndex = this.getBossBattleStagePageIndexForStage(this.bossBattleStageIndex);
         } else {
           this.bossBattleStageIndex = clampBossStageIndex(this.bossBattleStageIndex, boss.stages);
+          this.bossBattleStagePageIndex = this.getClampedBossBattleStagePageIndex(this.bossBattleStagePageIndex, boss);
         }
         this.addBossBattleContent(panel, boss, boss.stages[this.bossBattleStageIndex], panelWidth, panelHeight);
       }
@@ -2603,13 +2611,19 @@ export class FarmScene extends Phaser.Scene {
   ): void {
     const isCompactPanel = panelWidth < 420;
     const contentWidth = panelWidth - 48;
-    const topY = -panelHeight / 2 + (isCompactPanel ? 68 : 74);
+    const pageCount = this.getBossBattleBossPageCount();
+    this.bossBattleBossPageIndex = this.getClampedBossBattleBossPageIndex(this.bossBattleBossPageIndex);
+    const visibleBosses = this.getVisibleBossBattleDefinitions();
+    const headerY = -panelHeight / 2 + (isCompactPanel ? 62 : 70);
     const cardGap = isCompactPanel ? 8 : 12;
+    const rowGap = isCompactPanel ? 10 : 12;
     const cardWidth = (contentWidth - cardGap) / 2;
-    const cardHeight = isCompactPanel ? 172 : 184;
+    const cardHeight = isCompactPanel ? 154 : 166;
+    const gridTop = headerY + (isCompactPanel ? 38 : 44);
     const startX = -contentWidth / 2 + cardWidth / 2;
+    const pageControlsY = gridTop + cardHeight * 2 + rowGap + (isCompactPanel ? 26 : 30);
 
-    panel.add(this.add.text(0, topY - 26, this.t('ui.bossBattle.selectBoss'), {
+    panel.add(this.add.text(0, headerY, this.t('ui.bossBattle.selectBoss'), {
       align: 'center',
       color: THEME.mutedText,
       fixedWidth: contentWidth,
@@ -2618,14 +2632,54 @@ export class FarmScene extends Phaser.Scene {
       wordWrap: { width: contentWidth },
     }).setOrigin(0.5, 0));
 
-    BOSS_BATTLE_DEFINITIONS.forEach((boss, index) => {
+    visibleBosses.forEach((boss, index) => {
       const column = index % 2;
       const row = Math.floor(index / 2);
       const x = startX + column * (cardWidth + cardGap);
-      const y = topY + row * (cardHeight + cardGap);
+      const y = gridTop + cardHeight / 2 + row * (cardHeight + rowGap);
 
       this.addBossBattleCard(panel, boss, x, y, cardWidth, cardHeight, isCompactPanel);
     });
+
+    if (pageCount > 1) {
+      const buttonWidth = isCompactPanel ? 70 : 82;
+      const buttonHeight = isCompactPanel ? 28 : 30;
+      this.addBattleButton(
+        panel,
+        -buttonWidth - 44,
+        pageControlsY,
+        buttonWidth,
+        buttonHeight,
+        this.t('common.prev'),
+        THEME.button,
+        '#ffffff',
+        () => this.selectBossBattleBossPage(this.bossBattleBossPageIndex - 1),
+        this.bossBattleBossPageIndex > 0 && !this.battleAnimationInProgress,
+      );
+      panel.add(this.add.text(0, pageControlsY - 9, this.t('ui.bossBattle.page', {
+        current: this.bossBattleBossPageIndex + 1,
+        total: pageCount,
+      }), {
+        align: 'center',
+        color: THEME.mutedText,
+        fixedWidth: 96,
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: isCompactPanel ? '10px' : '11px',
+        fontStyle: 'bold',
+      }).setOrigin(0.5, 0));
+      this.addBattleButton(
+        panel,
+        buttonWidth + 44,
+        pageControlsY,
+        buttonWidth,
+        buttonHeight,
+        this.t('common.next'),
+        THEME.button,
+        '#ffffff',
+        () => this.selectBossBattleBossPage(this.bossBattleBossPageIndex + 1),
+        this.bossBattleBossPageIndex < pageCount - 1 && !this.battleAnimationInProgress,
+      );
+    }
   }
 
   private addBossBattleCard(
@@ -2652,20 +2706,20 @@ export class FarmScene extends Phaser.Scene {
     panel.add(this.add.rectangle(centerX, centerY, cardWidth, cardHeight, THEME.panelAlt, 0.92)
       .setStrokeStyle(2, isAllCleared ? THEME.slot : THEME.panelBorder, 0.72));
 
-    const preview = this.add.container(centerX, cardTop + (isCompactPanel ? 42 : 46));
-    this.addBossBattleHumanVisual(preview, boss, isCompactPanel ? 0.54 : 0.6);
+    const preview = this.add.container(centerX, cardTop + (isCompactPanel ? 34 : 38));
+    this.addBossBattleHumanVisual(preview, boss, isCompactPanel ? 0.48 : 0.54);
     panel.add(preview);
 
-    panel.add(this.add.text(centerX, cardTop + (isCompactPanel ? 78 : 86), this.getLocalizedBossName(boss), {
+    panel.add(this.add.text(centerX, cardTop + (isCompactPanel ? 68 : 76), this.getCompactBossBattleText(this.getLocalizedBossName(boss), isCompactPanel ? 18 : 24), {
       align: 'center',
       color: THEME.goldText,
       fixedWidth: cardWidth - 14,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '13px' : '15px',
+      fontSize: isCompactPanel ? '12px' : '14px',
       fontStyle: 'bold',
       wordWrap: { width: cardWidth - 14 },
     }).setOrigin(0.5, 0));
-    panel.add(this.add.text(centerX, cardTop + (isCompactPanel ? 99 : 111), this.getLocalizedBossClass(boss), {
+    panel.add(this.add.text(centerX, cardTop + (isCompactPanel ? 88 : 99), this.getCompactBossBattleText(this.getLocalizedBossClass(boss), isCompactPanel ? 18 : 24), {
       align: 'center',
       color: THEME.text,
       fixedWidth: cardWidth - 14,
@@ -2673,7 +2727,7 @@ export class FarmScene extends Phaser.Scene {
       fontSize: isCompactPanel ? '10px' : '11px',
       wordWrap: { width: cardWidth - 14 },
     }).setOrigin(0.5, 0));
-    panel.add(this.add.text(centerX, cardTop + (isCompactPanel ? 118 : 130), this.t('ui.bossBattle.bossProgress', {
+    panel.add(this.add.text(centerX, cardTop + (isCompactPanel ? 105 : 118), this.t('ui.bossBattle.bossProgress', {
       cleared: clearedCount,
       total: boss.stages.length,
     }), {
@@ -2683,7 +2737,7 @@ export class FarmScene extends Phaser.Scene {
       fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '10px' : '11px',
     }).setOrigin(0.5, 0));
-    panel.add(this.add.text(centerX, cardTop + (isCompactPanel ? 135 : 148), rewardText, {
+    panel.add(this.add.text(centerX, cardTop + (isCompactPanel ? 121 : 136), this.getCompactBossBattleText(rewardText, isCompactPanel ? 24 : 32), {
       align: 'center',
       color: THEME.mutedText,
       fixedWidth: cardWidth - 14,
@@ -2702,7 +2756,7 @@ export class FarmScene extends Phaser.Scene {
       THEME.buttonWarm,
       '#ffffff',
       () => this.enterBossBattleRoom(boss.id),
-      true,
+      !this.battleAnimationInProgress,
     );
   }
 
@@ -2725,8 +2779,8 @@ export class FarmScene extends Phaser.Scene {
     const arenaTop = stageY + (isCompactPanel ? 104 : 112);
     const arenaHeight = isCompactPanel ? 210 : 224;
     const actionTop = arenaTop + arenaHeight + (isCompactPanel ? 10 : 14);
-    const stageButtonWidth = isCompactPanel ? 48 : 62;
     const stageButtonHeight = isCompactPanel ? 30 : 34;
+    this.bossBattleStagePageIndex = this.getClampedBossBattleStagePageIndex(this.bossBattleStagePageIndex, boss);
 
     this.addBattleButton(
       panel,
@@ -2741,65 +2795,28 @@ export class FarmScene extends Phaser.Scene {
       !this.battleAnimationInProgress,
     );
 
-    this.addBattleButton(
-      panel,
-      -stageButtonWidth / 2 - (isCompactPanel ? 4 : 6),
-      stageY + 50,
-      stageButtonWidth,
-      stageButtonHeight,
-      'I',
-      THEME.button,
-      '#ffffff',
-      () => this.selectBossBattleStage(0),
-      !this.battleAnimationInProgress,
-    );
-
-    this.addBattleButton(
-      panel,
-      stageButtonWidth / 2 + (isCompactPanel ? 4 : 6),
-      stageY + 50,
-      stageButtonWidth,
-      stageButtonHeight,
-      'II',
-      THEME.button,
-      '#ffffff',
-      () => this.selectBossBattleStage(1),
-      boss.stages.length > 1 && !this.battleAnimationInProgress,
-    );
-
-    this.addBattleButton(
-      panel,
-      stageButtonWidth * 1.5 + (isCompactPanel ? 12 : 18),
-      stageY + 50,
-      stageButtonWidth,
-      stageButtonHeight,
-      'III',
-      THEME.button,
-      '#ffffff',
-      () => this.selectBossBattleStage(2),
-      boss.stages.length > 2 && !this.battleAnimationInProgress,
-    );
-
     panel.add(this.add.text(0, stageY - 2, this.t('ui.bossBattle.stage', {
       current: this.bossBattleStageIndex + 1,
       total: boss.stages.length,
     }), {
       align: 'center',
       color: THEME.mutedText,
-      fixedWidth: contentWidth - stageButtonWidth * 2 - 16,
+      fixedWidth: contentWidth - (isCompactPanel ? 164 : 192),
       fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '11px' : '12px',
     }).setOrigin(0.5, 0));
 
-    panel.add(this.add.text(0, stageY + 20, this.getLocalizedBossStageName(stage), {
+    panel.add(this.add.text(0, stageY + 20, this.getCompactBossBattleText(this.getLocalizedBossStageName(stage), isCompactPanel ? 26 : 34), {
       align: 'center',
       color: THEME.goldText,
-      fixedWidth: contentWidth - stageButtonWidth * 2 - 16,
+      fixedWidth: contentWidth - (isCompactPanel ? 164 : 192),
       fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '16px' : '18px',
       fontStyle: 'bold',
-      wordWrap: { width: contentWidth - stageButtonWidth * 2 - 16 },
+      wordWrap: { width: contentWidth - (isCompactPanel ? 164 : 192) },
     }).setOrigin(0.5, 0));
+
+    this.addBossBattleStageSelector(panel, boss, stageY + 50, contentWidth, isCompactPanel);
 
     const rewardText = isCleared
       ? this.t('ui.bossBattle.replayReward', { reward: this.getBossBattleRewardText(stage.replayReward) })
@@ -2815,7 +2832,7 @@ export class FarmScene extends Phaser.Scene {
       padding: { y: 4 },
     }).setOrigin(1, 0.5));
 
-    panel.add(this.add.text(0, stageY + (isCompactPanel ? 76 : 82), rewardText, {
+    panel.add(this.add.text(0, stageY + (isCompactPanel ? 78 : 84), this.getCompactBossBattleText(rewardText, isCompactPanel ? 42 : 54), {
       align: 'center',
       color: isCleared ? '#cdebb3' : THEME.goldText,
       fixedWidth: contentWidth,
@@ -2878,7 +2895,10 @@ export class FarmScene extends Phaser.Scene {
       this.addBossBattleAttackEffect(panel, enemyContainer, this.bossBattleBossVisualEffect, team, teamLeft, teamTop, teamWidth, isCompactPanel);
     }
 
-    panel.add(this.add.text(0, actionTop, this.getBossBattleStatusText(stage, session), {
+    const statusText = this.add.text(0, actionTop, this.getCompactBossBattleText(
+      this.getBossBattleStatusText(stage, session),
+      isCompactPanel ? 48 : 72,
+    ), {
       align: 'center',
       color: session?.status === 'victory' ? THEME.goldText : THEME.mutedText,
       fixedWidth: contentWidth,
@@ -2886,21 +2906,25 @@ export class FarmScene extends Phaser.Scene {
       fontSize: isCompactPanel ? '12px' : '14px',
       fontStyle: 'bold',
       wordWrap: { width: contentWidth },
-    }).setOrigin(0.5, 0));
+    }).setOrigin(0.5, 0);
+    statusText.setMaxLines(1);
+    panel.add(statusText);
 
     if (this.bossBattleLogText) {
-      panel.add(this.add.text(0, actionTop + 24, this.bossBattleLogText, {
+      const logText = this.add.text(0, actionTop + (isCompactPanel ? 20 : 23), this.getCompactBossBattleLogText(this.bossBattleLogText, isCompactPanel), {
         align: 'center',
         color: THEME.text,
         fixedWidth: contentWidth,
         fontFamily: UI_FONT_FAMILY,
         fontSize: isCompactPanel ? '10px' : '11px',
         wordWrap: { width: contentWidth },
-      }).setOrigin(0.5, 0));
+      }).setOrigin(0.5, 0);
+      logText.setMaxLines(isCompactPanel ? 2 : 3);
+      panel.add(logText);
     }
 
     if (team.length === 0) {
-      panel.add(this.add.text(0, actionTop + 36, this.t('ui.bossBattle.noTeam'), {
+      panel.add(this.add.text(0, actionTop + (isCompactPanel ? 46 : 52), this.t('ui.bossBattle.noTeam'), {
         align: 'center',
         color: THEME.mutedText,
         fixedWidth: contentWidth,
@@ -2912,11 +2936,74 @@ export class FarmScene extends Phaser.Scene {
     }
 
     if (!session || session.status !== 'ready') {
-      this.addBossBattleStartControls(panel, stage, actionTop + 54, contentWidth, isCompactPanel, session);
+      this.addBossBattleStartControls(panel, stage, actionTop + (isCompactPanel ? 80 : 88), contentWidth, isCompactPanel, session);
       return;
     }
 
-    this.addBossBattleSkillControls(panel, session, actionTop + 54, contentWidth, isCompactPanel);
+    this.addBossBattleSkillControls(panel, session, actionTop + (isCompactPanel ? 80 : 88), contentWidth, isCompactPanel);
+  }
+
+  private addBossBattleStageSelector(
+    panel: Phaser.GameObjects.Container,
+    boss: BossBattleDefinition,
+    y: number,
+    contentWidth: number,
+    isCompactPanel: boolean,
+  ): void {
+    const pageCount = this.getBossBattleStagePageCount(boss);
+    const visibleStages = this.getVisibleBossBattleStageEntries(boss);
+    const gap = isCompactPanel ? 5 : 6;
+    const navWidth = pageCount > 1 ? (isCompactPanel ? 32 : 38) : 0;
+    const navGap = pageCount > 1 ? gap : 0;
+    const availableWidth = contentWidth - navWidth * 2 - navGap * 2;
+    const chipWidth = Math.min(isCompactPanel ? 42 : 50, (availableWidth - gap * Math.max(0, visibleStages.length - 1)) / Math.max(1, visibleStages.length));
+    const chipHeight = isCompactPanel ? 27 : 30;
+    const totalChipWidth = chipWidth * visibleStages.length + gap * Math.max(0, visibleStages.length - 1);
+    const chipsStartX = -totalChipWidth / 2 + chipWidth / 2;
+    const controlsEnabled = !this.battleAnimationInProgress;
+
+    if (pageCount > 1) {
+      this.addBattleButton(
+        panel,
+        -contentWidth / 2 + navWidth / 2,
+        y,
+        navWidth,
+        chipHeight,
+        '<',
+        THEME.button,
+        '#ffffff',
+        () => this.selectBossBattleStagePage(this.bossBattleStagePageIndex - 1),
+        this.bossBattleStagePageIndex > 0 && controlsEnabled,
+      );
+      this.addBattleButton(
+        panel,
+        contentWidth / 2 - navWidth / 2,
+        y,
+        navWidth,
+        chipHeight,
+        '>',
+        THEME.button,
+        '#ffffff',
+        () => this.selectBossBattleStagePage(this.bossBattleStagePageIndex + 1),
+        this.bossBattleStagePageIndex < pageCount - 1 && controlsEnabled,
+      );
+    }
+
+    visibleStages.forEach(({ stage, index }, visibleIndex) => {
+      const isSelected = index === this.bossBattleStageIndex;
+      this.addBattleButton(
+        panel,
+        chipsStartX + visibleIndex * (chipWidth + gap),
+        y,
+        chipWidth,
+        chipHeight,
+        stage.stageNumber.toString(),
+        isSelected ? THEME.buttonHover : THEME.button,
+        isSelected ? '#fff4a8' : '#ffffff',
+        () => this.selectBossBattleStage(index),
+        !isSelected && controlsEnabled,
+      );
+    });
   }
 
   private addBossBattleStartControls(
@@ -4300,6 +4387,7 @@ export class FarmScene extends Phaser.Scene {
         this.bossBattleTurnBanner = '';
         this.bossBattlePlayerVisualEffect = undefined;
         this.bossBattleBossVisualEffect = undefined;
+        this.bossBattleStagePageIndex = 0;
       }
       this.hideModalOverlay();
     }
@@ -4311,7 +4399,35 @@ export class FarmScene extends Phaser.Scene {
     }
   }
 
+  private selectBossBattleBossPage(pageIndex: number): void {
+    if (this.battleAnimationInProgress) {
+      return;
+    }
+
+    this.bossBattleBossPageIndex = this.getClampedBossBattleBossPageIndex(pageIndex);
+    this.refreshExpeditionPanel();
+  }
+
+  private selectBossBattleStagePage(pageIndex: number): void {
+    if (this.battleAnimationInProgress) {
+      return;
+    }
+
+    const boss = this.getSelectedBossBattleDefinition();
+
+    if (!boss) {
+      return;
+    }
+
+    this.bossBattleStagePageIndex = this.getClampedBossBattleStagePageIndex(pageIndex, boss);
+    this.refreshExpeditionPanel();
+  }
+
   private selectBossBattleStage(stageIndex: number): void {
+    if (this.battleAnimationInProgress) {
+      return;
+    }
+
     const boss = this.getSelectedBossBattleDefinition();
 
     if (!boss) {
@@ -4320,6 +4436,7 @@ export class FarmScene extends Phaser.Scene {
 
     this.clearBattleAnimationEvents();
     this.bossBattleStageIndex = clampBossStageIndex(stageIndex, boss.stages);
+    this.bossBattleStagePageIndex = this.getBossBattleStagePageIndexForStage(this.bossBattleStageIndex);
     this.bossBattleSession = undefined;
     this.bossBattleStatusText = '';
     this.bossBattleLogText = '';
@@ -4331,6 +4448,10 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private enterBossBattleRoom(bossId: BossBattleBossId): void {
+    if (this.battleAnimationInProgress) {
+      return;
+    }
+
     const boss = BOSS_BATTLE_DEFINITIONS.find((definition) => definition.id === bossId);
 
     if (!boss) {
@@ -4340,6 +4461,7 @@ export class FarmScene extends Phaser.Scene {
     this.clearBattleAnimationEvents();
     this.selectedBossBattleBossId = boss.id;
     this.bossBattleStageIndex = getDefaultBossStageIndexForBoss(boss, this.claimedBossBattleStageIds);
+    this.bossBattleStagePageIndex = this.getBossBattleStagePageIndexForStage(this.bossBattleStageIndex);
     this.bossBattleSession = undefined;
     this.bossBattleStatusText = '';
     this.bossBattleLogText = '';
@@ -4351,6 +4473,10 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private backToBossBattleSelect(): void {
+    if (this.battleAnimationInProgress) {
+      return;
+    }
+
     this.clearBattleAnimationEvents();
     this.selectedBossBattleBossId = undefined;
     this.bossBattleSession = undefined;
@@ -4360,11 +4486,51 @@ export class FarmScene extends Phaser.Scene {
     this.bossBattleTurnBanner = '';
     this.bossBattlePlayerVisualEffect = undefined;
     this.bossBattleBossVisualEffect = undefined;
+    this.bossBattleStagePageIndex = 0;
     this.refreshExpeditionPanel();
   }
 
   private getSelectedBossBattleDefinition(): BossBattleDefinition | undefined {
     return BOSS_BATTLE_DEFINITIONS.find((boss) => boss.id === this.selectedBossBattleBossId);
+  }
+
+  private getBossBattleBossPageCount(): number {
+    return Math.max(1, Math.ceil(BOSS_BATTLE_DEFINITIONS.length / BOSS_SELECT_PAGE_SIZE));
+  }
+
+  private getClampedBossBattleBossPageIndex(index: number): number {
+    return Math.min(Math.max(Math.floor(index), 0), this.getBossBattleBossPageCount() - 1);
+  }
+
+  private getVisibleBossBattleDefinitions(): BossBattleDefinition[] {
+    const pageIndex = this.getClampedBossBattleBossPageIndex(this.bossBattleBossPageIndex);
+    const startIndex = pageIndex * BOSS_SELECT_PAGE_SIZE;
+
+    return BOSS_BATTLE_DEFINITIONS.slice(startIndex, startIndex + BOSS_SELECT_PAGE_SIZE);
+  }
+
+  private getBossBattleStagePageCount(boss: BossBattleDefinition): number {
+    return Math.max(1, Math.ceil(boss.stages.length / BOSS_STAGE_PAGE_SIZE));
+  }
+
+  private getClampedBossBattleStagePageIndex(index: number, boss: BossBattleDefinition): number {
+    return Math.min(Math.max(Math.floor(index), 0), this.getBossBattleStagePageCount(boss) - 1);
+  }
+
+  private getBossBattleStagePageIndexForStage(stageIndex: number): number {
+    return Math.max(0, Math.floor(Math.max(0, stageIndex) / BOSS_STAGE_PAGE_SIZE));
+  }
+
+  private getVisibleBossBattleStageEntries(boss: BossBattleDefinition): Array<{ stage: BossBattleStage; index: number }> {
+    const pageIndex = this.getClampedBossBattleStagePageIndex(this.bossBattleStagePageIndex, boss);
+    const startIndex = pageIndex * BOSS_STAGE_PAGE_SIZE;
+
+    return boss.stages
+      .slice(startIndex, startIndex + BOSS_STAGE_PAGE_SIZE)
+      .map((stage, offset) => ({
+        stage,
+        index: startIndex + offset,
+      }));
   }
 
   private startBossBattle(stage: BossBattleStage): void {
@@ -4734,6 +4900,24 @@ export class FarmScene extends Phaser.Scene {
     return this.t('common.essence', {
       amount: reward.amount,
     });
+  }
+
+  private getCompactBossBattleText(text: string, maxLength: number): string {
+    if (text.length <= maxLength) {
+      return text;
+    }
+
+    return `${text.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
+  }
+
+  private getCompactBossBattleLogText(text: string, isCompactPanel: boolean): string {
+    const maxLength = isCompactPanel ? 96 : 150;
+
+    if (text.length <= maxLength) {
+      return text;
+    }
+
+    return this.getCompactBossBattleText(text, maxLength);
   }
 
   private getExpeditionDefinition(expeditionId: ExpeditionId): ExpeditionDefinition | undefined {
@@ -7974,6 +8158,8 @@ export class FarmScene extends Phaser.Scene {
     this.bossBattleTurnBanner = '';
     this.bossBattlePlayerVisualEffect = undefined;
     this.bossBattleBossVisualEffect = undefined;
+    this.bossBattleBossPageIndex = 0;
+    this.bossBattleStagePageIndex = 0;
     this.bossBattleStageIndex = 0;
     this.unlockedZones = createInitialUnlockedZones(GRASS_FARM_ZONE_ID);
     this.currentZone = GRASS_FARM_ZONE_ID;

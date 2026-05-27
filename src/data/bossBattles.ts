@@ -8,14 +8,14 @@ export type BossBattleReward =
     amount: number;
   };
 
-export type BossBattleBossId = 'byte-wizard' | 'chili-chef' | 'turbo-driver' | 'doctor-snooze';
+export type BossBattleBossId = string;
 
 export type BossVisualTheme = 'programmer' | 'chef' | 'driver' | 'doctor';
 
 export type BossBattleStage = {
   id: string;
   bossId: BossBattleBossId;
-  stageNumber: 1 | 2 | 3;
+  stageNumber: number;
   name: string;
   hp: number;
   attack: number;
