@@ -3505,7 +3505,7 @@ export class FarmScene extends Phaser.Scene {
 
     const sacrificeText = sacrificeCandidate
       ? this.t('ui.prestige.sacrifice', {
-        monster: sacrificeCandidate.monster.name,
+        monster: this.getLocalizedMonsterName(sacrificeCandidate.monster),
         level: sacrificeCandidate.monster.level,
       })
       : this.t('ui.prestige.noSacrifice');
@@ -5398,7 +5398,7 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const familyOrder: MonsterFamily[] = ['Slime', 'Mushroom', 'Spore'];
+    const familyOrder: MonsterFamily[] = ['Slime', 'Mushroom', 'Spore', 'Cactus'];
     const listItems = getCompendiumListItems(MONSTER_DEFINITIONS, familyOrder);
     const { width: panelWidth, height: panelHeight } = this.getModalSize('compendium', 640, 640);
     const rowGap = panelWidth < 390 ? 34 : 38;
@@ -5456,7 +5456,7 @@ export class FarmScene extends Phaser.Scene {
     panelHeight: number,
     pageItems: CompendiumListItem[],
   ): void {
-    const familyOrder: MonsterFamily[] = ['Slime', 'Mushroom', 'Spore'];
+    const familyOrder: MonsterFamily[] = ['Slime', 'Mushroom', 'Spore', 'Cactus'];
     const discoveredCount = getDiscoveredMonsterCount(MONSTER_DEFINITIONS, this.discoveredMonsters);
     const pageSubtitle = this.getCompendiumPageSubtitle(pageItems);
     const summaryY = -panelHeight / 2 + 54;
@@ -5850,9 +5850,11 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private mergeSlots(sourceSlotId: number, targetSlotId: number): void {
+    const sourceMonster = this.farmSlots[sourceSlotId]?.monster;
+    const targetMonster = this.farmSlots[targetSlotId]?.monster;
     const nextMonsterDefinition = getMonsterMergeResult(
-      this.farmSlots[sourceSlotId]?.monster,
-      this.farmSlots[targetSlotId]?.monster,
+      sourceMonster,
+      targetMonster,
     );
 
     if (!nextMonsterDefinition) {
@@ -5870,7 +5872,7 @@ export class FarmScene extends Phaser.Scene {
     this.clearMonsterVisual(sourceSlotId);
     this.renderMonsterInSlot(this.farmSlots[targetSlotId]);
     audioSystem.playMerge();
-    this.showMergeFeedback(targetSlotId, nextMonsterDefinition.family === 'Spore' ? this.t('toast.fusion') : this.t('toast.merge'));
+    this.showMergeFeedback(targetSlotId, sourceMonster?.family !== targetMonster?.family ? this.t('toast.fusion') : this.t('toast.merge'));
     this.incrementMissionProgress('merge-1');
     this.evaluateMonsterMissions(nextMonsterDefinition);
     this.updateHud();

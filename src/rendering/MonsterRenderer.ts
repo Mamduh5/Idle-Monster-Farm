@@ -84,6 +84,11 @@ export class MonsterRenderer {
       return;
     }
 
+    if (monster.family === 'Cactus') {
+      this.addCactusVisual(container, monster.level, visualStyle, x, y, scale);
+      return;
+    }
+
     this.addSlimeVisual(container, monster.level, visualStyle, x, y, scale);
   }
   private addSlimeVisual(
@@ -199,6 +204,39 @@ export class MonsterRenderer {
     this.addVisualIntensitySparkles(container, visualStyle, x, y - 4 * scale, scale);
   }
 
+  private addCactusVisual(
+    container: Phaser.GameObjects.Container,
+    level: number,
+    visualStyle: MonsterVisualStyle,
+    x = 0,
+    y = 0,
+    scale = 1,
+  ): void {
+    this.addMonsterAura(container, visualStyle, x, y - 5 * scale, scale);
+
+    const strokeWidth = Math.max(1, Math.round(visualStyle.visualIntensity.outlineWidth * scale));
+    const bodyWidth = visualStyle.bodyWidth * scale;
+    const bodyHeight = visualStyle.bodyHeight * scale;
+    const armWidth = Math.max(7, bodyWidth * 0.24);
+    const armHeight = Math.max(18, bodyHeight * 0.48);
+
+    container.add(this.scene.add.ellipse(x, y + 19 * scale, bodyWidth * 0.9, 10 * scale, 0x2f7d40, 0.24));
+    container.add(this.scene.add.ellipse(x, y + 3 * scale, bodyWidth, bodyHeight, visualStyle.bodyColor, 0.98)
+      .setStrokeStyle(strokeWidth, visualStyle.strokeColor, 0.95));
+    container.add(this.scene.add.ellipse(x - bodyWidth * 0.46, y + 2 * scale, armWidth, armHeight, visualStyle.bodyColor, 0.98)
+      .setStrokeStyle(strokeWidth, visualStyle.strokeColor, 0.95));
+    container.add(this.scene.add.ellipse(x + bodyWidth * 0.46, y - 3 * scale, armWidth, armHeight, visualStyle.bodyColor, 0.98)
+      .setStrokeStyle(strokeWidth, visualStyle.strokeColor, 0.95));
+    container.add(this.scene.add.ellipse(x + 4 * scale, y - 7 * scale, bodyWidth * 0.54, bodyHeight * 0.7, visualStyle.accentColor, 0.14));
+    container.add(this.scene.add.circle(x - 8 * scale, y + 1 * scale, 3.1 * scale, 0x10291a));
+    container.add(this.scene.add.circle(x + 8 * scale, y + 1 * scale, 3.1 * scale, 0x10291a));
+    container.add(this.scene.add.circle(x - 7.2 * scale, y + 0.2 * scale, 1.1 * scale, 0xffffff, 0.86));
+    container.add(this.scene.add.circle(x + 8.8 * scale, y + 0.2 * scale, 1.1 * scale, 0xffffff, 0.86));
+
+    this.addCactusDecorations(container, level, visualStyle, x, y, scale);
+    this.addVisualIntensitySparkles(container, visualStyle, x, y - 5 * scale, scale);
+  }
+
   private addMonsterAura(
     container: Phaser.GameObjects.Container,
     visualStyle: MonsterVisualStyle,
@@ -273,11 +311,15 @@ export class MonsterRenderer {
       return this.getSporeVisualIdentity(monsterLevel, visualIntensity);
     }
 
+    if (family === 'Cactus') {
+      return this.getCactusVisualIdentity(monsterLevel, visualIntensity);
+    }
+
     return this.getSlimeVisualIdentity(monsterLevel, visualIntensity);
   }
 
   private getMonsterVisualIntensity(family: MonsterFamily, level: number): MonsterVisualIntensity {
-    const maxLevel = family === 'Mushroom' ? 8 : family === 'Spore' ? 10 : 12;
+    const maxLevel = 15;
     const normalizedLevel = Phaser.Math.Clamp(level, 1, maxLevel);
     const progress = maxLevel <= 1 ? 0 : (normalizedLevel - 1) / (maxLevel - 1);
     const tier = Math.min(5, Math.floor(progress * 6));
@@ -450,13 +492,52 @@ export class MonsterRenderer {
         accessories: ['crown ring', 'stars'],
         auraType: 'cosmic',
       },
+      13: {
+        bodyColor: 0x6ed7f2,
+        baseColor: 0x6ed7f2,
+        strokeColor: 0x245b78,
+        accentColor: 0xf8f3c0,
+        secondaryAccentColor: 0xbad7ff,
+        bodyWidth: 71,
+        bodyHeight: 57,
+        silhouetteVariant: 'stardust',
+        patternVariant: 'stardust veil',
+        accessories: ['dust stars'],
+        auraType: 'stardust',
+      },
+      14: {
+        bodyColor: 0xf08a58,
+        baseColor: 0xf08a58,
+        strokeColor: 0x853821,
+        accentColor: 0xfff0a8,
+        secondaryAccentColor: 0xff7aa8,
+        bodyWidth: 72,
+        bodyHeight: 58,
+        silhouetteVariant: 'nova',
+        patternVariant: 'nova flare',
+        accessories: ['flare crown'],
+        auraType: 'nova',
+      },
+      15: {
+        bodyColor: 0xf6f0ff,
+        baseColor: 0xf6f0ff,
+        strokeColor: 0x4f4bb8,
+        accentColor: 0xfff4a8,
+        secondaryAccentColor: 0x8ff7ff,
+        bodyWidth: 74,
+        bodyHeight: 60,
+        silhouetteVariant: 'eternal',
+        patternVariant: 'eternal orbit',
+        accessories: ['eternal crown'],
+        auraType: 'eternal',
+      },
     };
 
     return {
       family: 'Slime',
       level,
       visualIntensity,
-      ...(paletteByLevel[level] ?? paletteByLevel[12]),
+      ...(paletteByLevel[level] ?? paletteByLevel[15]),
     };
   }
 
@@ -582,13 +663,118 @@ export class MonsterRenderer {
         stemColor: 0xf0e6c4,
         stemStrokeColor: 0x927846,
       },
+      9: {
+        bodyColor: 0x9f65d8,
+        baseColor: 0x9f65d8,
+        strokeColor: 0x4d347d,
+        accentColor: 0xffd6f5,
+        secondaryAccentColor: 0xbff8ff,
+        bodyWidth: 73,
+        bodyHeight: 49,
+        silhouetteVariant: 'dreamcap',
+        patternVariant: 'dream dots',
+        accessories: ['dream bubbles'],
+        auraType: 'dream',
+        stemColor: 0xf4e7ff,
+        stemStrokeColor: 0x704d92,
+      },
+      10: {
+        bodyColor: 0x4d67d8,
+        baseColor: 0x4d67d8,
+        strokeColor: 0x202b69,
+        accentColor: 0xfff4a8,
+        secondaryAccentColor: 0x9ff7ff,
+        bodyWidth: 74,
+        bodyHeight: 50,
+        silhouetteVariant: 'starcap',
+        patternVariant: 'star cap',
+        accessories: ['star crest'],
+        auraType: 'star',
+        stemColor: 0xe9e2ff,
+        stemStrokeColor: 0x514184,
+      },
+      11: {
+        bodyColor: 0x72d9c1,
+        baseColor: 0x72d9c1,
+        strokeColor: 0x267a70,
+        accentColor: 0xd7fff0,
+        secondaryAccentColor: 0x8df0ff,
+        bodyWidth: 75,
+        bodyHeight: 51,
+        silhouetteVariant: 'crystalcap',
+        patternVariant: 'crystal cap',
+        accessories: ['cap crystals'],
+        auraType: 'crystal',
+        stemColor: 0xeafff7,
+        stemStrokeColor: 0x2a7d72,
+      },
+      12: {
+        bodyColor: 0x3b356f,
+        baseColor: 0x3b356f,
+        strokeColor: 0x171530,
+        accentColor: 0xf0e6ff,
+        secondaryAccentColor: 0xffb85f,
+        bodyWidth: 76,
+        bodyHeight: 52,
+        silhouetteVariant: 'eclipse-cap',
+        patternVariant: 'eclipse cap',
+        accessories: ['eclipse ring'],
+        auraType: 'eclipse',
+        stemColor: 0xf0e6ff,
+        stemStrokeColor: 0x5a4a8f,
+      },
+      13: {
+        bodyColor: 0x7c4fd6,
+        baseColor: 0x7c4fd6,
+        strokeColor: 0x37216f,
+        accentColor: 0xff8bc8,
+        secondaryAccentColor: 0xbad7ff,
+        bodyWidth: 78,
+        bodyHeight: 53,
+        silhouetteVariant: 'nebula-cap',
+        patternVariant: 'nebula cap',
+        accessories: ['nebula beads'],
+        auraType: 'nebula',
+        stemColor: 0xf4e7ff,
+        stemStrokeColor: 0x704d92,
+      },
+      14: {
+        bodyColor: 0xf2d16b,
+        baseColor: 0xf2d16b,
+        strokeColor: 0x876a1f,
+        accentColor: 0xfff4a8,
+        secondaryAccentColor: 0x8ff7ff,
+        bodyWidth: 80,
+        bodyHeight: 54,
+        silhouetteVariant: 'celestial-cap',
+        patternVariant: 'celestial crown',
+        accessories: ['celestial crown'],
+        auraType: 'celestial',
+        stemColor: 0xfff0d0,
+        stemStrokeColor: 0x7d6d35,
+      },
+      15: {
+        bodyColor: 0xf4f0ff,
+        baseColor: 0xf4f0ff,
+        strokeColor: 0x33577f,
+        accentColor: 0xfff4a8,
+        secondaryAccentColor: 0x8ff7ff,
+        bodyWidth: 82,
+        bodyHeight: 56,
+        silhouetteVariant: 'eternal-cap',
+        patternVariant: 'eternal crown',
+        accessories: ['eternal halo'],
+        auraType: 'eternal',
+        stemColor: 0xfff0d0,
+        stemStrokeColor: 0x7d6d35,
+      },
     };
 
     return {
       family: 'Mushroom',
       level,
       visualIntensity,
-      ...(paletteByLevel[level] ?? paletteByLevel[8]),
+      ...(paletteByLevel[level] ?? paletteByLevel[15]),
     };
   }
 
@@ -744,13 +930,295 @@ export class MonsterRenderer {
         stemColor: 0xfff0d0,
         stemStrokeColor: 0x7d6d35,
       },
+      11: {
+        bodyColor: 0xf2b84f,
+        baseColor: 0x65e0b9,
+        strokeColor: 0x8f5c18,
+        accentColor: 0xfff0a8,
+        secondaryAccentColor: 0xff7659,
+        bodyWidth: 81,
+        bodyHeight: 65,
+        silhouetteVariant: 'solar-spore',
+        patternVariant: 'solar spores',
+        accessories: ['solar halo'],
+        auraType: 'solar',
+        stemColor: 0xfff0d0,
+        stemStrokeColor: 0x7d6d35,
+      },
+      12: {
+        bodyColor: 0x38356f,
+        baseColor: 0x69d077,
+        strokeColor: 0x171530,
+        accentColor: 0xf0e6ff,
+        secondaryAccentColor: 0xffb85f,
+        bodyWidth: 82,
+        bodyHeight: 66,
+        silhouetteVariant: 'eclipse-spore',
+        patternVariant: 'eclipse spores',
+        accessories: ['eclipse halo'],
+        auraType: 'eclipse',
+        stemColor: 0xf0e6ff,
+        stemStrokeColor: 0x5a4a8f,
+      },
+      13: {
+        bodyColor: 0x7c4fd6,
+        baseColor: 0x68d7e6,
+        strokeColor: 0x37216f,
+        accentColor: 0xff8bc8,
+        secondaryAccentColor: 0xbad7ff,
+        bodyWidth: 83,
+        bodyHeight: 67,
+        silhouetteVariant: 'nebula-spore',
+        patternVariant: 'nebula spores',
+        accessories: ['nebula halo'],
+        auraType: 'nebula',
+        stemColor: 0xf4e7ff,
+        stemStrokeColor: 0x704d92,
+      },
+      14: {
+        bodyColor: 0xf2d16b,
+        baseColor: 0x65e0b9,
+        strokeColor: 0x876a1f,
+        accentColor: 0xfff4a8,
+        secondaryAccentColor: 0x8ff7ff,
+        bodyWidth: 84,
+        bodyHeight: 68,
+        silhouetteVariant: 'celestial-spore',
+        patternVariant: 'celestial spores',
+        accessories: ['celestial crown'],
+        auraType: 'celestial',
+        stemColor: 0xfff0d0,
+        stemStrokeColor: 0x7d6d35,
+      },
+      15: {
+        bodyColor: 0xf4f0ff,
+        baseColor: 0x65e0b9,
+        strokeColor: 0x33577f,
+        accentColor: 0xfff4a8,
+        secondaryAccentColor: 0x8ff7ff,
+        bodyWidth: 86,
+        bodyHeight: 70,
+        silhouetteVariant: 'eternal-spore-15',
+        patternVariant: 'eternal crown halo',
+        accessories: ['eternal halo', 'radiant spores'],
+        auraType: 'eternal-plus',
+        stemColor: 0xfff0d0,
+        stemStrokeColor: 0x7d6d35,
+      },
     };
 
     return {
       family: 'Spore',
       level,
       visualIntensity,
-      ...(paletteByLevel[level] ?? paletteByLevel[10]),
+      ...(paletteByLevel[level] ?? paletteByLevel[15]),
+    };
+  }
+
+  private getCactusVisualIdentity(level: number, visualIntensity: MonsterVisualIntensity): MonsterVisualIdentity {
+    const paletteByLevel: Record<number, Omit<MonsterVisualIdentity, 'family' | 'level' | 'visualIntensity'>> = {
+      1: {
+        bodyColor: 0x67bd55,
+        baseColor: 0x67bd55,
+        strokeColor: 0x2f6f34,
+        accentColor: 0xc9f2a0,
+        secondaryAccentColor: 0xffa6c8,
+        bodyWidth: 34,
+        bodyHeight: 50,
+        silhouetteVariant: 'tiny-cactus',
+        patternVariant: 'small thorns',
+        accessories: ['tiny thorns'],
+        auraType: 'none',
+      },
+      2: {
+        bodyColor: 0x5fb84d,
+        baseColor: 0x5fb84d,
+        strokeColor: 0x2b6730,
+        accentColor: 0xd5f7a8,
+        secondaryAccentColor: 0xffbfd6,
+        bodyWidth: 36,
+        bodyHeight: 52,
+        silhouetteVariant: 'prickly-cactus',
+        patternVariant: 'prickly thorns',
+        accessories: ['side arms'],
+        auraType: 'none',
+      },
+      3: {
+        bodyColor: 0x69c65a,
+        baseColor: 0x69c65a,
+        strokeColor: 0x317238,
+        accentColor: 0xfff0a8,
+        secondaryAccentColor: 0xff8bc8,
+        bodyWidth: 38,
+        bodyHeight: 54,
+        silhouetteVariant: 'bloom-cactus',
+        patternVariant: 'bloom thorns',
+        accessories: ['flower bud'],
+        auraType: 'bloom',
+      },
+      4: {
+        bodyColor: 0x54a94a,
+        baseColor: 0x54a94a,
+        strokeColor: 0x285f2c,
+        accentColor: 0xbff7a2,
+        secondaryAccentColor: 0xf2d16b,
+        bodyWidth: 42,
+        bodyHeight: 56,
+        silhouetteVariant: 'barrel-cactus',
+        patternVariant: 'barrel ribs',
+        accessories: ['rib lines'],
+        auraType: 'desert',
+      },
+      5: {
+        bodyColor: 0x4f944b,
+        baseColor: 0x4f944b,
+        strokeColor: 0x244f28,
+        accentColor: 0xfff0a8,
+        secondaryAccentColor: 0xff7659,
+        bodyWidth: 44,
+        bodyHeight: 58,
+        silhouetteVariant: 'guardian-cactus',
+        patternVariant: 'guardian thorns',
+        accessories: ['thorn crown'],
+        auraType: 'guardian',
+      },
+      6: {
+        bodyColor: 0x5fcf95,
+        baseColor: 0x5fcf95,
+        strokeColor: 0x267a70,
+        accentColor: 0xd8fbff,
+        secondaryAccentColor: 0x8df0ff,
+        bodyWidth: 46,
+        bodyHeight: 60,
+        silhouetteVariant: 'crystal-cactus',
+        patternVariant: 'crystal thorns',
+        accessories: ['crystals'],
+        auraType: 'crystal',
+      },
+      7: {
+        bodyColor: 0x7bb36a,
+        baseColor: 0x7bb36a,
+        strokeColor: 0x395e32,
+        accentColor: 0xf0dca4,
+        secondaryAccentColor: 0xc5f0a0,
+        bodyWidth: 48,
+        bodyHeight: 62,
+        silhouetteVariant: 'desert-cactus',
+        patternVariant: 'desert ribs',
+        accessories: ['sand bloom'],
+        auraType: 'desert',
+      },
+      8: {
+        bodyColor: 0x5f8ed8,
+        baseColor: 0x5f8ed8,
+        strokeColor: 0x28507f,
+        accentColor: 0xd8fbff,
+        secondaryAccentColor: 0xffd978,
+        bodyWidth: 50,
+        bodyHeight: 64,
+        silhouetteVariant: 'mirage-cactus',
+        patternVariant: 'mirage thorns',
+        accessories: ['mirage ring'],
+        auraType: 'mirage',
+      },
+      9: {
+        bodyColor: 0x4f944b,
+        baseColor: 0x4f944b,
+        strokeColor: 0x244f28,
+        accentColor: 0xfff0a8,
+        secondaryAccentColor: 0xe94c74,
+        bodyWidth: 52,
+        bodyHeight: 66,
+        silhouetteVariant: 'thorn-king-cactus',
+        patternVariant: 'thorn crown',
+        accessories: ['king crown'],
+        auraType: 'gold',
+      },
+      10: {
+        bodyColor: 0xf2b84f,
+        baseColor: 0x5fb84d,
+        strokeColor: 0x8f5c18,
+        accentColor: 0xfff0a8,
+        secondaryAccentColor: 0xff7659,
+        bodyWidth: 54,
+        bodyHeight: 68,
+        silhouetteVariant: 'solar-cactus',
+        patternVariant: 'solar thorns',
+        accessories: ['sun flower'],
+        auraType: 'solar',
+      },
+      11: {
+        bodyColor: 0x65d8a0,
+        baseColor: 0x65d8a0,
+        strokeColor: 0x267a70,
+        accentColor: 0xd7fff0,
+        secondaryAccentColor: 0x8df0ff,
+        bodyWidth: 56,
+        bodyHeight: 70,
+        silhouetteVariant: 'oasis-cactus',
+        patternVariant: 'oasis bloom',
+        accessories: ['water bloom'],
+        auraType: 'oasis',
+      },
+      12: {
+        bodyColor: 0x557a4d,
+        baseColor: 0x557a4d,
+        strokeColor: 0x2d4c25,
+        accentColor: 0xf0dca4,
+        secondaryAccentColor: 0xc5f0a0,
+        bodyWidth: 58,
+        bodyHeight: 72,
+        silhouetteVariant: 'ancient-cactus',
+        patternVariant: 'ancient runes',
+        accessories: ['rune thorns'],
+        auraType: 'rune',
+      },
+      13: {
+        bodyColor: 0x7c4fd6,
+        baseColor: 0x5fcf95,
+        strokeColor: 0x37216f,
+        accentColor: 0xff8bc8,
+        secondaryAccentColor: 0xbad7ff,
+        bodyWidth: 60,
+        bodyHeight: 74,
+        silhouetteVariant: 'starbloom-cactus',
+        patternVariant: 'star flowers',
+        accessories: ['star flowers'],
+        auraType: 'starbloom',
+      },
+      14: {
+        bodyColor: 0x2f6fc2,
+        baseColor: 0x2f6fc2,
+        strokeColor: 0x15315d,
+        accentColor: 0xd8fbff,
+        secondaryAccentColor: 0xfff19a,
+        bodyWidth: 62,
+        bodyHeight: 76,
+        silhouetteVariant: 'cosmic-cactus',
+        patternVariant: 'cosmic thorns',
+        accessories: ['cosmic orbit'],
+        auraType: 'cosmic',
+      },
+      15: {
+        bodyColor: 0xf4f0ff,
+        baseColor: 0x65e0b9,
+        strokeColor: 0x33577f,
+        accentColor: 0xfff4a8,
+        secondaryAccentColor: 0x8ff7ff,
+        bodyWidth: 64,
+        bodyHeight: 78,
+        silhouetteVariant: 'eternal-cactus',
+        patternVariant: 'eternal flowers',
+        accessories: ['eternal flower crown'],
+        auraType: 'eternal',
+      },
+    };
+
+    return {
+      family: 'Cactus',
+      level,
+      visualIntensity,
+      ...(paletteByLevel[level] ?? paletteByLevel[15]),
     };
   }
 
@@ -788,6 +1256,124 @@ export class MonsterRenderer {
 
       signatures.set(signature, monster);
     });
+  }
+
+  private addCactusDecorations(
+    container: Phaser.GameObjects.Container,
+    level: number,
+    visualStyle: MonsterVisualStyle,
+    x = 0,
+    y = 0,
+    scale = 1,
+  ): void {
+    const strokeWidth = Math.max(1, Math.round(1.3 * scale));
+
+    [
+      [-7, -16],
+      [7, -12],
+      [-8, 1],
+      [8, 6],
+      [-5, 17],
+      [5, 21],
+    ].forEach(([thornX, thornY], index) => {
+      const thorn = this.scene.add.triangle(
+        x + thornX * scale,
+        y + thornY * scale,
+        0,
+        -3.4 * scale,
+        -2.8 * scale,
+        2.6 * scale,
+        2.8 * scale,
+        2.6 * scale,
+        index % 2 === 0 ? visualStyle.accentColor : visualStyle.secondaryAccentColor,
+        0.9,
+      );
+      thorn.setAngle(index % 2 === 0 ? -18 : 18);
+      container.add(thorn);
+    });
+
+    [
+      [-22, -3],
+      [22, -8],
+      [-20, 11],
+      [20, 7],
+    ].forEach(([ribX, ribY]) => {
+      container.add(this.scene.add.ellipse(x + ribX * scale, y + ribY * scale, 5 * scale, 18 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, visualStyle.accentColor, 0.42));
+    });
+
+    if (level >= 3) {
+      container.add(this.scene.add.star(
+        x,
+        y - 35 * scale,
+        5,
+        Math.max(2, 4 * scale),
+        Math.max(4, 8 * scale),
+        visualStyle.secondaryAccentColor,
+        0.95,
+      ).setStrokeStyle(Math.max(1, Math.round(1 * scale)), visualStyle.strokeColor, 0.48));
+    }
+
+    if (level >= 6) {
+      [
+        [-18, -22, -12],
+        [18, -27, 14],
+      ].forEach(([crystalX, crystalY, angle]) => {
+        const crystal = this.scene.add.triangle(
+          x + crystalX * scale,
+          y + crystalY * scale,
+          0,
+          -8 * scale,
+          -5 * scale,
+          6 * scale,
+          5 * scale,
+          6 * scale,
+          visualStyle.accentColor,
+          0.92,
+        ).setStrokeStyle(1, visualStyle.strokeColor, 0.58);
+        crystal.setAngle(angle);
+        container.add(crystal);
+      });
+    }
+
+    if (level >= 9) {
+      container.add(this.scene.add.rectangle(x, y - 32 * scale, 30 * scale, 5 * scale, visualStyle.accentColor, 0.9)
+        .setStrokeStyle(1, visualStyle.strokeColor, 0.65));
+      [-12, 0, 12].forEach((crownX, index) => {
+        container.add(this.scene.add.triangle(
+          x + crownX * scale,
+          y - 38 * scale,
+          0,
+          8 * scale,
+          5 * scale,
+          -6 * scale,
+          10 * scale,
+          8 * scale,
+          index === 1 ? visualStyle.secondaryAccentColor : visualStyle.accentColor,
+          0.92,
+        ).setStrokeStyle(1, visualStyle.strokeColor, 0.56));
+      });
+    }
+
+    if (level >= 13) {
+      container.add(this.scene.add.ellipse(x, y - 7 * scale, 72 * scale, 90 * scale, 0xffffff, 0)
+        .setStrokeStyle(strokeWidth, visualStyle.secondaryAccentColor, 0.32));
+      [
+        [-28, -18],
+        [28, -15],
+        [0, -46],
+      ].forEach(([flowerX, flowerY], index) => {
+        container.add(this.scene.add.star(
+          x + flowerX * scale,
+          y + flowerY * scale,
+          6,
+          Math.max(1.8, 2.8 * scale),
+          Math.max(3.4, 6.2 * scale),
+          index === 1 ? visualStyle.accentColor : visualStyle.secondaryAccentColor,
+          0.94,
+        ));
+      });
+    }
   }
 
   private addSporeDecorations(

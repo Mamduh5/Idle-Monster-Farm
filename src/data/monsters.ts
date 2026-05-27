@@ -84,6 +84,27 @@ export const LEVEL_12_SLIME: MonsterDefinition = {
   incomePerSecond: 32000,
 };
 
+export const LEVEL_13_SLIME: MonsterDefinition = {
+  family: 'Slime',
+  level: 13,
+  name: 'Stardust Slime',
+  incomePerSecond: 74000,
+};
+
+export const LEVEL_14_SLIME: MonsterDefinition = {
+  family: 'Slime',
+  level: 14,
+  name: 'Nova Slime',
+  incomePerSecond: 170000,
+};
+
+export const LEVEL_15_SLIME: MonsterDefinition = {
+  family: 'Slime',
+  level: 15,
+  name: 'Eternal Slime',
+  incomePerSecond: 390000,
+};
+
 export const BUTTON_MUSHROOM: MonsterDefinition = {
   family: 'Mushroom',
   level: 1,
@@ -138,6 +159,55 @@ export const LEVEL_8_MUSHROOM: MonsterDefinition = {
   level: 8,
   name: 'Worldcap Mushroom',
   incomePerSecond: 3600,
+};
+
+export const LEVEL_9_MUSHROOM: MonsterDefinition = {
+  family: 'Mushroom',
+  level: 9,
+  name: 'Dreamcap Mushroom',
+  incomePerSecond: 8600,
+};
+
+export const LEVEL_10_MUSHROOM: MonsterDefinition = {
+  family: 'Mushroom',
+  level: 10,
+  name: 'Starcap Mushroom',
+  incomePerSecond: 20500,
+};
+
+export const LEVEL_11_MUSHROOM: MonsterDefinition = {
+  family: 'Mushroom',
+  level: 11,
+  name: 'Crystalcap Mushroom',
+  incomePerSecond: 49000,
+};
+
+export const LEVEL_12_MUSHROOM: MonsterDefinition = {
+  family: 'Mushroom',
+  level: 12,
+  name: 'Eclipse Mushroom',
+  incomePerSecond: 116000,
+};
+
+export const LEVEL_13_MUSHROOM: MonsterDefinition = {
+  family: 'Mushroom',
+  level: 13,
+  name: 'Nebula Mushroom',
+  incomePerSecond: 275000,
+};
+
+export const LEVEL_14_MUSHROOM: MonsterDefinition = {
+  family: 'Mushroom',
+  level: 14,
+  name: 'Celestial Mushroom',
+  incomePerSecond: 650000,
+};
+
+export const LEVEL_15_MUSHROOM: MonsterDefinition = {
+  family: 'Mushroom',
+  level: 15,
+  name: 'Eternal Mushroom',
+  incomePerSecond: 1500000,
 };
 
 export const SPORELING: MonsterDefinition = {
@@ -210,6 +280,146 @@ export const ETERNAL_SPORE: MonsterDefinition = {
   incomePerSecond: 55000,
 };
 
+export const LEVEL_11_SPORE: MonsterDefinition = {
+  family: 'Spore',
+  level: 11,
+  name: 'Solar Spore',
+  incomePerSecond: 130000,
+};
+
+export const LEVEL_12_SPORE: MonsterDefinition = {
+  family: 'Spore',
+  level: 12,
+  name: 'Eclipse Spore',
+  incomePerSecond: 305000,
+};
+
+export const LEVEL_13_SPORE: MonsterDefinition = {
+  family: 'Spore',
+  level: 13,
+  name: 'Nebula Spore',
+  incomePerSecond: 720000,
+};
+
+export const LEVEL_14_SPORE: MonsterDefinition = {
+  family: 'Spore',
+  level: 14,
+  name: 'Celestial Spore',
+  incomePerSecond: 1700000,
+};
+
+export const LEVEL_15_SPORE: MonsterDefinition = {
+  family: 'Spore',
+  level: 15,
+  name: 'Infinite Spore',
+  incomePerSecond: 4000000,
+};
+
+export const TINY_CACTUS: MonsterDefinition = {
+  family: 'Cactus',
+  level: 1,
+  name: 'Tiny Cactus',
+  incomePerSecond: 7,
+};
+
+export const PRICKLY_CACTUS: MonsterDefinition = {
+  family: 'Cactus',
+  level: 2,
+  name: 'Prickly Cactus',
+  incomePerSecond: 22,
+};
+
+export const BLOOM_CACTUS: MonsterDefinition = {
+  family: 'Cactus',
+  level: 3,
+  name: 'Bloom Cactus',
+  incomePerSecond: 64,
+};
+
+export const BARREL_CACTUS: MonsterDefinition = {
+  family: 'Cactus',
+  level: 4,
+  name: 'Barrel Cactus',
+  incomePerSecond: 180,
+};
+
+export const GUARDIAN_CACTUS: MonsterDefinition = {
+  family: 'Cactus',
+  level: 5,
+  name: 'Guardian Cactus',
+  incomePerSecond: 510,
+};
+
+export const CRYSTAL_CACTUS: MonsterDefinition = {
+  family: 'Cactus',
+  level: 6,
+  name: 'Crystal Cactus',
+  incomePerSecond: 1450,
+};
+
+export const DESERT_CACTUS: MonsterDefinition = {
+  family: 'Cactus',
+  level: 7,
+  name: 'Desert Cactus',
+  incomePerSecond: 4100,
+};
+
+export const MIRAGE_CACTUS: MonsterDefinition = {
+  family: 'Cactus',
+  level: 8,
+  name: 'Mirage Cactus',
+  incomePerSecond: 11500,
+};
+
+export const THORN_KING_CACTUS: MonsterDefinition = {
+  family: 'Cactus',
+  level: 9,
+  name: 'Thorn King Cactus',
+  incomePerSecond: 32500,
+};
+
+export const SOLAR_CACTUS: MonsterDefinition = {
+  family: 'Cactus',
+  level: 10,
+  name: 'Solar Cactus',
+  incomePerSecond: 92000,
+};
+
+export const OASIS_CACTUS: MonsterDefinition = {
+  family: 'Cactus',
+  level: 11,
+  name: 'Oasis Cactus',
+  incomePerSecond: 260000,
+};
+
+export const ANCIENT_CACTUS: MonsterDefinition = {
+  family: 'Cactus',
+  level: 12,
+  name: 'Ancient Cactus',
+  incomePerSecond: 730000,
+};
+
+export const STARBLOOM_CACTUS: MonsterDefinition = {
+  family: 'Cactus',
+  level: 13,
+  name: 'Starbloom Cactus',
+  incomePerSecond: 2050000,
+};
+
+export const COSMIC_CACTUS: MonsterDefinition = {
+  family: 'Cactus',
+  level: 14,
+  name: 'Cosmic Cactus',
+  incomePerSecond: 5750000,
+};
+
+export const ETERNAL_CACTUS: MonsterDefinition = {
+  family: 'Cactus',
+  level: 15,
+  name: 'Eternal Cactus',
+  incomePerSecond: 16000000,
+};
+
 export const MONSTER_DEFINITIONS: MonsterDefinition[] = [
   BABY_SLIME,
   LEVEL_2_SLIME,
@@ -223,6 +433,9 @@ export const MONSTER_DEFINITIONS: MonsterDefinition[] = [
   LEVEL_10_SLIME,
   LEVEL_11_SLIME,
   LEVEL_12_SLIME,
+  LEVEL_13_SLIME,
+  LEVEL_14_SLIME,
+  LEVEL_15_SLIME,
   BUTTON_MUSHROOM,
   SPOTTED_MUSHROOM,
   ELDER_MUSHROOM,
@@ -231,6 +444,13 @@ export const MONSTER_DEFINITIONS: MonsterDefinition[] = [
   LEVEL_6_MUSHROOM,
   LEVEL_7_MUSHROOM,
   LEVEL_8_MUSHROOM,
+  LEVEL_9_MUSHROOM,
+  LEVEL_10_MUSHROOM,
+  LEVEL_11_MUSHROOM,
+  LEVEL_12_MUSHROOM,
+  LEVEL_13_MUSHROOM,
+  LEVEL_14_MUSHROOM,
+  LEVEL_15_MUSHROOM,
   SPORELING,
   BOUNCY_SPORE,
   BLOOM_SPORE,
@@ -241,6 +461,26 @@ export const MONSTER_DEFINITIONS: MonsterDefinition[] = [
   DREAM_SPORE,
   MYTHIC_SPORE,
   ETERNAL_SPORE,
+  LEVEL_11_SPORE,
+  LEVEL_12_SPORE,
+  LEVEL_13_SPORE,
+  LEVEL_14_SPORE,
+  LEVEL_15_SPORE,
+  TINY_CACTUS,
+  PRICKLY_CACTUS,
+  BLOOM_CACTUS,
+  BARREL_CACTUS,
+  GUARDIAN_CACTUS,
+  CRYSTAL_CACTUS,
+  DESERT_CACTUS,
+  MIRAGE_CACTUS,
+  THORN_KING_CACTUS,
+  SOLAR_CACTUS,
+  OASIS_CACTUS,
+  ANCIENT_CACTUS,
+  STARBLOOM_CACTUS,
+  COSMIC_CACTUS,
+  ETERNAL_CACTUS,
 ];
 
 export function getNextMonsterDefinition(

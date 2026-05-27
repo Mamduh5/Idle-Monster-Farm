@@ -8,7 +8,7 @@ export type PrestigeState = {
   totalRitualsPerformed: number;
 };
 
-export const MONSTER_FAMILIES = ['Slime', 'Mushroom', 'Spore'] as const;
+export const MONSTER_FAMILIES = ['Slime', 'Mushroom', 'Spore', 'Cactus'] as const;
 
 export type MonsterFamily = typeof MONSTER_FAMILIES[number];
 

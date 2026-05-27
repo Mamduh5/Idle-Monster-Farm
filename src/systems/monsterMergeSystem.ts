@@ -33,6 +33,7 @@ export function getMonsterMergeResult(
 ): MonsterDefinition | undefined {
   return getSameFamilyNextMonsterDefinition(sourceMonster, targetMonster)
     ?? getSlimeMushroomSporeFusionResult(sourceMonster, targetMonster)
+    ?? getMushroomSporeCactusFusionResult(sourceMonster, targetMonster)
     ?? getSporeCatalystFusionResult(sourceMonster, targetMonster);
 }
 
@@ -59,6 +60,24 @@ function getSlimeMushroomSporeFusionResult(
   }
 
   return getMonsterDefinition('Spore', sourceMonster.level);
+}
+
+function getMushroomSporeCactusFusionResult(
+  sourceMonster: MergeableMonster | null | undefined,
+  targetMonster: MergeableMonster | null | undefined,
+): MonsterDefinition | undefined {
+  if (!sourceMonster || !targetMonster || sourceMonster.level !== targetMonster.level) {
+    return undefined;
+  }
+
+  const isMushroomSporePair = (sourceMonster.family === 'Mushroom' && targetMonster.family === 'Spore')
+    || (sourceMonster.family === 'Spore' && targetMonster.family === 'Mushroom');
+
+  if (!isMushroomSporePair) {
+    return undefined;
+  }
+
+  return getMonsterDefinition('Cactus', sourceMonster.level);
 }
 
 function getSporeCatalystFusionResult(
