@@ -1,4 +1,5 @@
 import { STARTING_EGG_COST } from '../data/economy';
+import { BOSS_BATTLE_STAGE_IDS } from '../data/bossBattles';
 import { EXPEDITION_IDS, type ExpeditionId } from '../data/expeditions';
 import { MISSION_DEFINITIONS, MISSION_IDS, type MissionId } from '../data/missions';
 import { ORDER_IDS, type OrderId } from '../data/orders';
@@ -42,6 +43,7 @@ export type LocalSaveData = {
   claimedMissionIds: MissionId[];
   claimedOrderIds: OrderId[];
   claimedExpeditionIds: ExpeditionId[];
+  claimedBossBattleStageIds: string[];
   unlockedZones: ZoneId[];
   currentZone: ZoneId;
   hasPrestigedOnce: boolean;
@@ -125,6 +127,7 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
     claimedMissionIds: normalizeMissionIds(rawData.claimedMissionIds),
     claimedOrderIds: normalizeOrderIds(rawData.claimedOrderIds),
     claimedExpeditionIds: normalizeExpeditionIds(rawData.claimedExpeditionIds),
+    claimedBossBattleStageIds: normalizeBossBattleStageIds(rawData.claimedBossBattleStageIds),
     unlockedZones: normalizeUnlockedZones(rawData.unlockedZones),
     currentZone: normalizeCurrentZone(rawData.currentZone, rawData.unlockedZones),
     hasPrestigedOnce,
@@ -216,6 +219,16 @@ function normalizeExpeditionIds(rawExpeditionIds: unknown): ExpeditionId[] {
 
   return Array.from(new Set(rawExpeditionIds.filter((expeditionId): expeditionId is ExpeditionId => (
     typeof expeditionId === 'string' && EXPEDITION_IDS.includes(expeditionId as ExpeditionId)
+  ))));
+}
+
+function normalizeBossBattleStageIds(rawStageIds: unknown): string[] {
+  if (!Array.isArray(rawStageIds)) {
+    return [];
+  }
+
+  return Array.from(new Set(rawStageIds.filter((stageId): stageId is string => (
+    typeof stageId === 'string' && BOSS_BATTLE_STAGE_IDS.includes(stageId)
   ))));
 }
 

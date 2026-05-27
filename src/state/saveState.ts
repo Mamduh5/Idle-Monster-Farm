@@ -36,6 +36,7 @@ export type SaveSourceState = {
   claimedMissionIds: ReadonlySet<MissionId>;
   claimedOrderIds: ReadonlySet<OrderId>;
   claimedExpeditionIds: ReadonlySet<ExpeditionId>;
+  claimedBossBattleStageIds: ReadonlySet<string>;
   unlockedZones: ReadonlySet<ZoneId>;
   currentZone: ZoneId;
   hasPrestigedOnce: boolean;
@@ -47,6 +48,7 @@ export type LoadedSceneStateFragments = {
   claimedMissionIds: Set<MissionId>;
   claimedOrderIds: Set<OrderId>;
   claimedExpeditionIds: Set<ExpeditionId>;
+  claimedBossBattleStageIds: Set<string>;
 };
 
 export function createLocalSaveData(sourceState: SaveSourceState): LocalSaveData {
@@ -68,6 +70,7 @@ export function createLocalSaveData(sourceState: SaveSourceState): LocalSaveData
     claimedMissionIds: Array.from(sourceState.claimedMissionIds),
     claimedOrderIds: Array.from(sourceState.claimedOrderIds),
     claimedExpeditionIds: Array.from(sourceState.claimedExpeditionIds),
+    claimedBossBattleStageIds: Array.from(sourceState.claimedBossBattleStageIds),
     unlockedZones: Array.from(sourceState.unlockedZones),
     currentZone: sourceState.currentZone,
     hasPrestigedOnce: sourceState.hasPrestigedOnce,
@@ -120,5 +123,6 @@ export function createLoadedSetsFromSave(saveData: LocalSaveData): LoadedSceneSt
     claimedMissionIds,
     claimedOrderIds: new Set(saveData.claimedOrderIds),
     claimedExpeditionIds: new Set(saveData.claimedExpeditionIds),
+    claimedBossBattleStageIds: new Set(saveData.claimedBossBattleStageIds),
   };
 }
