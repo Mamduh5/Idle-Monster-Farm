@@ -3200,6 +3200,8 @@ export class FarmScene extends Phaser.Scene {
     const cooldownMs = this.getHatchCooldownMs();
     const remainingMs = Math.max(0, cooldownMs - this.hatchCooldownMs);
     const ritualRequirement = getRitualRequirement(this.totalRitualsPerformed);
+    const ritualSacrificeCandidate = getRitualSacrificeCandidate(this.farmSlots, this.totalRitualsPerformed);
+    const ritualCompletionResult = getRitualCompletionResult(this.farmSlots, this.totalRitualsPerformed);
     const hatchBlessingBonus = getHatchBlessingTierBonus(this.essencePowerLevel);
     const hatchState = this.isHatchReady()
       ? 'Ready'
@@ -3213,6 +3215,9 @@ export class FarmScene extends Phaser.Scene {
       `Income/sec: ${this.formatCoinAmount(this.getTotalIncomePerSecond())}`,
       `Rituals performed: ${this.totalRitualsPerformed}`,
       `Ritual Power: ${getFarmRitualPower(this.farmSlots)} / ${ritualRequirement}`,
+      `Ritual sacrifice power: ${ritualSacrificeCandidate?.ritualPower ?? 0}`,
+      `Ritual reward: ${ritualCompletionResult.success ? ritualCompletionResult.rewardEssence : 0}`,
+      `Ritual requirement: ${ritualRequirement}`,
       `Ritual income: x${this.getPrestigeIncomeMultiplier().toFixed(2)}`,
       `Hatch Blessing: Lv ${this.essencePowerLevel} (+1 ${Math.round(hatchBlessingBonus.plusOneChance * 100)}% / +2 ${Math.round(hatchBlessingBonus.plusTwoChance * 100)}% / +3 ${Math.round(hatchBlessingBonus.plusThreeChance * 100)}%)`,
       `Hatch cooldown: ${(cooldownMs / MILLISECONDS_PER_SECOND).toFixed(1)}s`,
@@ -3428,6 +3433,9 @@ export class FarmScene extends Phaser.Scene {
     const sacrificeCandidate = getRitualSacrificeCandidate(this.farmSlots, this.totalRitualsPerformed);
     const completionResult = getRitualCompletionResult(this.farmSlots, this.totalRitualsPerformed);
     const reward = completionResult.success ? completionResult.rewardEssence : 0;
+    const sacrificePower = completionResult.success
+      ? completionResult.sacrificePower
+      : sacrificeCandidate?.ritualPower ?? 0;
     const canPrestige = canPerformRitual(this.farmSlots, this.totalRitualsPerformed);
     const canSafeRitual = canPerformSafeRitual(
       this.farmSlots,
@@ -3474,17 +3482,7 @@ export class FarmScene extends Phaser.Scene {
       fixedWidth: contentWidth,
     }));
 
-    panel.add(this.add.text(contentX, -panelHeight / 2 + 130, this.t('ui.prestige.rituals', {
-      count: this.totalRitualsPerformed,
-    }), {
-      color: '#f7ffe8',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: panelWidth < 390 ? '12px' : '13px',
-      fontStyle: 'bold',
-      fixedWidth: Math.floor(contentWidth / 2),
-    }));
-
-    panel.add(this.add.text(contentX + Math.floor(contentWidth / 2), -panelHeight / 2 + 130, this.t('ui.prestige.ritualIncome', {
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 130, this.t('ui.prestige.permanentIncome', {
       current: this.getPrestigeIncomeMultiplier().toFixed(2),
       next: getRitualIncomeMultiplier(this.totalRitualsPerformed + 1).toFixed(2),
     }), {
@@ -3492,8 +3490,7 @@ export class FarmScene extends Phaser.Scene {
       fontFamily: UI_FONT_FAMILY,
       fontSize: panelWidth < 390 ? '12px' : '13px',
       fontStyle: 'bold',
-      fixedWidth: Math.floor(contentWidth / 2),
-      align: 'right',
+      fixedWidth: contentWidth,
     }));
 
     panel.add(this.add.text(contentX, -panelHeight / 2 + 154, statusText, {
@@ -3513,7 +3510,20 @@ export class FarmScene extends Phaser.Scene {
       })
       : this.t('ui.prestige.noSacrifice');
 
-    panel.add(this.add.text(contentX, -panelHeight / 2 + 182, sacrificeText, {
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 180, sacrificeText, {
+      color: sacrificeCandidate ? '#cdebb3' : '#9ca79f',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: panelWidth < 390 ? '13px' : '14px',
+      fontStyle: 'bold',
+      fixedWidth: contentWidth,
+      wordWrap: {
+        width: contentWidth,
+      },
+    }));
+
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 204, this.t('ui.prestige.sacrificePower', {
+      amount: sacrificePower,
+    }), {
       color: sacrificeCandidate ? '#cdebb3' : '#9ca79f',
       fontFamily: UI_FONT_FAMILY,
       fontSize: panelWidth < 390 ? '13px' : '14px',
@@ -3521,7 +3531,7 @@ export class FarmScene extends Phaser.Scene {
       fixedWidth: contentWidth,
     }));
 
-    panel.add(this.add.text(contentX, -panelHeight / 2 + 206, this.t('ui.prestige.reward', {
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 228, this.t('ui.prestige.reward', {
       amount: reward,
     }), {
       color: canPrestige ? '#fff4a8' : '#9ca79f',
@@ -3531,10 +3541,11 @@ export class FarmScene extends Phaser.Scene {
       fixedWidth: contentWidth,
     }));
 
-    panel.add(this.add.text(contentX, -panelHeight / 2 + 232, this.t('ui.prestige.permanentPower'), {
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 252, this.t('ui.prestige.rewardHint'), {
       color: THEME.mutedText,
       fontFamily: UI_FONT_FAMILY,
       fontSize: panelWidth < 390 ? '12px' : '13px',
+      fixedWidth: contentWidth,
       wordWrap: {
         width: contentWidth,
       },

@@ -32,6 +32,7 @@ export type RitualCompletionResult =
     success: true;
     sacrificeSlotId: number;
     sacrificeMonster: MonsterInstance;
+    sacrificePower: number;
     rewardEssence: number;
     nextTotalRitualsPerformed: number;
     nextRequirement: number;
@@ -42,7 +43,14 @@ export type RitualCompletionResult =
     reason: 'not-enough-ritual-power' | 'missing-sacrifice';
   };
 
-const RITUAL_ESSENCE_REWARD = 1;
+const RITUAL_ESSENCE_REWARD_TIERS = [
+  { multiplier: 6, reward: 6 },
+  { multiplier: 4.5, reward: 5 },
+  { multiplier: 3.25, reward: 4 },
+  { multiplier: 2.25, reward: 3 },
+  { multiplier: 1.5, reward: 2 },
+  { multiplier: 1, reward: 1 },
+] as const;
 const RITUAL_INCOME_BOOST_PER_COMPLETION = 0.1;
 
 export function sanitizePrestigeInteger(value: number): number {
@@ -115,11 +123,34 @@ export function getRitualIncomeMultiplier(totalRitualsPerformed: number): number
   return 1 + sanitizePrestigeInteger(totalRitualsPerformed) * RITUAL_INCOME_BOOST_PER_COMPLETION;
 }
 
+export function getRitualEssenceRewardTier(sacrificePower: number, requirement: number): number {
+  if (!Number.isFinite(sacrificePower) || !Number.isFinite(requirement) || requirement <= 0) {
+    return 0;
+  }
+
+  if (sacrificePower < requirement) {
+    return 0;
+  }
+
+  const matchedTier = RITUAL_ESSENCE_REWARD_TIERS.find((tier) => sacrificePower >= requirement * tier.multiplier);
+
+  return matchedTier?.reward ?? 0;
+}
+
+export function getRitualEssenceRewardForPower(sacrificePower: number, requirement: number): number {
+  return Math.min(6, getRitualEssenceRewardTier(sacrificePower, requirement));
+}
+
 export function getPrestigeReward(
   farmSlots: readonly FarmSlotState[],
   totalRitualsPerformed: number,
 ): number {
-  return canPerformRitual(farmSlots, totalRitualsPerformed) ? RITUAL_ESSENCE_REWARD : 0;
+  const requirement = getRitualRequirement(totalRitualsPerformed);
+  const sacrificeCandidate = getRitualSacrificeCandidate(farmSlots, totalRitualsPerformed);
+
+  return sacrificeCandidate
+    ? getRitualEssenceRewardForPower(sacrificeCandidate.ritualPower, requirement)
+    : 0;
 }
 
 export function getRitualSacrificeCandidate(
@@ -179,9 +210,10 @@ export function getRitualCompletionResult(
   farmSlots: readonly FarmSlotState[],
   totalRitualsPerformed: number,
 ): RitualCompletionResult {
+  const requirement = getRitualRequirement(totalRitualsPerformed);
   const sacrificeCandidate = getRitualSacrificeCandidate(farmSlots, totalRitualsPerformed);
 
-  if (!sacrificeCandidate && getFarmRitualPower(farmSlots) < getRitualRequirement(totalRitualsPerformed)) {
+  if (!sacrificeCandidate && getFarmRitualPower(farmSlots) < requirement) {
     return {
       success: false,
       reason: 'not-enough-ritual-power',
@@ -196,12 +228,21 @@ export function getRitualCompletionResult(
   }
 
   const nextTotalRitualsPerformed = sanitizePrestigeInteger(totalRitualsPerformed + 1);
+  const rewardEssence = getRitualEssenceRewardForPower(sacrificeCandidate.ritualPower, requirement);
+
+  if (rewardEssence <= 0) {
+    return {
+      success: false,
+      reason: 'not-enough-ritual-power',
+    };
+  }
 
   return {
     success: true,
     sacrificeSlotId: sacrificeCandidate.slotId,
     sacrificeMonster: sacrificeCandidate.monster,
-    rewardEssence: RITUAL_ESSENCE_REWARD,
+    sacrificePower: sacrificeCandidate.ritualPower,
+    rewardEssence,
     nextTotalRitualsPerformed,
     nextRequirement: getRitualRequirement(nextTotalRitualsPerformed),
     nextIncomeMultiplier: getRitualIncomeMultiplier(nextTotalRitualsPerformed),
