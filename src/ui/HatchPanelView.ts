@@ -20,8 +20,10 @@ type HatchPanelViewOptions = {
   formatCoinAmount: (amount: number) => string;
   getLayout: () => HatchLayout;
   isModalOpen: () => boolean;
-  onHatchClick: () => void;
   onHoverBlocked: () => void;
+  onPressCancel: (pointer: Phaser.Input.Pointer) => void;
+  onPressEnd: (pointer: Phaser.Input.Pointer) => void;
+  onPressStart: (pointer: Phaser.Input.Pointer) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
   theme: HatchTheme;
 };
@@ -39,10 +41,13 @@ export class HatchPanelView {
   private container?: Phaser.GameObjects.Container;
   private hatchPanel?: Phaser.GameObjects.Rectangle;
   private labelText?: Phaser.GameObjects.Text;
+  private lastState?: HatchPanelState;
   private progressFill?: Phaser.GameObjects.Rectangle;
   private progressHeight = 8;
   private progressWidth = HATCH_PROGRESS_WIDTH;
   private statusText?: Phaser.GameObjects.Text;
+  private holdFeedbackActive = false;
+  private holdTween?: Phaser.Tweens.Tween;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -80,12 +85,18 @@ export class HatchPanelView {
 
     hatchPanel
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
+      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         if (this.options.isModalOpen()) {
           return;
         }
 
-        this.options.onHatchClick();
+        this.options.onPressStart(pointer);
+      })
+      .on('pointerup', (pointer: Phaser.Input.Pointer) => {
+        this.options.onPressEnd(pointer);
+      })
+      .on('pointerupoutside', (pointer: Phaser.Input.Pointer) => {
+        this.options.onPressCancel(pointer);
       })
       .on('pointerover', () => {
         if (this.options.isModalOpen()) {
@@ -97,6 +108,10 @@ export class HatchPanelView {
       })
       .on('pointerout', () => {
         hatchPanel.setFillStyle(0x49395d, 0.92);
+        this.options.onPressCancel(this.scene.input.activePointer);
+      })
+      .on('pointercancel', (pointer: Phaser.Input.Pointer) => {
+        this.options.onPressCancel(pointer);
       });
 
     hatchContainer.add(this.scene.add.ellipse(eggX + 2, eggY + 2, eggWidth, eggHeight, theme.shadow, 0.2));
@@ -139,10 +154,12 @@ export class HatchPanelView {
   }
 
   destroy(): void {
+    this.clearHoldFeedback(false);
     this.container?.destroy();
     this.container = undefined;
     this.hatchPanel = undefined;
     this.labelText = undefined;
+    this.lastState = undefined;
     this.progressFill = undefined;
     this.progressHeight = 8;
     this.progressWidth = HATCH_PROGRESS_WIDTH;
@@ -150,6 +167,46 @@ export class HatchPanelView {
   }
 
   refresh(state: HatchPanelState): void {
+    this.lastState = state;
+
+    if (this.holdFeedbackActive) {
+      return;
+    }
+
+    this.applyState(state);
+  }
+
+  showHoldFeedback(durationMs: number): void {
+    if (!this.progressFill || !this.statusText) {
+      return;
+    }
+
+    this.holdFeedbackActive = true;
+    this.holdTween?.stop();
+    this.labelText?.setText(this.options.t('ui.hatch.label'));
+    this.statusText.setText(this.options.t('ui.hatch.hold'));
+    this.statusText.setColor('#fff4a8');
+    this.progressFill.setDisplaySize(0, this.progressHeight);
+    this.progressFill.setFillStyle(0xf3d06b, 0.95);
+    this.holdTween = this.scene.tweens.add({
+      targets: this.progressFill,
+      displayWidth: this.progressWidth,
+      duration: durationMs,
+      ease: 'Linear',
+    });
+  }
+
+  clearHoldFeedback(refreshState = true): void {
+    this.holdTween?.stop();
+    this.holdTween = undefined;
+    this.holdFeedbackActive = false;
+
+    if (refreshState && this.lastState) {
+      this.applyState(this.lastState);
+    }
+  }
+
+  private applyState(state: HatchPanelState): void {
     const progress = Phaser.Math.Clamp(state.hatchCooldownMs / state.cooldownMs, 0, 1);
     const isReady = progress >= 1;
     const statusColor = state.isFull || !state.canAfford ? '#fff4a8' : '#d9d6ec';

@@ -171,6 +171,8 @@ const MILLISECONDS_PER_SECOND = 1000;
 const SAVE_THROTTLE_MS = 5000;
 const STARTING_COINS = STARTING_EGG_COST;
 const ESSENCE_POWER_COST = 1;
+const HATCH_POOL_HOLD_MS = 1750;
+const HATCH_POOL_HINT_HATCH_COUNT = 3;
 const SHOW_DEBUG_PANEL = false;
 const SHOW_MONSTER_HITBOX_DEBUG = false;
 const MODAL_OVERLAY_DEPTH = 18;
@@ -327,6 +329,7 @@ export class FarmScene extends Phaser.Scene {
   private expeditionPanel?: Phaser.GameObjects.Container;
   private upgradeShopPanel?: Phaser.GameObjects.Container;
   private prestigePanel?: Phaser.GameObjects.Container;
+  private hatchPoolPanel?: Phaser.GameObjects.Container;
   private modalOverlay?: Phaser.GameObjects.Rectangle;
   private economyDebugPanel?: Phaser.GameObjects.Container;
   private economyDebugText?: Phaser.GameObjects.Text;
@@ -363,13 +366,20 @@ export class FarmScene extends Phaser.Scene {
   private lastTapFarmAt = -TAP_FARM_COOLDOWN_MS;
   private tapFarmCombo = 0;
   private lastTapFarmComboAt = -TAP_FARM_COMBO_TIMEOUT_MS;
+  private hatchPoolHoldTimer?: Phaser.Time.TimerEvent;
+  private hatchPoolHoldPointerId: number | null = null;
+  private hatchPoolHoldTriggered = false;
+  private successfulHatchesThisSession = 0;
+  private hatchPoolHintShownThisSession = false;
 
   private readonly handlePageHide = (): void => {
+    this.cancelHatchPoolHold();
     this.saveProgress();
   };
 
   private readonly handleVisibilityChange = (): void => {
     if (document.visibilityState === 'hidden') {
+      this.cancelHatchPoolHold();
       this.lastHiddenAt = Date.now();
       this.saveProgress();
       return;
@@ -378,6 +388,10 @@ export class FarmScene extends Phaser.Scene {
     if (document.visibilityState === 'visible') {
       this.applyResumeProgress();
     }
+  };
+
+  private readonly handleWindowBlur = (): void => {
+    this.cancelHatchPoolHold();
   };
 
   private readonly handleManualDragPointerMove = (pointer: Phaser.Input.Pointer): void => {
@@ -413,11 +427,10 @@ export class FarmScene extends Phaser.Scene {
       formatCoinAmount: (amount) => this.formatCoinAmount(amount),
       getLayout: () => this.getLayout(),
       isModalOpen: () => this.isModalOpen(),
-      onHatchClick: () => {
-        this.playButtonClickSound();
-        this.hatchMonster();
-      },
       onHoverBlocked: () => this.resetFarmControlHoverState(),
+      onPressCancel: (pointer) => this.cancelHatchPoolHold(pointer),
+      onPressEnd: (pointer) => this.finishHatchPanelPress(pointer),
+      onPressStart: (pointer) => this.startHatchPanelPress(pointer),
       t: (key, params) => this.t(key, params),
       theme: THEME,
     });
@@ -508,6 +521,7 @@ export class FarmScene extends Phaser.Scene {
     this.expeditionPanel = undefined;
     this.upgradeShopPanel = undefined;
     this.prestigePanel = undefined;
+    this.hatchPoolPanel = undefined;
     this.navigationMenuPanelView.destroy();
     this.modalOverlay = undefined;
     this.economyDebugPanel = undefined;
@@ -546,6 +560,9 @@ export class FarmScene extends Phaser.Scene {
     this.lastTapFarmAt = -TAP_FARM_COOLDOWN_MS;
     this.tapFarmCombo = 0;
     this.lastTapFarmComboAt = -TAP_FARM_COMBO_TIMEOUT_MS;
+    this.cancelHatchPoolHold();
+    this.successfulHatchesThisSession = 0;
+    this.hatchPoolHintShownThisSession = false;
     this.monsterRenderer.validateMonsterVisualIdentities();
     this.clearCoinBugs();
     this.hatchCooldownMs = HATCH_COOLDOWN_MS;
@@ -603,6 +620,7 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
+    this.cancelHatchPoolHold();
     this.monsterVisuals.forEach((visual) => {
       visual?.destroy();
     });
@@ -980,6 +998,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private createHatchArea(): void {
+    this.cancelHatchPoolHold();
     this.hatchPanelView.create();
     this.updateHatchCooldownUi();
   }
@@ -1235,6 +1254,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private showModalOverlay(): void {
+    this.cancelHatchPoolHold();
     this.hideModalOverlay();
     this.setModalOpenVisualState(true);
 
@@ -1277,6 +1297,7 @@ export class FarmScene extends Phaser.Scene {
       || this.expeditionPanel
       || this.upgradeShopPanel
       || this.prestigePanel
+      || this.hatchPoolPanel
       || this.navigationMenuPanelView.isOpen()
       || this.modalOverlay
     );
@@ -1308,6 +1329,11 @@ export class FarmScene extends Phaser.Scene {
 
     if (this.prestigePanel) {
       this.closePrestigePanel();
+      return;
+    }
+
+    if (this.hatchPoolPanel) {
+      this.closeHatchPoolPanel();
       return;
     }
 
@@ -1365,6 +1391,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private resetFarmControlHoverState(): void {
+    this.cancelHatchPoolHold();
     this.hatchPanelView.resetHoverState();
     this.tapFarmView.resetHoverState();
     this.gameplayActionBarView.resetHoverState();
@@ -5242,6 +5269,7 @@ export class FarmScene extends Phaser.Scene {
     audioSystem.playHatch();
     this.discoverMonster(hatchDefinition);
     this.incrementMissionProgress('hatch-3');
+    this.maybeShowHatchPoolHint();
     this.evaluateMonsterMissions(hatchDefinition);
     this.hideFarmMessage();
     this.renderMonsterInSlot(this.farmSlots[emptySlot.id]);
@@ -5252,6 +5280,20 @@ export class FarmScene extends Phaser.Scene {
     this.updateHatchCooldownUi();
     this.skipSavingUntilProgress = false;
     this.saveProgress();
+  }
+
+  private maybeShowHatchPoolHint(): void {
+    this.successfulHatchesThisSession += 1;
+
+    if (
+      this.hatchPoolHintShownThisSession
+      || this.successfulHatchesThisSession < HATCH_POOL_HINT_HATCH_COUNT
+    ) {
+      return;
+    }
+
+    this.hatchPoolHintShownThisSession = true;
+    this.showToast(this.t('toast.hatchPoolHint'), 'info');
   }
 
   private rollHatchMonsterDefinition(): MonsterDefinition {
@@ -5311,6 +5353,168 @@ export class FarmScene extends Phaser.Scene {
       hatchCooldownMs: this.hatchCooldownMs,
       isFull: this.isFarmFull(),
     });
+  }
+
+  private startHatchPanelPress(pointer: Phaser.Input.Pointer): void {
+    if (this.isModalOpen()) {
+      return;
+    }
+
+    this.cancelHatchPoolHold();
+    this.hatchPoolHoldPointerId = pointer.id;
+    this.hatchPoolHoldTriggered = false;
+    this.hatchPanelView.showHoldFeedback(HATCH_POOL_HOLD_MS);
+    this.hatchPoolHoldTimer = this.time.delayedCall(HATCH_POOL_HOLD_MS, () => {
+      if (this.hatchPoolHoldPointerId !== pointer.id || this.isModalOpen()) {
+        return;
+      }
+
+      this.hatchPoolHoldTriggered = true;
+      this.hatchPoolHoldTimer = undefined;
+      this.hatchPanelView.clearHoldFeedback();
+      this.playButtonClickSound();
+      this.openHatchPoolPanel();
+    });
+  }
+
+  private finishHatchPanelPress(pointer: Phaser.Input.Pointer): void {
+    if (this.hatchPoolHoldPointerId !== pointer.id) {
+      return;
+    }
+
+    const shouldHatch = !this.hatchPoolHoldTriggered;
+    this.cancelHatchPoolHold();
+
+    if (!shouldHatch) {
+      return;
+    }
+
+    this.playButtonClickSound();
+    this.hatchMonster();
+  }
+
+  private cancelHatchPoolHold(pointer?: Phaser.Input.Pointer): void {
+    if (pointer && this.hatchPoolHoldPointerId !== null && this.hatchPoolHoldPointerId !== pointer.id) {
+      return;
+    }
+
+    this.hatchPoolHoldTimer?.remove(false);
+    this.hatchPoolHoldTimer = undefined;
+    this.hatchPoolHoldPointerId = null;
+    this.hatchPoolHoldTriggered = false;
+    this.hatchPanelView.clearHoldFeedback();
+  }
+
+  private openHatchPoolPanel(): void {
+    this.closeHatchPoolPanel(false);
+    this.closeNavigationMenuPanel();
+    this.closeCompendiumPanel();
+    this.closeSettingsPanel();
+    this.closeHelpPanel();
+    this.closeZonePanel();
+    this.closeMissionsPanel();
+    this.closeOrdersPanel();
+    this.closeExpeditionPanel();
+    this.closeUpgradeShopPanel();
+    this.closePrestigePanel();
+    this.closeEconomyDebugPanel();
+    this.cancelActiveDrag();
+    this.clearSelectedSlot();
+    this.showModalOverlay();
+
+    const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
+    const { width: panelWidth, height: panelHeight } = getPanelSize(this.scale, 350, 270);
+    const contentX = -panelWidth / 2 + 24;
+    const contentWidth = panelWidth - 48;
+    const mushroomChance = this.getMushroomHatchChance();
+    const slimeChance = Math.max(0, 1 - mushroomChance);
+    const hatchBlessingBonus = getHatchBlessingTierBonus(this.essencePowerLevel);
+    const compactBlessingText = this.t('ui.prestige.hatchBlessingEffectCompact', {
+      plusOne: Math.round(hatchBlessingBonus.plusOneChance * 100),
+      plusTwo: Math.round(hatchBlessingBonus.plusTwoChance * 100),
+      plusThree: Math.round(hatchBlessingBonus.plusThreeChance * 100),
+    });
+
+    panel.setDepth(24);
+    addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
+
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 18, this.t('ui.hatchPool.title'), {
+      color: THEME.text,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: getPanelTitleFontSize(panelWidth, 22),
+      fontStyle: 'bold',
+    }));
+
+    this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closeHatchPoolPanel());
+
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 64, this.t('ui.hatchPool.description'), {
+      color: THEME.mutedText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: panelWidth < 390 ? '12px' : '13px',
+      fixedWidth: contentWidth,
+      wordWrap: {
+        width: contentWidth,
+      },
+    }));
+
+    const chanceLabel = this.t('ui.hatchPool.chance');
+    const familyRows = [
+      { family: this.getLocalizedFamilyName('Slime'), chance: Math.round(slimeChance * 100) },
+      { family: this.getLocalizedFamilyName('Mushroom'), chance: Math.round(mushroomChance * 100) },
+    ];
+
+    familyRows.forEach((row, index) => {
+      const rowY = -panelHeight / 2 + 118 + index * 34;
+
+      panel.add(this.add.rectangle(0, rowY, panelWidth - 48, 26, THEME.panelAlt, 0.88)
+        .setStrokeStyle(1, THEME.lockedBorder, 0.5));
+      panel.add(this.add.text(contentX, rowY - 9, row.family, {
+        color: '#f7ffe8',
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: panelWidth < 390 ? '13px' : '14px',
+        fontStyle: 'bold',
+        fixedWidth: Math.floor(contentWidth * 0.55),
+      }));
+      panel.add(this.add.text(panelWidth / 2 - 28, rowY - 9, `${row.chance}% ${chanceLabel}`, {
+        color: '#fff4a8',
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: panelWidth < 390 ? '12px' : '13px',
+        fontStyle: 'bold',
+        align: 'right',
+        fixedWidth: Math.floor(contentWidth * 0.42),
+      }).setOrigin(1, 0));
+    });
+
+    panel.add(this.add.text(contentX, panelHeight / 2 - 76, this.t('ui.prestige.hatchBlessing'), {
+      color: '#f7ffe8',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: panelWidth < 390 ? '13px' : '14px',
+      fontStyle: 'bold',
+      fixedWidth: contentWidth,
+    }));
+
+    panel.add(this.add.text(contentX, panelHeight / 2 - 52, compactBlessingText, {
+      color: THEME.mutedText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: panelWidth < 390 ? '12px' : '13px',
+      fixedWidth: contentWidth,
+      wordWrap: {
+        width: contentWidth,
+      },
+    }));
+
+    this.hatchPoolPanel = panel;
+  }
+
+  private closeHatchPoolPanel(hideOverlay = true): void {
+    if (this.hatchPoolPanel) {
+      this.hatchPoolPanel.destroy();
+      this.hatchPoolPanel = undefined;
+
+      if (hideOverlay) {
+        this.hideModalOverlay();
+      }
+    }
   }
 
   private discoverMonster(monster: MonsterDefinition): void {
@@ -6146,6 +6350,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeExpeditionPanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
+    this.closeHatchPoolPanel();
     this.closeNavigationMenuPanel();
     this.closeEconomyDebugPanel();
     this.updateHatchCooldownUi();
@@ -6156,10 +6361,12 @@ export class FarmScene extends Phaser.Scene {
   private registerPersistenceEvents(): void {
     window.addEventListener('pagehide', this.handlePageHide);
     window.addEventListener('beforeunload', this.handlePageHide);
+    window.addEventListener('blur', this.handleWindowBlur);
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.saveProgress();
+      this.cancelHatchPoolHold();
       this.cancelActiveDrag();
       this.clearCoinBugs();
       this.clearToast();
@@ -6170,6 +6377,7 @@ export class FarmScene extends Phaser.Scene {
       this.input.off('pointerdown', this.handleCoinBugProximityPointerDown);
       window.removeEventListener('pagehide', this.handlePageHide);
       window.removeEventListener('beforeunload', this.handlePageHide);
+      window.removeEventListener('blur', this.handleWindowBlur);
       document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     });
   }
