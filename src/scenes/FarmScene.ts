@@ -25,6 +25,7 @@ import {
   type BossBattleDefinition,
   type BossBattleReward,
   type BossBattleStage,
+  type BossVisualTheme,
 } from '../data/bossBattles';
 import {
   EXPEDITION_DEFINITIONS,
@@ -247,6 +248,10 @@ type BossBattlePlayerVisualEffect = {
 type BossBattleBossVisualEffect = {
   damage: number;
   targetId?: string;
+  visualTheme: BossVisualTheme;
+};
+type ExpeditionPanelRefreshOptions = {
+  preserveBattleAnimation?: boolean;
 };
 type CoinBug = {
   id: number;
@@ -2515,8 +2520,8 @@ export class FarmScene extends Phaser.Scene {
     this.openExpeditionPanel();
   }
 
-  private openExpeditionPanel(useDefaultStage = true): void {
-    this.closeExpeditionPanel(false);
+  private openExpeditionPanel(useDefaultStage = true, options: ExpeditionPanelRefreshOptions = {}): void {
+    this.closeExpeditionPanel(false, options);
     this.closeNavigationMenuPanel();
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
@@ -3078,11 +3083,12 @@ export class FarmScene extends Phaser.Scene {
     effect: BossBattlePlayerVisualEffect,
     isCompactPanel: boolean,
   ): void {
-    const color = this.getBossBattleSkillEffectColor(effect.skillId);
+    const style = this.getBossBattleSkillVisualStyle(effect.skillId);
+    const color = style.primary;
     const impactX = enemyContainer.x - (isCompactPanel ? 8 : 12);
     const impactY = enemyContainer.y - (isCompactPanel ? 22 : 28);
-    const ring = this.add.circle(impactX, impactY, isCompactPanel ? 11 : 13, color, 0.18)
-      .setStrokeStyle(isCompactPanel ? 3 : 4, color, 0.92);
+    const ring = this.add.circle(impactX, impactY, style.radius * (isCompactPanel ? 0.82 : 1), color, 0.18)
+      .setStrokeStyle(isCompactPanel ? 3 : 4, style.accent, 0.92);
     const damageText = this.add.text(impactX + (isCompactPanel ? 16 : 20), impactY - 12, `-${effect.amount}`, {
       color: '#fff4a8',
       fontFamily: UI_FONT_FAMILY,
@@ -3094,11 +3100,12 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(ring);
     panel.add(damageText);
+    this.addBossBattleSkillSpecificImpact(panel, effect.skillId, impactX, impactY, isCompactPanel);
     this.tweens.add({
       alpha: 0,
       duration: 420,
       ease: 'Sine.easeOut',
-      scale: 2.35,
+      scale: style.impactScale,
       targets: ring,
     });
     this.tweens.add({
@@ -3118,17 +3125,37 @@ export class FarmScene extends Phaser.Scene {
       yoyo: true,
     });
 
-    for (let index = 0; index < 6; index += 1) {
-      const angle = (Math.PI * 2 * index) / 6;
-      const spark = this.add.circle(impactX, impactY, isCompactPanel ? 2.5 : 3, color, 0.9);
+    for (let index = 0; index < style.particleCount; index += 1) {
+      const angle = (Math.PI * 2 * index) / style.particleCount;
+      const spark = this.add.circle(impactX, impactY, isCompactPanel ? 2.5 : 3, index % 2 === 0 ? color : style.accent, 0.9);
       panel.add(spark);
       this.tweens.add({
         alpha: 0,
         duration: 360,
         ease: 'Sine.easeOut',
         targets: spark,
-        x: impactX + Math.cos(angle) * (isCompactPanel ? 24 : 30),
-        y: impactY + Math.sin(angle) * (isCompactPanel ? 16 : 20),
+        x: impactX + Math.cos(angle) * style.spread * (isCompactPanel ? 0.78 : 1),
+        y: impactY + Math.sin(angle) * style.spread * (isCompactPanel ? 0.54 : 0.68),
+      });
+    }
+
+    if (style.label) {
+      const label = this.add.text(impactX, impactY + (isCompactPanel ? 20 : 24), style.label, {
+        color: style.labelColor,
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: isCompactPanel ? '11px' : '12px',
+        fontStyle: 'bold',
+        stroke: '#173c27',
+        strokeThickness: 3,
+      }).setOrigin(0.5);
+
+      panel.add(label);
+      this.tweens.add({
+        alpha: 0,
+        duration: 460,
+        ease: 'Sine.easeOut',
+        targets: label,
+        y: label.y - (isCompactPanel ? 18 : 22),
       });
     }
   }
@@ -3147,10 +3174,10 @@ export class FarmScene extends Phaser.Scene {
     const visibleCardCount = Math.max(1, Math.min(teamSize, 3));
     const effectX = leftX + width / 2;
     const effectY = topY + ((cardHeight + gap) * visibleCardCount - gap) / 2;
-    const color = this.getBossBattleSkillEffectColor(effect.skillId);
-    const label = effect.amount > 0 ? `+${effect.amount}` : this.t('ui.bossBattle.skillShield');
-    const aura = this.add.rectangle(effectX, effectY, width + 8, cardHeight * 0.78, color, 0.14)
-      .setStrokeStyle(2, color, 0.75);
+    const style = this.getBossBattleSkillVisualStyle(effect.skillId);
+    const label = effect.amount > 0 ? `+${effect.amount}` : this.getBossBattleSupportEffectLabel(effect.skillId);
+    const aura = this.add.rectangle(effectX, effectY, width + 8, cardHeight * 0.78, style.primary, 0.14)
+      .setStrokeStyle(2, style.accent, 0.75);
     const text = this.add.text(effectX, effectY - (isCompactPanel ? 22 : 26), label, {
       color: '#dfffd2',
       fontFamily: UI_FONT_FAMILY,
@@ -3162,6 +3189,7 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(aura);
     panel.add(text);
+    this.addBossBattleSupportParticles(panel, effect.skillId, effectX, effectY, width, isCompactPanel);
     this.tweens.add({
       alpha: 0,
       duration: 520,
@@ -3179,6 +3207,147 @@ export class FarmScene extends Phaser.Scene {
     });
   }
 
+  private addBossBattleSkillSpecificImpact(
+    panel: Phaser.GameObjects.Container,
+    skillId: BattleSkillId,
+    x: number,
+    y: number,
+    isCompactPanel: boolean,
+  ): void {
+    const style = this.getBossBattleSkillVisualStyle(skillId);
+
+    if (skillId === 'slime-surge') {
+      const wave = this.add.ellipse(x - 8, y + 4, isCompactPanel ? 56 : 72, isCompactPanel ? 18 : 22, style.primary, 0.2)
+        .setStrokeStyle(3, style.accent, 0.75);
+      panel.add(wave);
+      this.tweens.add({
+        alpha: 0,
+        duration: 420,
+        ease: 'Sine.easeOut',
+        scaleX: 1.28,
+        targets: wave,
+      });
+      return;
+    }
+
+    if (skillId === 'poison-puff' || skillId === 'daze-dust') {
+      const cloudCount = isCompactPanel ? 4 : 5;
+      for (let index = 0; index < cloudCount; index += 1) {
+        const cloud = this.add.circle(
+          x + (index - cloudCount / 2) * (isCompactPanel ? 8 : 10),
+          y + (index % 2 === 0 ? -4 : 6),
+          isCompactPanel ? 8 : 10,
+          index % 2 === 0 ? style.primary : style.accent,
+          0.26,
+        );
+        panel.add(cloud);
+        this.tweens.add({
+          alpha: 0,
+          duration: 520,
+          ease: 'Sine.easeOut',
+          targets: cloud,
+          x: cloud.x + (index - 2) * 4,
+          y: cloud.y - (isCompactPanel ? 12 : 16),
+        });
+      }
+      return;
+    }
+
+    if (skillId === 'thorn-jab' || skillId === 'thorn-storm') {
+      const needleCount = skillId === 'thorn-storm' ? (isCompactPanel ? 5 : 7) : 2;
+      for (let index = 0; index < needleCount; index += 1) {
+        const needle = this.add.rectangle(
+          x - (isCompactPanel ? 26 : 34) - index * 2,
+          y - (needleCount / 2 - index) * 5,
+          isCompactPanel ? 20 : 25,
+          3,
+          style.primary,
+          0.9,
+        ).setRotation(-0.22 + index * 0.08);
+        panel.add(needle);
+        this.tweens.add({
+          alpha: 0,
+          duration: 340,
+          ease: 'Sine.easeOut',
+          targets: needle,
+          x: x + (isCompactPanel ? 16 : 22),
+        });
+      }
+      return;
+    }
+
+    if (skillId === 'dream-shot' || skillId === 'dream-burst') {
+      const sparkleCount = skillId === 'dream-burst' ? (isCompactPanel ? 6 : 8) : 4;
+      for (let index = 0; index < sparkleCount; index += 1) {
+        const sparkle = this.add.text(x, y, '*', {
+          color: index % 2 === 0 ? '#d6d2ff' : '#8ad7ff',
+          fontFamily: UI_FONT_FAMILY,
+          fontSize: isCompactPanel ? '13px' : '15px',
+          fontStyle: 'bold',
+        }).setOrigin(0.5);
+        const angle = (Math.PI * 2 * index) / sparkleCount;
+        panel.add(sparkle);
+        this.tweens.add({
+          alpha: 0,
+          duration: 420,
+          ease: 'Sine.easeOut',
+          targets: sparkle,
+          x: x + Math.cos(angle) * (isCompactPanel ? 24 : 32),
+          y: y + Math.sin(angle) * (isCompactPanel ? 16 : 22),
+        });
+      }
+      return;
+    }
+
+    if (skillId === 'splash-hit' || skillId === 'spore-bonk') {
+      const dropCount = isCompactPanel ? 4 : 5;
+      for (let index = 0; index < dropCount; index += 1) {
+        const drop = this.add.circle(x, y, isCompactPanel ? 3 : 4, index % 2 === 0 ? style.primary : style.accent, 0.85);
+        const angle = -Math.PI + (Math.PI * index) / Math.max(1, dropCount - 1);
+        panel.add(drop);
+        this.tweens.add({
+          alpha: 0,
+          duration: 360,
+          ease: 'Sine.easeOut',
+          targets: drop,
+          x: x + Math.cos(angle) * (isCompactPanel ? 20 : 26),
+          y: y + Math.sin(angle) * (isCompactPanel ? 14 : 18),
+        });
+      }
+    }
+  }
+
+  private addBossBattleSupportParticles(
+    panel: Phaser.GameObjects.Container,
+    skillId: BattleSkillId,
+    x: number,
+    y: number,
+    width: number,
+    isCompactPanel: boolean,
+  ): void {
+    const style = this.getBossBattleSkillVisualStyle(skillId);
+    const count = skillId === 'healing-spores' ? (isCompactPanel ? 6 : 8) : (isCompactPanel ? 5 : 6);
+
+    for (let index = 0; index < count; index += 1) {
+      const angle = (Math.PI * 2 * index) / count;
+      const radiusX = width * 0.38;
+      const radiusY = isCompactPanel ? 24 : 30;
+      const particle = skillId === 'needle-guard'
+        ? this.add.rectangle(x, y, isCompactPanel ? 13 : 16, 3, style.accent, 0.9).setRotation(angle)
+        : this.add.circle(x, y, isCompactPanel ? 3 : 4, index % 2 === 0 ? style.primary : style.accent, 0.85);
+
+      panel.add(particle);
+      this.tweens.add({
+        alpha: 0,
+        duration: 520,
+        ease: 'Sine.easeOut',
+        targets: particle,
+        x: x + Math.cos(angle) * radiusX,
+        y: y + Math.sin(angle) * radiusY,
+      });
+    }
+  }
+
   private addBossBattleAttackEffect(
     panel: Phaser.GameObjects.Container,
     enemyContainer: Phaser.GameObjects.Container,
@@ -3190,6 +3359,7 @@ export class FarmScene extends Phaser.Scene {
     isCompactPanel: boolean,
   ): void {
     const targetPoint = this.getBossBattleTargetPoint(effect.targetId, team, leftX, topY, width, isCompactPanel);
+    const style = this.getBossBattleAttackVisualStyle(effect.visualTheme);
 
     this.tweens.add({
       duration: 150,
@@ -3210,13 +3380,14 @@ export class FarmScene extends Phaser.Scene {
     const deltaX = targetPoint.x - startX;
     const deltaY = targetPoint.y - startY;
     const distance = Math.max(1, Math.sqrt(deltaX * deltaX + deltaY * deltaY));
-    const slash = this.add.rectangle(startX + deltaX / 2, startY + deltaY / 2, distance, isCompactPanel ? 6 : 8, 0xffcf6f, 0.82)
+    const slash = this.add.rectangle(startX + deltaX / 2, startY + deltaY / 2, distance, isCompactPanel ? 6 : 8, style.primary, 0.82)
       .setRotation(Math.atan2(deltaY, deltaX));
-    const impact = this.add.circle(targetPoint.x, targetPoint.y, isCompactPanel ? 12 : 14, 0xffcf6f, 0.2)
-      .setStrokeStyle(isCompactPanel ? 3 : 4, 0xfff0a8, 0.9);
+    const impact = this.add.circle(targetPoint.x, targetPoint.y, isCompactPanel ? 12 : 14, style.primary, 0.2)
+      .setStrokeStyle(isCompactPanel ? 3 : 4, style.accent, 0.9);
 
     panel.add(slash);
     panel.add(impact);
+    this.addBossBattleThemedAttackParticles(panel, effect.visualTheme, startX, startY, targetPoint.x, targetPoint.y, isCompactPanel);
     this.tweens.add({
       alpha: 0,
       duration: 360,
@@ -3231,6 +3402,69 @@ export class FarmScene extends Phaser.Scene {
       scale: 2.1,
       targets: impact,
     });
+  }
+
+  private addBossBattleThemedAttackParticles(
+    panel: Phaser.GameObjects.Container,
+    visualTheme: BossVisualTheme,
+    startX: number,
+    startY: number,
+    targetX: number,
+    targetY: number,
+    isCompactPanel: boolean,
+  ): void {
+    const style = this.getBossBattleAttackVisualStyle(visualTheme);
+    const count = isCompactPanel ? 4 : 6;
+
+    for (let index = 0; index < count; index += 1) {
+      const progress = (index + 1) / (count + 1);
+      const x = Phaser.Math.Linear(startX, targetX, progress);
+      const y = Phaser.Math.Linear(startY, targetY, progress);
+      const offset = (index % 2 === 0 ? -1 : 1) * (isCompactPanel ? 5 : 7);
+      const particle = this.createBossBattleAttackParticle(visualTheme, x, y + offset, style, isCompactPanel, index);
+
+      panel.add(particle);
+      this.tweens.add({
+        alpha: 0,
+        duration: 420,
+        ease: 'Sine.easeOut',
+        targets: particle,
+        x: x + (targetX - startX) * 0.08,
+        y: y + offset * 1.5,
+      });
+    }
+  }
+
+  private createBossBattleAttackParticle(
+    visualTheme: BossVisualTheme,
+    x: number,
+    y: number,
+    style: { primary: number; accent: number; textColor: string },
+    isCompactPanel: boolean,
+    index: number,
+  ): Phaser.GameObjects.GameObject {
+    if (visualTheme === 'programmer') {
+      return this.add.rectangle(x, y, isCompactPanel ? 6 : 8, isCompactPanel ? 6 : 8, index % 2 === 0 ? style.primary : style.accent, 0.92)
+        .setRotation(index % 2 === 0 ? 0.15 : -0.18);
+    }
+
+    if (visualTheme === 'chef') {
+      return this.add.circle(x, y, isCompactPanel ? 4 : 5, index % 2 === 0 ? style.primary : style.accent, 0.9);
+    }
+
+    if (visualTheme === 'driver') {
+      return this.add.rectangle(x, y, isCompactPanel ? 18 : 22, isCompactPanel ? 3 : 4, index % 2 === 0 ? style.primary : style.accent, 0.88)
+        .setRotation(-0.08);
+    }
+
+    return this.add.text(x, y, index % 2 === 0 ? 'Z' : 'z', {
+      color: style.textColor,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '12px' : '14px',
+      fontStyle: 'bold',
+      stroke: '#173c27',
+      strokeThickness: 3,
+    }).setOrigin(0.5);
   }
 
   private addBossBattleTargetHitEffect(
@@ -3315,20 +3549,72 @@ export class FarmScene extends Phaser.Scene {
     return new Phaser.Math.Vector2(leftX + width * 0.42, topY + targetIndex * (cardHeight + gap) + cardHeight / 2);
   }
 
-  private getBossBattleSkillEffectColor(skillId: BattleSkillId): number {
-    if (skillId.includes('spore') || skillId.includes('poison')) {
-      return 0x9be56a;
+  private getBossBattleSkillVisualStyle(skillId: BattleSkillId): {
+    primary: number;
+    accent: number;
+    label?: string;
+    labelColor: string;
+    radius: number;
+    impactScale: number;
+    particleCount: number;
+    spread: number;
+  } {
+    switch (skillId) {
+      case 'splash-hit':
+        return { primary: 0x74d8ff, accent: 0xbaf5ff, labelColor: '#baf5ff', radius: 11, impactScale: 2.15, particleCount: 5, spread: 26 };
+      case 'jelly-guard':
+        return { primary: 0x77e8cf, accent: 0xb8fff0, labelColor: '#dfffd2', radius: 13, impactScale: 2.05, particleCount: 5, spread: 24 };
+      case 'slime-surge':
+        return { primary: 0x3eb8ff, accent: 0xd6fbff, label: 'Rush', labelColor: '#d6fbff', radius: 15, impactScale: 2.6, particleCount: 7, spread: 34 };
+      case 'spore-bonk':
+        return { primary: 0x9be56a, accent: 0xe2ffba, labelColor: '#e2ffba', radius: 12, impactScale: 2.15, particleCount: 5, spread: 26 };
+      case 'healing-spores':
+        return { primary: 0x7bdd67, accent: 0xdfffd2, labelColor: '#dfffd2', radius: 13, impactScale: 2.1, particleCount: 6, spread: 26 };
+      case 'poison-puff':
+        return { primary: 0x9be56a, accent: 0xb06add, label: 'Poison', labelColor: '#d8b7ff', radius: 14, impactScale: 2.35, particleCount: 6, spread: 30 };
+      case 'dream-shot':
+        return { primary: 0x8ad7ff, accent: 0xb8a7ff, labelColor: '#d6d2ff', radius: 12, impactScale: 2.2, particleCount: 5, spread: 28 };
+      case 'daze-dust':
+        return { primary: 0xc6b18a, accent: 0x8ad7ff, label: 'Daze', labelColor: '#d6d2ff', radius: 13, impactScale: 2.25, particleCount: 5, spread: 28 };
+      case 'dream-burst':
+        return { primary: 0x8ad7ff, accent: 0xd6a8ff, label: 'Burst', labelColor: '#e8d7ff', radius: 16, impactScale: 2.75, particleCount: 8, spread: 36 };
+      case 'thorn-jab':
+        return { primary: 0xffd166, accent: 0xdfffd2, labelColor: '#fff4a8', radius: 11, impactScale: 2.05, particleCount: 4, spread: 24 };
+      case 'needle-guard':
+        return { primary: 0x6fbd64, accent: 0xffd166, labelColor: '#fff4a8', radius: 13, impactScale: 2.05, particleCount: 6, spread: 26 };
+      case 'thorn-storm':
+        return { primary: 0xffd166, accent: 0x9be56a, label: 'Storm', labelColor: '#fff4a8', radius: 15, impactScale: 2.55, particleCount: 8, spread: 36 };
+      default:
+        return { primary: 0x8ee8ff, accent: 0xd6fbff, labelColor: '#d6fbff', radius: 12, impactScale: 2.2, particleCount: 5, spread: 28 };
+    }
+  }
+
+  private getBossBattleSupportEffectLabel(skillId: BattleSkillId): string {
+    if (skillId === 'needle-guard') {
+      return 'Counter';
     }
 
-    if (skillId.includes('dream') || skillId.includes('daze')) {
-      return 0x8ad7ff;
+    return this.t('ui.bossBattle.skillShield');
+  }
+
+  private getBossBattleAttackVisualStyle(visualTheme: BossVisualTheme): {
+    primary: number;
+    accent: number;
+    textColor: string;
+  } {
+    if (visualTheme === 'programmer') {
+      return { primary: 0x78f3ff, accent: 0xb7fff2, textColor: '#b7fff2' };
     }
 
-    if (skillId.includes('thorn') || skillId.includes('needle')) {
-      return 0xffd166;
+    if (visualTheme === 'chef') {
+      return { primary: 0xff6b35, accent: 0xffd166, textColor: '#ffd7a8' };
     }
 
-    return 0x8ee8ff;
+    if (visualTheme === 'driver') {
+      return { primary: 0xffd84a, accent: 0xb7b3a8, textColor: '#fff4a8' };
+    }
+
+    return { primary: 0x8ad7ff, accent: 0x77e8cf, textColor: '#d6fbff' };
   }
 
   private addBossBattleHumanVisual(
@@ -3995,9 +4281,14 @@ export class FarmScene extends Phaser.Scene {
     return actionText;
   }
 
-  private closeExpeditionPanel(resetBossBattleState = true): void {
+  private closeExpeditionPanel(
+    resetBossBattleState = true,
+    options: ExpeditionPanelRefreshOptions = {},
+  ): void {
     if (this.expeditionPanel) {
-      this.clearBattleAnimationEvents();
+      if (!options.preserveBattleAnimation) {
+        this.clearBattleAnimationEvents();
+      }
       this.expeditionPanel.destroy();
       this.expeditionPanel = undefined;
       if (resetBossBattleState) {
@@ -4014,9 +4305,9 @@ export class FarmScene extends Phaser.Scene {
     }
   }
 
-  private refreshExpeditionPanel(): void {
+  private refreshExpeditionPanel(options: ExpeditionPanelRefreshOptions = { preserveBattleAnimation: true }): void {
     if (this.expeditionPanel) {
-      this.openExpeditionPanel(false);
+      this.openExpeditionPanel(false, options);
     }
   }
 
@@ -4027,6 +4318,7 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
+    this.clearBattleAnimationEvents();
     this.bossBattleStageIndex = clampBossStageIndex(stageIndex, boss.stages);
     this.bossBattleSession = undefined;
     this.bossBattleStatusText = '';
@@ -4045,6 +4337,7 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
+    this.clearBattleAnimationEvents();
     this.selectedBossBattleBossId = boss.id;
     this.bossBattleStageIndex = getDefaultBossStageIndexForBoss(boss, this.claimedBossBattleStageIds);
     this.bossBattleSession = undefined;
@@ -4058,6 +4351,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private backToBossBattleSelect(): void {
+    this.clearBattleAnimationEvents();
     this.selectedBossBattleBossId = undefined;
     this.bossBattleSession = undefined;
     this.bossBattleStatusText = '';
@@ -4193,6 +4487,7 @@ export class FarmScene extends Phaser.Scene {
       this.bossBattleBossVisualEffect = {
         damage: bossResult.bossDamage,
         targetId: bossResult.bossTargetId,
+        visualTheme: boss.visualTheme,
       };
       this.bossBattleTargetMonsterId = bossResult.bossTargetId;
       this.bossBattleTurnBanner = 'boss';
