@@ -206,8 +206,8 @@ const SHOW_MONSTER_HITBOX_DEBUG = false;
 const MODAL_OVERLAY_DEPTH = 18;
 const BOSS_SELECT_PAGE_SIZE = 4;
 const BOSS_STAGE_PAGE_SIZE = 5;
-const COMPENDIUM_FAMILIES_PER_PAGE = 4;
-const COMPENDIUM_MONSTERS_PER_PAGE = 12;
+const COMPENDIUM_FAMILIES_PER_PAGE = 9;
+const COMPENDIUM_MONSTERS_PER_PAGE = 15;
 const UI_FONT_FAMILY = 'Arial, Tahoma, "Noto Sans Thai", sans-serif';
 const MONO_FONT_FAMILY = 'Consolas, monospace';
 const THEME = {
@@ -7493,14 +7493,15 @@ export class FarmScene extends Phaser.Scene {
     const bodyTopY = -panelHeight / 2 + (isCompactPanel ? 88 : 94);
     const bodyBottomY = panelHeight / 2 - (pageCount > 1 ? 76 : 34);
     const bodyHeight = Math.max(220, bodyBottomY - bodyTopY);
-    const columns = 2;
-    const rows = 2;
-    const gapX = isCompactPanel ? 10 : 14;
-    const gapY = isCompactPanel ? 12 : 16;
-    const cardWidth = Math.floor((panelWidth - 48 - gapX) / columns);
-    const cardHeight = Math.min(isCompactPanel ? 164 : 178, Math.floor((bodyHeight - gapY) / rows));
-    const gridWidth = columns * cardWidth + gapX;
-    const gridHeight = rows * cardHeight + gapY;
+    const columns = pageItems.length <= 1 ? 1 : pageItems.length <= 4 ? 2 : 3;
+    const rows = Math.max(1, Math.ceil(pageItems.length / columns));
+    const gapX = columns === 3 ? (isCompactPanel ? 8 : 10) : (isCompactPanel ? 10 : 14);
+    const gapY = rows === 3 ? (isCompactPanel ? 8 : 10) : (isCompactPanel ? 12 : 16);
+    const maxCardHeight = rows === 3 ? (isCompactPanel ? 132 : 148) : (isCompactPanel ? 164 : 178);
+    const cardWidth = Math.floor((panelWidth - 48 - gapX * (columns - 1)) / columns);
+    const cardHeight = Math.min(maxCardHeight, Math.floor((bodyHeight - gapY * (rows - 1)) / rows));
+    const gridWidth = columns * cardWidth + gapX * (columns - 1);
+    const gridHeight = rows * cardHeight + gapY * (rows - 1);
     const firstX = -gridWidth / 2 + cardWidth / 2;
     const firstY = bodyTopY + Math.max(0, (bodyHeight - gridHeight) / 2) + cardHeight / 2;
 
@@ -7547,23 +7548,31 @@ export class FarmScene extends Phaser.Scene {
     panel.add(cardBackground);
 
     if (visualMonster) {
+      const iconScale = Math.min(
+        isCompactPanel ? 1.14 : 1.28,
+        Math.max(0.76, cardWidth / 112),
+        Math.max(0.76, cardHeight / 122),
+      );
+
       this.monsterRenderer.addCompendiumIcon(
         panel,
         visualMonster,
         true,
         centerX,
-        centerY - cardHeight * 0.16,
-        isCompactPanel ? 1.35 : 1.55,
+        centerY - cardHeight * 0.19,
+        iconScale,
       );
     }
+
+    const isDenseCard = cardWidth < 112 || cardHeight < 145;
 
     panel.add(this.add.text(centerX, centerY + cardHeight * 0.24, this.getCompactBossBattleText(familyName, isCompactPanel ? 13 : 16), {
       color: THEME.text,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '16px' : '18px',
+      fontSize: isDenseCard ? '12px' : isCompactPanel ? '16px' : '18px',
       fontStyle: 'bold',
       align: 'center',
-      fixedWidth: cardWidth - 16,
+      fixedWidth: cardWidth - (isDenseCard ? 10 : 16),
     }).setOrigin(0.5));
 
     panel.add(this.add.text(centerX, centerY + cardHeight * 0.42, this.t('ui.compendium.familyProgress', {
@@ -7573,9 +7582,9 @@ export class FarmScene extends Phaser.Scene {
     }), {
       color: THEME.mutedText,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '10px' : '11px',
+      fontSize: isDenseCard ? '9px' : isCompactPanel ? '10px' : '11px',
       align: 'center',
-      fixedWidth: cardWidth - 18,
+      fixedWidth: cardWidth - (isDenseCard ? 10 : 18),
     }).setOrigin(0.5));
 
     const hitZone = this.add.zone(centerX, centerY, cardWidth, cardHeight)
@@ -7609,17 +7618,19 @@ export class FarmScene extends Phaser.Scene {
     const progress = getFamilyProgress(MONSTER_DEFINITIONS, this.discoveredMonsters, [family])[0];
     const isCompactPanel = panelWidth < 390;
     const gridColumns = 3;
-    const gridRows = 4;
-    const gapX = isCompactPanel ? 7 : 9;
-    const gapY = isCompactPanel ? 7 : 9;
-    const bodyTopY = -panelHeight / 2 + (isCompactPanel ? 118 : 124);
-    const bodyBottomY = panelHeight / 2 - 76;
-    const bodyHeight = Math.max(320, bodyBottomY - bodyTopY);
+    const gridRows = 5;
+    const gapX = isCompactPanel ? 6 : 8;
+    const gapY = isCompactPanel ? 5 : 7;
+    const bodyTopY = -panelHeight / 2 + (isCompactPanel ? 112 : 120);
+    const bodyBottomY = panelHeight / 2 - (pageCount > 1 ? 76 : 24);
+    const bodyHeight = Math.max(380, bodyBottomY - bodyTopY);
+    const maxCardHeight = isCompactPanel ? 92 : 108;
     const cardWidth = Math.floor((panelWidth - 48 - gapX * (gridColumns - 1)) / gridColumns);
-    const cardHeight = Math.floor((bodyHeight - gapY * (gridRows - 1)) / gridRows);
+    const cardHeight = Math.min(maxCardHeight, Math.floor((bodyHeight - gapY * (gridRows - 1)) / gridRows));
     const gridWidth = gridColumns * cardWidth + gapX * (gridColumns - 1);
+    const gridHeight = gridRows * cardHeight + gapY * (gridRows - 1);
     const firstX = -gridWidth / 2 + cardWidth / 2;
-    const firstY = bodyTopY + cardHeight / 2;
+    const firstY = bodyTopY + Math.max(0, (bodyHeight - gridHeight) / 2) + cardHeight / 2;
 
     this.compendiumFamilyPageIndex = pageIndex;
 
@@ -7687,11 +7698,15 @@ export class FarmScene extends Phaser.Scene {
   ): void {
     const isDiscovered = this.isMonsterDiscovered(monster);
     const textColor = isDiscovered ? '#f7ffe8' : '#9ca79f';
-    const iconScale = isCompactPanel ? 0.55 : 0.62;
+    const iconScale = Math.min(
+      isCompactPanel ? 0.46 : 0.54,
+      Math.max(0.38, cardWidth / 184),
+      Math.max(0.38, cardHeight / 178),
+    );
     const nameText = isDiscovered
-      ? this.getCompactBossBattleText(this.getLocalizedMonsterName(monster), isCompactPanel ? 12 : 15)
+      ? this.getCompactBossBattleText(this.getLocalizedMonsterName(monster), isCompactPanel ? 11 : 14)
       : '???';
-    const familyLevelText = `${this.getCompactBossBattleText(this.getLocalizedFamilyName(monster.family), isCompactPanel ? 8 : 10)} ${this.t('common.levelShort', { level: monster.level })}`;
+    const familyLevelText = this.t('common.levelShort', { level: monster.level });
     const incomeText = isDiscovered
       ? this.t('common.perSecond', { amount: this.formatSignedCoinAmount(monster.incomePerSecond) })
       : this.t('common.unknown');
@@ -7699,12 +7714,12 @@ export class FarmScene extends Phaser.Scene {
     panel.add(this.add.rectangle(centerX, centerY, cardWidth, cardHeight, isDiscovered ? THEME.panelAlt : 0x29362f, isDiscovered ? 0.94 : 0.78)
       .setStrokeStyle(2, isDiscovered ? THEME.slot : THEME.lockedBorder, 0.78));
 
-    this.monsterRenderer.addCompendiumIcon(panel, monster, isDiscovered, centerX, centerY - cardHeight * 0.25, iconScale);
+    this.monsterRenderer.addCompendiumIcon(panel, monster, isDiscovered, centerX, centerY - cardHeight * 0.28, iconScale);
 
-    panel.add(this.add.text(centerX, centerY - cardHeight * 0.02, nameText, {
+    panel.add(this.add.text(centerX, centerY - cardHeight * 0.01, nameText, {
       color: textColor,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '10px' : '11px',
+      fontSize: isCompactPanel ? '9px' : '10px',
       fontStyle: 'bold',
       align: 'center',
       fixedWidth: cardWidth - 10,
@@ -7713,15 +7728,15 @@ export class FarmScene extends Phaser.Scene {
     panel.add(this.add.text(centerX, centerY + cardHeight * 0.18, familyLevelText, {
       color: textColor,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '9px' : '10px',
+      fontSize: isCompactPanel ? '8px' : '9px',
       align: 'center',
       fixedWidth: cardWidth - 10,
     }).setOrigin(0.5));
 
-    panel.add(this.add.text(centerX, centerY + cardHeight * 0.37, this.getCompactBossBattleText(incomeText, isCompactPanel ? 13 : 16), {
+    panel.add(this.add.text(centerX, centerY + cardHeight * 0.36, this.getCompactBossBattleText(incomeText, isCompactPanel ? 12 : 15), {
       color: isDiscovered ? '#fff4a8' : '#9ca79f',
       fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '9px' : '10px',
+      fontSize: isCompactPanel ? '8px' : '9px',
       fontStyle: 'bold',
       align: 'center',
       fixedWidth: cardWidth - 10,
