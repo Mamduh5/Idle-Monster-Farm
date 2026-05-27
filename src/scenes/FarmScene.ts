@@ -86,7 +86,6 @@ import {
   getBossReplayReward,
   getDefaultBossStageIndexForBoss,
   isBossStageCleared,
-  markReplayRewardGranted,
   reviveBattleSession,
   type BattleMonsterSnapshot,
   type BattleSessionState,
@@ -3010,34 +3009,6 @@ export class FarmScene extends Phaser.Scene {
     const buttonWidth = Math.min(isCompactPanel ? 138 : 164, contentWidth * 0.45);
     const isCleared = isBossStageCleared(stage.id, this.claimedBossBattleStageIds);
     const controlsEnabled = !this.battleAnimationInProgress;
-
-    if (session?.status === 'defeat' && !session.reviveUsed) {
-      const gap = isCompactPanel ? 8 : 10;
-      panel.add(this.add.text(0, y - 42, this.t('ui.bossBattle.defeatDetail'), {
-        align: 'center',
-        color: '#ffcfba',
-        fixedWidth: contentWidth,
-        fontFamily: UI_FONT_FAMILY,
-        fontSize: isCompactPanel ? '11px' : '12px',
-        wordWrap: { width: contentWidth },
-      }).setOrigin(0.5, 0));
-      this.addBattleButton(panel, -buttonWidth / 2 - gap / 2, y, buttonWidth, isCompactPanel ? 34 : 38, this.t('ui.bossBattle.startFight'), THEME.buttonWarm, '#ffffff', () => {
-        this.startBossBattle(stage);
-      }, controlsEnabled);
-      this.addBattleButton(panel, buttonWidth / 2 + gap / 2, y, buttonWidth, isCompactPanel ? 34 : 38, this.t('ui.bossBattle.reviveAd'), THEME.buttonRitual, '#ffffff', () => {
-        void this.reviveBossBattleWithAd();
-      }, controlsEnabled);
-      panel.add(this.add.text(0, y + 24, this.t('ui.bossBattle.reviveHint'), {
-        align: 'center',
-        color: THEME.mutedText,
-        fixedWidth: contentWidth,
-        fontFamily: UI_FONT_FAMILY,
-        fontSize: isCompactPanel ? '10px' : '11px',
-        wordWrap: { width: contentWidth },
-      }).setOrigin(0.5, 0));
-      return;
-    }
-
     const firstClearX2Opportunity = this.getBossBattleRewardX2Opportunity(stage.id, 'first-clear');
 
     if (firstClearX2Opportunity) {
@@ -3073,7 +3044,7 @@ export class FarmScene extends Phaser.Scene {
         THEME.buttonWarm,
         '#ffffff',
         () => this.autoClearBossBattle(stage),
-        controlsEnabled,
+        controlsEnabled && !autoClearX2Opportunity?.adInProgress,
       );
       this.addBattleButton(
         panel,
@@ -3081,21 +3052,41 @@ export class FarmScene extends Phaser.Scene {
         y,
         twoButtonWidth,
         isCompactPanel ? 34 : 38,
-        autoClearX2Opportunity
-          ? autoClearX2Opportunity.adInProgress ? this.t('ui.bossBattle.rewardX2') : this.t('ui.bossBattle.watchAdX2')
-          : this.t('ui.bossBattle.replayFight'),
-        autoClearX2Opportunity ? THEME.buttonHover : THEME.button,
+        autoClearX2Opportunity?.adInProgress ? this.t('ui.bossBattle.rewardX2') : this.t('ui.bossBattle.autoClearX2'),
+        THEME.buttonHover,
         '#ffffff',
         () => {
-          if (autoClearX2Opportunity) {
-            void this.claimBossBattleRewardX2(stage, 'auto-clear');
-            return;
-          }
-
-          this.startBossBattle(stage);
+          void this.autoClearBossBattleWithX2(stage);
         },
-        controlsEnabled && (!autoClearX2Opportunity || !autoClearX2Opportunity.adInProgress),
+        controlsEnabled && !autoClearX2Opportunity?.adInProgress,
       );
+      return;
+    }
+
+    if (session?.status === 'defeat' && !session.reviveUsed) {
+      const gap = isCompactPanel ? 8 : 10;
+      panel.add(this.add.text(0, y - 42, this.t('ui.bossBattle.defeatDetail'), {
+        align: 'center',
+        color: '#ffcfba',
+        fixedWidth: contentWidth,
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: isCompactPanel ? '11px' : '12px',
+        wordWrap: { width: contentWidth },
+      }).setOrigin(0.5, 0));
+      this.addBattleButton(panel, -buttonWidth / 2 - gap / 2, y, buttonWidth, isCompactPanel ? 34 : 38, this.t('ui.bossBattle.startFight'), THEME.buttonWarm, '#ffffff', () => {
+        this.startBossBattle(stage);
+      }, controlsEnabled);
+      this.addBattleButton(panel, buttonWidth / 2 + gap / 2, y, buttonWidth, isCompactPanel ? 34 : 38, this.t('ui.bossBattle.reviveAd'), THEME.buttonRitual, '#ffffff', () => {
+        void this.reviveBossBattleWithAd();
+      }, controlsEnabled);
+      panel.add(this.add.text(0, y + 24, this.t('ui.bossBattle.reviveHint'), {
+        align: 'center',
+        color: THEME.mutedText,
+        fixedWidth: contentWidth,
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: isCompactPanel ? '10px' : '11px',
+        wordWrap: { width: contentWidth },
+      }).setOrigin(0.5, 0));
       return;
     }
 
@@ -4148,6 +4139,19 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
+    if (isBossStageCleared(stage.id, this.claimedBossBattleStageIds)) {
+      this.clearBattleAnimationEvents();
+      this.bossBattleSession = undefined;
+      this.bossBattleTargetMonsterId = undefined;
+      this.bossBattleTurnBanner = '';
+      this.bossBattlePlayerVisualEffect = undefined;
+      this.bossBattleBossVisualEffect = undefined;
+      this.bossBattleStatusText = this.t('ui.bossBattle.autoClearOnly');
+      this.bossBattleLogText = '';
+      this.refreshBossBattlePanel();
+      return;
+    }
+
     this.clearBattleAnimationEvents();
     this.clearBossBattleRewardX2Opportunity();
     const team = getAutoBattleTeam(this.farmSlots, stage.teamSize);
@@ -4168,6 +4172,13 @@ export class FarmScene extends Phaser.Scene {
     this.refreshBossBattlePanel();
   }
 
+  private getDoubledBossBattleCoinReward(reward: BossBattleCoinReward): BossBattleCoinReward {
+    return {
+      type: 'coins',
+      amount: reward.amount * 2,
+    };
+  }
+
   private autoClearBossBattle(stage: BossBattleStage): void {
     if (this.battleAnimationInProgress || !isBossStageCleared(stage.id, this.claimedBossBattleStageIds)) {
       return;
@@ -4176,8 +4187,8 @@ export class FarmScene extends Phaser.Scene {
     const reward = getBossReplayReward(stage);
 
     this.clearBattleAnimationEvents();
+    this.clearBossBattleRewardX2Opportunity();
     this.grantBossBattleReward(reward);
-    this.setBossBattleRewardX2Opportunity(stage, 'auto-clear', reward);
     this.bossBattleSession = undefined;
     this.bossBattleTargetMonsterId = undefined;
     this.bossBattleTurnBanner = '';
@@ -4193,6 +4204,68 @@ export class FarmScene extends Phaser.Scene {
     this.refreshBossBattlePanel();
     this.showToast(this.t('toast.bossBattleReward', {
       reward: this.getBossBattleRewardText(reward),
+    }), 'success');
+  }
+
+  private async autoClearBossBattleWithX2(stage: BossBattleStage): Promise<void> {
+    if (this.battleAnimationInProgress || !isBossStageCleared(stage.id, this.claimedBossBattleStageIds)) {
+      return;
+    }
+
+    const activeOpportunity = this.getBossBattleRewardX2Opportunity(stage.id, 'auto-clear');
+
+    if (activeOpportunity?.adInProgress) {
+      return;
+    }
+
+    const reward = getBossReplayReward(stage);
+
+    this.setBossBattleRewardX2Opportunity(stage, 'auto-clear', reward);
+    const opportunity = this.getBossBattleRewardX2Opportunity(stage.id, 'auto-clear');
+
+    if (!opportunity) {
+      return;
+    }
+
+    opportunity.adInProgress = true;
+    this.bossBattleSession = undefined;
+    this.bossBattleTargetMonsterId = undefined;
+    this.bossBattleTurnBanner = '';
+    this.bossBattlePlayerVisualEffect = undefined;
+    this.bossBattleBossVisualEffect = undefined;
+    this.bossBattleStatusText = this.t('ui.bossBattle.rewardX2');
+    this.bossBattleLogText = '';
+    this.refreshBossBattlePanel();
+
+    const adCompleted = await showRewardedAd('boss-auto-clear-x2').catch(() => false);
+    const currentOpportunity = this.bossBattleRewardX2Opportunity;
+
+    if (!currentOpportunity || currentOpportunity.id !== opportunity.id || currentOpportunity.consumed) {
+      return;
+    }
+
+    if (!adCompleted) {
+      this.clearBossBattleRewardX2Opportunity();
+      this.showToast(this.t('toast.adNotCompleted'), 'warning');
+      this.refreshBossBattlePanel();
+      return;
+    }
+
+    const doubledReward = this.getDoubledBossBattleCoinReward(currentOpportunity.reward);
+
+    currentOpportunity.consumed = true;
+    this.grantBossBattleReward(doubledReward);
+    this.clearBossBattleRewardX2Opportunity();
+    this.bossBattleStatusText = this.t('ui.bossBattle.autoClearX2Granted', {
+      reward: this.getBossBattleRewardText(doubledReward),
+    });
+    this.bossBattleLogText = this.bossBattleStatusText;
+    this.skipSavingUntilProgress = false;
+    this.updateHud();
+    this.saveProgress();
+    this.refreshBossBattlePanel();
+    this.showToast(this.t('toast.bossBattleRewardX2', {
+      reward: this.getBossBattleRewardText(doubledReward),
     }), 'success');
   }
 
@@ -4414,23 +4487,6 @@ export class FarmScene extends Phaser.Scene {
         this.saveProgress();
         this.showToast(this.t('toast.bossBattleFirstClear', {
           reward: this.getBossBattleRewardText(stage.firstClearReward),
-        }), 'success');
-        return;
-      }
-
-      if (isBossStageCleared(stage.id, this.claimedBossBattleStageIds) && !session.replayRewardGranted) {
-        const reward = getBossReplayReward(stage);
-        this.grantBossBattleReward(reward);
-        this.clearBossBattleRewardX2Opportunity();
-        this.bossBattleSession = markReplayRewardGranted(session);
-        this.bossBattleStatusText = this.t('ui.bossBattle.replayGranted', {
-          reward: this.getBossBattleRewardText(reward),
-        });
-        this.skipSavingUntilProgress = false;
-        this.updateHud();
-        this.saveProgress();
-        this.showToast(this.t('toast.bossBattleReward', {
-          reward: this.getBossBattleRewardText(reward),
         }), 'success');
         return;
       }

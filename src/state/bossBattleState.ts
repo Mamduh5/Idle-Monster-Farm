@@ -60,7 +60,6 @@ export type BattleSessionState = {
   poisonTurns: number;
   poisonDamagePerTurn: number;
   reviveUsed: boolean;
-  replayRewardGranted: boolean;
 };
 
 export type BattleTurnResult = {
@@ -216,7 +215,6 @@ export function createBattleSession(stage: BossBattleStage, team: readonly Battl
     poisonTurns: 0,
     poisonDamagePerTurn: 0,
     reviveUsed: false,
-    replayRewardGranted: false,
   };
 }
 
@@ -485,13 +483,6 @@ export function reviveBattleSession(session: BattleSessionState): BattleSessionS
       shieldPercent: 0,
       counterDamage: 0,
     })),
-  };
-}
-
-export function markReplayRewardGranted(session: BattleSessionState): BattleSessionState {
-  return {
-    ...session,
-    replayRewardGranted: true,
   };
 }
 
