@@ -12,6 +12,13 @@ export type CompendiumListItem = {
   monster: MonsterDefinition;
 };
 
+export type CompendiumFamilyItem = {
+  family: MonsterFamily;
+  representativeMonster?: MonsterDefinition;
+  discovered: number;
+  total: number;
+};
+
 export type FamilyDiscoveryProgress = {
   family: MonsterFamily;
   discovered: number;
@@ -98,6 +105,51 @@ export function getFamilyProgress(
     discovered: getFamilyDiscoveredCount(monsterDefinitions, discoveredMonsters, family),
     total: getFamilyTotalCount(monsterDefinitions, family),
   }));
+}
+
+export function getCompendiumFamilyItems(
+  monsterDefinitions: readonly MonsterDefinition[],
+  discoveredMonsters: ReadonlySet<DiscoveryKey>,
+  familyOrder: readonly MonsterFamily[],
+): CompendiumFamilyItem[] {
+  return familyOrder.map((family) => {
+    const familyMonsters = getCompendiumFamilyMonsters(monsterDefinitions, family);
+
+    return {
+      family,
+      representativeMonster: familyMonsters[0],
+      discovered: getFamilyDiscoveredCount(monsterDefinitions, discoveredMonsters, family),
+      total: familyMonsters.length,
+    };
+  }).filter((item) => item.total > 0);
+}
+
+export function getCompendiumFamilyMonsters(
+  monsterDefinitions: readonly MonsterDefinition[],
+  family: MonsterFamily,
+): MonsterDefinition[] {
+  return monsterDefinitions
+    .filter((definition) => definition.family === family)
+    .sort((first, second) => first.level - second.level);
+}
+
+export function getCompendiumFamilyPageItems<T>(
+  items: readonly T[],
+  pageIndex: number,
+  itemsPerPage: number,
+): T[] {
+  return items.slice(pageIndex * itemsPerPage, (pageIndex + 1) * itemsPerPage);
+}
+
+export function getCompendiumFamilyPageCount(
+  items: readonly unknown[],
+  itemsPerPage: number,
+): number {
+  return Math.max(1, Math.ceil(items.length / Math.max(1, itemsPerPage)));
+}
+
+export function clampCompendiumFamilyPageIndex(pageIndex: number, pageCount: number): number {
+  return Math.min(Math.max(pageIndex, 0), Math.max(0, pageCount - 1));
 }
 
 export function getCompendiumListItems(

@@ -50,17 +50,16 @@ import {
 } from '../state/farmSlotState';
 import { chooseCoinBugSpawnPosition, COIN_BUG_FAILED_SPAWN_RETRY_MS, COIN_BUG_HITBOX_SIZE, COIN_BUG_MAX_ACTIVE, COIN_BUG_MAX_LIFETIME_MS, COIN_BUG_MIN_DISTANCE_FROM_OTHER_BUGS, COIN_BUG_MIN_LIFETIME_MS, COIN_BUG_MIN_REWARD, COIN_BUG_PICKUP_RADIUS_DESKTOP, COIN_BUG_PICKUP_RADIUS_MOBILE, COIN_BUG_REWARD_SECONDS, COIN_BUG_SPAWN_ATTEMPTS, COIN_BUG_SPAWN_MAX_MS, COIN_BUG_SPAWN_MIN_MS, getActiveCoinBugCount as getActiveCoinBugStateCount, getCoinBugPickupRadius as getCoinBugPickupRadiusFromState, getCoinBugRewardAmount, getCoinBugRewardBase, getNextCoinBugSpawnState, getPointDistance, getRandomDelayMs, getRandomLifetimeMs, shouldAttemptCoinBugSpawn, shouldExpireCoinBug, updateCoinBugLifetime } from '../state/coinBugState';
 import {
-  clampCompendiumPageIndex,
+  clampCompendiumFamilyPageIndex,
   discoverMonster as discoverMonsterInState,
-  getCompendiumListItems,
-  getCompendiumPageCount,
-  getCompendiumPageFamilies,
-  getCompendiumPageItems,
-  getDiscoveredMonsterCount,
+  getCompendiumFamilyItems,
+  getCompendiumFamilyMonsters,
+  getCompendiumFamilyPageCount,
+  getCompendiumFamilyPageItems,
   getFamilyProgress,
   hasDiscoveredFamily,
   isMonsterDiscovered as isMonsterDiscoveredInState,
-  type CompendiumListItem,
+  type CompendiumFamilyItem,
   type DiscoveryKey,
 } from '../state/discoveryState';
 import { applyHatchBlessingToMonsterDefinition, canAffordHatch as canAffordHatchInState, getAppliedAwayHatchCooldown, getCappedHatchCooldown, getHatchAttemptState, getHatchBlessingTierBonus, getHatchCooldownDurationForState, getHatchCost, getHatchedMonsterDefinition, getMushroomHatchChanceForState, getNextHatchCostAfterSuccess, getUpdatedHatchCooldown, isHatchReady as isHatchReadyInState } from '../state/hatchState';
@@ -139,6 +138,7 @@ import {
   getMonsterDefinition,
   getNextMonsterDefinition,
   MONSTER_DEFINITIONS,
+  MONSTER_FAMILY_DEFINITIONS,
 } from '../data/monsters';
 import {
   UPGRADE_DEFINITIONS,
@@ -206,6 +206,7 @@ const SHOW_MONSTER_HITBOX_DEBUG = false;
 const MODAL_OVERLAY_DEPTH = 18;
 const BOSS_SELECT_PAGE_SIZE = 4;
 const BOSS_STAGE_PAGE_SIZE = 5;
+const COMPENDIUM_FAMILIES_PER_PAGE = 4;
 const COMPENDIUM_MONSTERS_PER_PAGE = 12;
 const UI_FONT_FAMILY = 'Arial, Tahoma, "Noto Sans Thai", sans-serif';
 const MONO_FONT_FAMILY = 'Consolas, monospace';
@@ -394,7 +395,9 @@ export class FarmScene extends Phaser.Scene {
   private resetConfirmationArmed = false;
   private prestigeConfirmationArmed = false;
   private safeRitualInProgress = false;
-  private compendiumPageIndex = 0;
+  private selectedCompendiumFamily?: MonsterFamily;
+  private compendiumFamilyHomePageIndex = 0;
+  private compendiumFamilyPageIndex = 0;
   private upgradeShopPageIndex = 0;
   private missionsPageIndex = 0;
   private ordersPageIndex = 0;
@@ -599,7 +602,9 @@ export class FarmScene extends Phaser.Scene {
     this.resetConfirmationArmed = false;
     this.prestigeConfirmationArmed = false;
     this.safeRitualInProgress = false;
-    this.compendiumPageIndex = 0;
+    this.selectedCompendiumFamily = undefined;
+    this.compendiumFamilyHomePageIndex = 0;
+    this.compendiumFamilyPageIndex = 0;
     this.upgradeShopPageIndex = 0;
     this.missionsPageIndex = 0;
     this.ordersPageIndex = 0;
@@ -7429,8 +7434,8 @@ export class FarmScene extends Phaser.Scene {
     this.openCompendiumPanel();
   }
 
-  private openCompendiumPanel(): void {
-    this.closeCompendiumPanel();
+  private openCompendiumPanel(resetNavigation = true): void {
+    this.closeCompendiumPanel(resetNavigation);
     this.closeNavigationMenuPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
@@ -7446,22 +7451,7 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const familyOrder: MonsterFamily[] = ['Slime', 'Mushroom', 'Spore', 'Cactus'];
-    const listItems = getCompendiumListItems(MONSTER_DEFINITIONS, familyOrder);
     const { width: panelWidth, height: panelHeight } = this.getModalSize('compendium', 640, 640);
-    const isCompactPanel = panelWidth < 390;
-    const rowGap = isCompactPanel ? 34 : 36;
-    const rowHeight = isCompactPanel ? 31 : 33;
-    const bodyTopY = -panelHeight / 2 + (isCompactPanel ? 122 : 118);
-    const bodyBottomY = panelHeight / 2 - 58;
-    const bodyHeight = Math.max(rowGap, bodyBottomY - bodyTopY);
-    const pageCount = getCompendiumPageCount(listItems, COMPENDIUM_MONSTERS_PER_PAGE);
-    const pageIndex = clampCompendiumPageIndex(this.compendiumPageIndex, pageCount);
-    const pageItems = getCompendiumPageItems(listItems, pageIndex, COMPENDIUM_MONSTERS_PER_PAGE);
-    const visibleRowsHeight = Math.max(rowHeight, (pageItems.length - 1) * rowGap + rowHeight);
-    const firstRowY = bodyTopY + Math.max(0, (bodyHeight - visibleRowsHeight) / 2);
-
-    this.compendiumPageIndex = pageIndex;
 
     panel.setDepth(20);
     addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
@@ -7477,150 +7467,301 @@ export class FarmScene extends Phaser.Scene {
       yOffset: 20,
     });
 
-    this.addCompendiumSummary(panel, panelWidth, panelHeight, pageItems);
-
-    pageItems.forEach((item, index) => {
-      const rowY = firstRowY + index * rowGap;
-
-      this.addCompendiumRow(panel, item.monster, rowY, panelWidth, rowHeight);
-    });
-
-    this.addPaginationControls(panel, panelWidth, panelHeight, pageIndex, pageCount, (nextPageIndex) => {
-      this.compendiumPageIndex = nextPageIndex;
-      this.openCompendiumPanel();
-    });
+    if (this.selectedCompendiumFamily) {
+      this.addCompendiumFamilyDetailContent(panel, panelWidth, panelHeight, this.selectedCompendiumFamily);
+    } else {
+      this.addCompendiumHomeContent(panel, panelWidth, panelHeight);
+    }
 
     this.compendiumPanel = panel;
   }
 
-  private addCompendiumSummary(
+  private addCompendiumHomeContent(
     panel: Phaser.GameObjects.Container,
     panelWidth: number,
     panelHeight: number,
-    pageItems: CompendiumListItem[],
   ): void {
-    const familyOrder: MonsterFamily[] = ['Slime', 'Mushroom', 'Spore', 'Cactus'];
-    const discoveredCount = getDiscoveredMonsterCount(MONSTER_DEFINITIONS, this.discoveredMonsters);
-    const pageSubtitle = this.getCompendiumPageSubtitle(pageItems);
-    const summaryY = -panelHeight / 2 + 54;
-    const familyProgress = getFamilyProgress(MONSTER_DEFINITIONS, this.discoveredMonsters, familyOrder)
-      .map((progress) => this.t('ui.compendium.familyProgress', {
-        family: this.getLocalizedFamilyName(progress.family),
-        discovered: progress.discovered,
-        total: progress.total,
-      }))
-      .join('  |  ');
+    const familyItems = getCompendiumFamilyItems(
+      MONSTER_DEFINITIONS,
+      this.discoveredMonsters,
+      this.getCompendiumFamilyOrder(),
+    );
+    const pageCount = getCompendiumFamilyPageCount(familyItems, COMPENDIUM_FAMILIES_PER_PAGE);
+    const pageIndex = clampCompendiumFamilyPageIndex(this.compendiumFamilyHomePageIndex, pageCount);
+    const pageItems = getCompendiumFamilyPageItems(familyItems, pageIndex, COMPENDIUM_FAMILIES_PER_PAGE);
+    const isCompactPanel = panelWidth < 390;
+    const bodyTopY = -panelHeight / 2 + (isCompactPanel ? 88 : 94);
+    const bodyBottomY = panelHeight / 2 - (pageCount > 1 ? 76 : 34);
+    const bodyHeight = Math.max(220, bodyBottomY - bodyTopY);
+    const columns = 2;
+    const rows = 2;
+    const gapX = isCompactPanel ? 10 : 14;
+    const gapY = isCompactPanel ? 12 : 16;
+    const cardWidth = Math.floor((panelWidth - 48 - gapX) / columns);
+    const cardHeight = Math.min(isCompactPanel ? 164 : 178, Math.floor((bodyHeight - gapY) / rows));
+    const gridWidth = columns * cardWidth + gapX;
+    const gridHeight = rows * cardHeight + gapY;
+    const firstX = -gridWidth / 2 + cardWidth / 2;
+    const firstY = bodyTopY + Math.max(0, (bodyHeight - gridHeight) / 2) + cardHeight / 2;
 
-    panel.add(this.add.text(-panelWidth / 2 + 24, summaryY, pageSubtitle, {
+    this.compendiumFamilyHomePageIndex = pageIndex;
+
+    panel.add(this.add.text(0, -panelHeight / 2 + 58, this.t('ui.compendium.chooseFamily'), {
       color: THEME.goldText,
       fontFamily: UI_FONT_FAMILY,
       fontSize: panelWidth < 390 ? '12px' : '14px',
       fontStyle: 'bold',
-    }));
+    }).setOrigin(0.5));
 
-    panel.add(this.add.text(-panelWidth / 2 + 24, summaryY + 18, this.t('ui.compendium.summary', {
-      discovered: discoveredCount,
-      total: MONSTER_DEFINITIONS.length,
-      familyProgress,
+    pageItems.forEach((item, index) => {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const centerX = firstX + column * (cardWidth + gapX);
+      const centerY = firstY + row * (cardHeight + gapY);
+
+      this.addCompendiumFamilyCard(panel, item, centerX, centerY, cardWidth, cardHeight, isCompactPanel);
+    });
+
+    if (pageCount > 1) {
+      this.addPaginationControls(panel, panelWidth, panelHeight, pageIndex, pageCount, (nextPageIndex) => {
+        this.compendiumFamilyHomePageIndex = nextPageIndex;
+        this.openCompendiumPanel(false);
+      });
+    }
+  }
+
+  private addCompendiumFamilyCard(
+    panel: Phaser.GameObjects.Container,
+    item: CompendiumFamilyItem,
+    centerX: number,
+    centerY: number,
+    cardWidth: number,
+    cardHeight: number,
+    isCompactPanel: boolean,
+  ): void {
+    const cardBackground = this.add.rectangle(centerX, centerY, cardWidth, cardHeight, THEME.panelAlt, 0.94)
+      .setStrokeStyle(2, THEME.slot, 0.82);
+    const familyName = this.getLocalizedFamilyName(item.family);
+    const visualMonster = item.representativeMonster;
+
+    panel.add(cardBackground);
+
+    if (visualMonster) {
+      this.monsterRenderer.addCompendiumIcon(
+        panel,
+        visualMonster,
+        true,
+        centerX,
+        centerY - cardHeight * 0.16,
+        isCompactPanel ? 1.35 : 1.55,
+      );
+    }
+
+    panel.add(this.add.text(centerX, centerY + cardHeight * 0.24, this.getCompactBossBattleText(familyName, isCompactPanel ? 13 : 16), {
+      color: THEME.text,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '16px' : '18px',
+      fontStyle: 'bold',
+      align: 'center',
+      fixedWidth: cardWidth - 16,
+    }).setOrigin(0.5));
+
+    panel.add(this.add.text(centerX, centerY + cardHeight * 0.42, this.t('ui.compendium.familyProgress', {
+      family: familyName,
+      discovered: item.discovered,
+      total: item.total,
     }), {
       color: THEME.mutedText,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: panelWidth < 390 ? '10px' : '12px',
-      wordWrap: {
-        width: panelWidth - 48,
-      },
-    }));
+      fontSize: isCompactPanel ? '10px' : '11px',
+      align: 'center',
+      fixedWidth: cardWidth - 18,
+    }).setOrigin(0.5));
+
+    const hitZone = this.add.zone(centerX, centerY, cardWidth, cardHeight)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation();
+        this.playButtonClickSound();
+        this.openCompendiumFamilyDetail(item.family);
+      });
+
+    panel.add(hitZone);
   }
 
-  private getCompendiumPageSubtitle(pageItems: CompendiumListItem[]): string {
-    const visibleFamilies = getCompendiumPageFamilies(pageItems);
+  private addCompendiumFamilyDetailContent(
+    panel: Phaser.GameObjects.Container,
+    panelWidth: number,
+    panelHeight: number,
+    family: MonsterFamily,
+  ): void {
+    const familyMonsters = getCompendiumFamilyMonsters(MONSTER_DEFINITIONS, family);
 
-    if (visibleFamilies.length === 1) {
-      return this.t('ui.compendium.familyCollection', {
-        family: this.getLocalizedFamilyName(visibleFamilies[0]),
-      });
+    if (familyMonsters.length === 0) {
+      this.selectedCompendiumFamily = undefined;
+      this.addCompendiumHomeContent(panel, panelWidth, panelHeight);
+      return;
     }
 
-    return this.t('ui.compendium.mixedCollection');
+    const pageCount = getCompendiumFamilyPageCount(familyMonsters, COMPENDIUM_MONSTERS_PER_PAGE);
+    const pageIndex = clampCompendiumFamilyPageIndex(this.compendiumFamilyPageIndex, pageCount);
+    const pageItems = getCompendiumFamilyPageItems(familyMonsters, pageIndex, COMPENDIUM_MONSTERS_PER_PAGE);
+    const progress = getFamilyProgress(MONSTER_DEFINITIONS, this.discoveredMonsters, [family])[0];
+    const isCompactPanel = panelWidth < 390;
+    const gridColumns = 3;
+    const gridRows = 4;
+    const gapX = isCompactPanel ? 7 : 9;
+    const gapY = isCompactPanel ? 7 : 9;
+    const bodyTopY = -panelHeight / 2 + (isCompactPanel ? 118 : 124);
+    const bodyBottomY = panelHeight / 2 - 76;
+    const bodyHeight = Math.max(320, bodyBottomY - bodyTopY);
+    const cardWidth = Math.floor((panelWidth - 48 - gapX * (gridColumns - 1)) / gridColumns);
+    const cardHeight = Math.floor((bodyHeight - gapY * (gridRows - 1)) / gridRows);
+    const gridWidth = gridColumns * cardWidth + gapX * (gridColumns - 1);
+    const firstX = -gridWidth / 2 + cardWidth / 2;
+    const firstY = bodyTopY + cardHeight / 2;
+
+    this.compendiumFamilyPageIndex = pageIndex;
+
+    this.addBattleButton(
+      panel,
+      -panelWidth / 2 + 62,
+      -panelHeight / 2 + 66,
+      isCompactPanel ? 76 : 88,
+      30,
+      this.t('ui.compendium.back'),
+      THEME.button,
+      THEME.text,
+      () => this.backToCompendiumHome(),
+      true,
+    );
+
+    panel.add(this.add.text(0, -panelHeight / 2 + 54, this.t('ui.compendium.familyCollection', {
+      family: this.getLocalizedFamilyName(family),
+    }), {
+      color: THEME.goldText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '14px' : '16px',
+      fontStyle: 'bold',
+      align: 'center',
+      fixedWidth: Math.max(120, panelWidth - 172),
+    }).setOrigin(0.5));
+
+    panel.add(this.add.text(0, -panelHeight / 2 + 78, this.t('ui.compendium.familyProgress', {
+      family: this.getLocalizedFamilyName(family),
+      discovered: progress?.discovered ?? 0,
+      total: progress?.total ?? familyMonsters.length,
+    }), {
+      color: THEME.mutedText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '10px' : '12px',
+      align: 'center',
+      fixedWidth: panelWidth - 48,
+    }).setOrigin(0.5));
+
+    pageItems.forEach((monster, index) => {
+      const column = index % gridColumns;
+      const row = Math.floor(index / gridColumns);
+      const centerX = firstX + column * (cardWidth + gapX);
+      const centerY = firstY + row * (cardHeight + gapY);
+
+      this.addCompendiumMonsterCard(panel, monster, centerX, centerY, cardWidth, cardHeight, isCompactPanel);
+    });
+
+    if (pageCount > 1) {
+      this.addPaginationControls(panel, panelWidth, panelHeight, pageIndex, pageCount, (nextPageIndex) => {
+        this.compendiumFamilyPageIndex = nextPageIndex;
+        this.openCompendiumPanel(false);
+      });
+    }
   }
 
-  private closeCompendiumPanel(): void {
+  private addCompendiumMonsterCard(
+    panel: Phaser.GameObjects.Container,
+    monster: MonsterDefinition,
+    centerX: number,
+    centerY: number,
+    cardWidth: number,
+    cardHeight: number,
+    isCompactPanel: boolean,
+  ): void {
+    const isDiscovered = this.isMonsterDiscovered(monster);
+    const textColor = isDiscovered ? '#f7ffe8' : '#9ca79f';
+    const iconScale = isCompactPanel ? 0.55 : 0.62;
+    const nameText = isDiscovered
+      ? this.getCompactBossBattleText(this.getLocalizedMonsterName(monster), isCompactPanel ? 12 : 15)
+      : '???';
+    const familyLevelText = `${this.getCompactBossBattleText(this.getLocalizedFamilyName(monster.family), isCompactPanel ? 8 : 10)} ${this.t('common.levelShort', { level: monster.level })}`;
+    const incomeText = isDiscovered
+      ? this.t('common.perSecond', { amount: this.formatSignedCoinAmount(monster.incomePerSecond) })
+      : this.t('common.unknown');
+
+    panel.add(this.add.rectangle(centerX, centerY, cardWidth, cardHeight, isDiscovered ? THEME.panelAlt : 0x29362f, isDiscovered ? 0.94 : 0.78)
+      .setStrokeStyle(2, isDiscovered ? THEME.slot : THEME.lockedBorder, 0.78));
+
+    this.monsterRenderer.addCompendiumIcon(panel, monster, isDiscovered, centerX, centerY - cardHeight * 0.25, iconScale);
+
+    panel.add(this.add.text(centerX, centerY - cardHeight * 0.02, nameText, {
+      color: textColor,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '10px' : '11px',
+      fontStyle: 'bold',
+      align: 'center',
+      fixedWidth: cardWidth - 10,
+    }).setOrigin(0.5));
+
+    panel.add(this.add.text(centerX, centerY + cardHeight * 0.18, familyLevelText, {
+      color: textColor,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '9px' : '10px',
+      align: 'center',
+      fixedWidth: cardWidth - 10,
+    }).setOrigin(0.5));
+
+    panel.add(this.add.text(centerX, centerY + cardHeight * 0.37, this.getCompactBossBattleText(incomeText, isCompactPanel ? 13 : 16), {
+      color: isDiscovered ? '#fff4a8' : '#9ca79f',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '9px' : '10px',
+      fontStyle: 'bold',
+      align: 'center',
+      fixedWidth: cardWidth - 10,
+    }).setOrigin(0.5));
+  }
+
+  private openCompendiumFamilyDetail(family: MonsterFamily): void {
+    this.selectedCompendiumFamily = family;
+    this.compendiumFamilyPageIndex = 0;
+    this.openCompendiumPanel(false);
+  }
+
+  private backToCompendiumHome(): void {
+    this.selectedCompendiumFamily = undefined;
+    this.compendiumFamilyPageIndex = 0;
+    this.openCompendiumPanel(false);
+  }
+
+  private closeCompendiumPanel(resetNavigation = true): void {
     if (this.compendiumPanel) {
       this.compendiumPanel.destroy();
       this.compendiumPanel = undefined;
       this.hideModalOverlay();
     }
+
+    if (resetNavigation) {
+      this.selectedCompendiumFamily = undefined;
+      this.compendiumFamilyHomePageIndex = 0;
+      this.compendiumFamilyPageIndex = 0;
+    }
   }
 
   private refreshCompendiumPanel(): void {
     if (this.compendiumPanel) {
-      this.openCompendiumPanel();
+      this.openCompendiumPanel(false);
     }
   }
 
-  private addCompendiumFamilyLabel(
-    panel: Phaser.GameObjects.Container,
-    family: MonsterFamily,
-    rowY: number,
-    panelWidth: number,
-  ): void {
-    panel.add(this.add.text(-panelWidth / 2 + 28, rowY - 8, this.getLocalizedFamilyName(family), {
-      color: '#fff4a8',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: panelWidth < 390 ? '13px' : '14px',
-      fontStyle: 'bold',
-    }));
-  }
-
-  private addCompendiumRow(
-    panel: Phaser.GameObjects.Container,
-    monster: MonsterDefinition,
-    rowY: number,
-    panelWidth: number,
-    rowHeight: number,
-  ): void {
-    const isDiscovered = this.isMonsterDiscovered(monster);
-    const rowColor = isDiscovered ? THEME.panelAlt : 0x29362f;
-    const textColor = isDiscovered ? '#f7ffe8' : '#9ca79f';
-    const isCompactPanel = panelWidth < 390 || rowHeight < 38;
-    const iconX = -panelWidth / 2 + (isCompactPanel ? 38 : 56);
-    const textX = -panelWidth / 2 + (isCompactPanel ? 66 : 94);
-    const nameY = rowY - (isCompactPanel ? 10 : 16);
-    const detailY = rowY + (isCompactPanel ? 5 : 5);
-    const iconScale = isCompactPanel ? 0.72 : 1;
-
-    panel.add(this.add.rectangle(0, rowY, panelWidth - 48, rowHeight, rowColor, 0.92)
-      .setStrokeStyle(2, isDiscovered ? THEME.slot : THEME.lockedBorder, 0.75));
-
-    this.monsterRenderer.addCompendiumIcon(panel, monster, isDiscovered, iconX, rowY, iconScale);
-
-    panel.add(this.add.text(textX, nameY, isDiscovered ? this.getLocalizedMonsterName(monster) : '???', {
-      color: textColor,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '13px' : '16px',
-      fontStyle: 'bold',
-      wordWrap: {
-        width: Math.max(108, panelWidth - (isCompactPanel ? 164 : 220)),
-      },
-    }));
-
-    panel.add(this.add.text(textX, detailY, `${this.getLocalizedFamilyName(monster.family)} ${this.t('common.level', { level: monster.level })}`, {
-      color: textColor,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '10px' : '12px',
-      wordWrap: {
-        width: Math.max(118, panelWidth - (isCompactPanel ? 178 : 238)),
-      },
-    }));
-
-    panel.add(this.add.text(panelWidth / 2 - 42, rowY - (isCompactPanel ? 7 : 8), isDiscovered ? this.t('common.perSecond', {
-      amount: this.formatSignedCoinAmount(monster.incomePerSecond),
-    }) : this.t('common.unknown'), {
-      color: isDiscovered ? '#fff4a8' : '#9ca79f',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '12px' : '14px',
-      fontStyle: 'bold',
-    }).setOrigin(1, 0));
+  private getCompendiumFamilyOrder(): MonsterFamily[] {
+    return MONSTER_FAMILY_DEFINITIONS.map((familyDefinition) => familyDefinition.family);
   }
 
   private clearSelectedSlot(): void {

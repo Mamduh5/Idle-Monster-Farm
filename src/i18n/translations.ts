@@ -245,6 +245,8 @@ const EN: TranslationTable = {
   'ui.prestige.confirm': 'Click again to confirm Ritual Reset',
 
   'ui.compendium.title': 'Monster Compendium',
+  'ui.compendium.back': 'Families',
+  'ui.compendium.chooseFamily': 'Choose a family',
   'ui.compendium.familyCollection': '{family} Collection',
   'ui.compendium.mixedCollection': 'Monster Family Collection',
   'ui.compendium.summary': 'Discovered {discovered}/{total}  |  {familyProgress}',
@@ -698,6 +700,8 @@ const TH: TranslationTable = {
   'ui.prestige.confirm': 'กดอีกครั้งเพื่อยืนยันพิธีรีเซ็ต',
 
   'ui.compendium.title': 'สารบัญมอนสเตอร์',
+  'ui.compendium.back': 'ครอบครัว',
+  'ui.compendium.chooseFamily': 'เลือกครอบครัว',
   'ui.compendium.familyCollection': 'ชุด{family}',
   'ui.compendium.mixedCollection': 'ชุดครอบครัวมอนสเตอร์',
   'ui.compendium.summary': 'ค้นพบ {discovered}/{total}  |  {familyProgress}',
