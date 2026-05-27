@@ -206,6 +206,7 @@ const SHOW_MONSTER_HITBOX_DEBUG = false;
 const MODAL_OVERLAY_DEPTH = 18;
 const BOSS_SELECT_PAGE_SIZE = 4;
 const BOSS_STAGE_PAGE_SIZE = 5;
+const COMPENDIUM_MONSTERS_PER_PAGE = 12;
 const UI_FONT_FAMILY = 'Arial, Tahoma, "Noto Sans Thai", sans-serif';
 const MONO_FONT_FAMILY = 'Consolas, monospace';
 const THEME = {
@@ -6830,10 +6831,12 @@ export class FarmScene extends Phaser.Scene {
     this.monsterEssence = sanitizePrestigeIntegerState(this.monsterEssence + ritualResult.rewardEssence);
     this.totalRitualsPerformed = ritualResult.nextTotalRitualsPerformed;
     this.hasPrestigedOnce = true;
+    this.resetHatchCostForRitual();
     this.syncZoneUnlockFromPrestigeProgress();
     this.skipSavingUntilProgress = false;
     this.prestigeConfirmationArmed = false;
     this.updateHud();
+    this.updateHatchCooldownUi();
     this.completeMission('prestige-once');
     this.refreshOrdersPanel();
     this.refreshOrderWidget();
@@ -6861,7 +6864,7 @@ export class FarmScene extends Phaser.Scene {
     this.skipSavingUntilProgress = false;
     this.prestigeConfirmationArmed = false;
     this.upgradeLevels = this.createInitialUpgradeLevels();
-    this.currentEggCost = STARTING_EGG_COST;
+    this.resetHatchCostForRitual();
     this.hatchCooldownMs = HATCH_COOLDOWN_MS;
     this.expansionUnlocked = false;
     this.farmSlots = this.createInitialFarmSlots();
@@ -6883,6 +6886,10 @@ export class FarmScene extends Phaser.Scene {
     this.completeMission('prestige-once');
     this.refreshOrdersPanel();
     this.saveProgress();
+  }
+
+  private resetHatchCostForRitual(): void {
+    this.currentEggCost = STARTING_EGG_COST;
   }
 
   private scheduleInitialOnboardingHints(): void {
@@ -7442,15 +7449,15 @@ export class FarmScene extends Phaser.Scene {
     const familyOrder: MonsterFamily[] = ['Slime', 'Mushroom', 'Spore', 'Cactus'];
     const listItems = getCompendiumListItems(MONSTER_DEFINITIONS, familyOrder);
     const { width: panelWidth, height: panelHeight } = this.getModalSize('compendium', 640, 640);
-    const rowGap = panelWidth < 390 ? 34 : 38;
-    const rowHeight = Math.min(34, rowGap - 3);
-    const bodyTopY = -panelHeight / 2 + (panelWidth < 390 ? 122 : 118);
-    const bodyBottomY = panelHeight / 2 - 72;
+    const isCompactPanel = panelWidth < 390;
+    const rowGap = isCompactPanel ? 34 : 36;
+    const rowHeight = isCompactPanel ? 31 : 33;
+    const bodyTopY = -panelHeight / 2 + (isCompactPanel ? 122 : 118);
+    const bodyBottomY = panelHeight / 2 - 58;
     const bodyHeight = Math.max(rowGap, bodyBottomY - bodyTopY);
-    const rowsPerPage = this.getRowsPerPage(rowGap, bodyHeight, listItems.length, 8, 12);
-    const pageCount = getCompendiumPageCount(listItems, rowsPerPage);
+    const pageCount = getCompendiumPageCount(listItems, COMPENDIUM_MONSTERS_PER_PAGE);
     const pageIndex = clampCompendiumPageIndex(this.compendiumPageIndex, pageCount);
-    const pageItems = getCompendiumPageItems(listItems, pageIndex, rowsPerPage);
+    const pageItems = getCompendiumPageItems(listItems, pageIndex, COMPENDIUM_MONSTERS_PER_PAGE);
     const visibleRowsHeight = Math.max(rowHeight, (pageItems.length - 1) * rowGap + rowHeight);
     const firstRowY = bodyTopY + Math.max(0, (bodyHeight - visibleRowsHeight) / 2);
 
@@ -7474,11 +7481,6 @@ export class FarmScene extends Phaser.Scene {
 
     pageItems.forEach((item, index) => {
       const rowY = firstRowY + index * rowGap;
-
-      if (item.type === 'family') {
-        this.addCompendiumFamilyLabel(panel, item.family, rowY, panelWidth);
-        return;
-      }
 
       this.addCompendiumRow(panel, item.monster, rowY, panelWidth, rowHeight);
     });
@@ -7602,10 +7604,13 @@ export class FarmScene extends Phaser.Scene {
       },
     }));
 
-    panel.add(this.add.text(textX, detailY, this.t('common.level', { level: monster.level }), {
+    panel.add(this.add.text(textX, detailY, `${this.getLocalizedFamilyName(monster.family)} ${this.t('common.level', { level: monster.level })}`, {
       color: textColor,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '11px' : '13px',
+      fontSize: isCompactPanel ? '10px' : '12px',
+      wordWrap: {
+        width: Math.max(118, panelWidth - (isCompactPanel ? 178 : 238)),
+      },
     }));
 
     panel.add(this.add.text(panelWidth / 2 - 42, rowY - (isCompactPanel ? 7 : 8), isDiscovered ? this.t('common.perSecond', {

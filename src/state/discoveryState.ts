@@ -7,15 +7,10 @@ export type ParsedDiscoveryKey = {
   level: number;
 };
 
-export type CompendiumListItem =
-  | {
-    type: 'family';
-    family: MonsterFamily;
-  }
-  | {
-    type: 'monster';
-    monster: MonsterDefinition;
-  };
+export type CompendiumListItem = {
+  type: 'monster';
+  monster: MonsterDefinition;
+};
 
 export type FamilyDiscoveryProgress = {
   family: MonsterFamily;
@@ -114,10 +109,7 @@ export function getCompendiumListItems(
       .filter((definition) => definition.family === family)
       .sort((first, second) => first.level - second.level);
 
-    return [
-      { type: 'family', family },
-      ...definitions.map((monster) => ({ type: 'monster' as const, monster })),
-    ];
+    return definitions.map((monster) => ({ type: 'monster' as const, monster }));
   });
 }
 
@@ -143,7 +135,5 @@ export function clampCompendiumPageIndex(pageIndex: number, pageCount: number): 
 export function getCompendiumPageFamilies(
   pageItems: readonly CompendiumListItem[],
 ): MonsterFamily[] {
-  return Array.from(new Set(pageItems.map((item) => (
-    item.type === 'family' ? item.family : item.monster.family
-  ))));
+  return Array.from(new Set(pageItems.map((item) => item.monster.family)));
 }
