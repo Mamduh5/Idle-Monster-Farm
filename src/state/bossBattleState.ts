@@ -1,4 +1,4 @@
-import type { BossBattleStage } from '../data/bossBattles';
+import type { BossBattleDefinition, BossBattleStage } from '../data/bossBattles';
 import type { FarmSlotState, MonsterFamily, MonsterInstance } from '../types/game-state';
 
 export type BattleSkillId =
@@ -69,6 +69,7 @@ export type BattleTurnResult = {
   damage: number;
   healing: number;
   bossDamage: number;
+  bossTargetId?: string;
   defeatedMonsterId?: string;
 };
 
@@ -337,6 +338,7 @@ export function applyBossTurn(session: BattleSessionState): BattleTurnResult {
   };
   let damage = 0;
   let bossDamage = 0;
+  let bossTargetId: string | undefined;
   let defeatedMonsterId: string | undefined;
 
   if (nextSession.poisonTurns > 0 && nextSession.poisonDamagePerTurn > 0) {
@@ -367,6 +369,7 @@ export function applyBossTurn(session: BattleSessionState): BattleTurnResult {
   const reducedAttack = Math.floor(nextSession.bossAttack * (1 - nextSession.bossAttackReductionPercent));
   nextSession.bossAttackReductionPercent = 0;
   bossDamage = Math.max(0, reducedAttack);
+  bossTargetId = target.id;
 
   if (target.shieldPercent > 0) {
     bossDamage = Math.floor(bossDamage * (1 - target.shieldPercent));
@@ -390,6 +393,7 @@ export function applyBossTurn(session: BattleSessionState): BattleTurnResult {
     return createTurnResult(nextSession, {
       bossDamage,
       damage,
+      bossTargetId,
       defeatedMonsterId,
     });
   }
@@ -399,6 +403,7 @@ export function applyBossTurn(session: BattleSessionState): BattleTurnResult {
     return createTurnResult(nextSession, {
       bossDamage,
       damage,
+      bossTargetId,
       defeatedMonsterId,
     });
   }
@@ -409,6 +414,7 @@ export function applyBossTurn(session: BattleSessionState): BattleTurnResult {
   return createTurnResult(nextSession, {
     bossDamage,
     damage,
+    bossTargetId,
     defeatedMonsterId,
   });
 }
@@ -425,6 +431,19 @@ export function getDefaultBossStageIndex(stages: readonly BossBattleStage[], cla
   }
 
   return Math.max(0, stages.length - 1);
+}
+
+export function getDefaultBossStageIndexForBoss(
+  boss: BossBattleDefinition,
+  claimedStageIds: ReadonlySet<string>,
+): number {
+  const firstUnclearedIndex = boss.stages.findIndex((stage) => !claimedStageIds.has(stage.id));
+
+  if (firstUnclearedIndex >= 0) {
+    return firstUnclearedIndex;
+  }
+
+  return Math.max(0, boss.stages.length - 1);
 }
 
 export function clampBossStageIndex(index: number, stages: readonly BossBattleStage[]): number {
@@ -503,6 +522,7 @@ function createTurnResult(
     damage: result.damage ?? 0,
     healing: result.healing ?? 0,
     bossDamage: result.bossDamage ?? 0,
+    bossTargetId: result.bossTargetId,
     defeatedMonsterId: result.defeatedMonsterId,
   };
 }
