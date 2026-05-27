@@ -34,6 +34,7 @@ export type LocalSaveData = {
   upgrades: Record<UpgradeId, number>;
   monsterEssence: number;
   essencePowerLevel: number;
+  rareHatchLevel: number;
   totalRitualsPerformed: number;
   currentEggCost: number;
   onboardingHintsSeen: OnboardingHintId[];
@@ -119,6 +120,7 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
     upgrades: normalizeUpgradeLevels(rawData.upgrades),
     monsterEssence: normalizePrestigeInteger(rawData.monsterEssence),
     essencePowerLevel: normalizePrestigeInteger(rawData.essencePowerLevel),
+    rareHatchLevel: normalizePrestigeInteger(rawData.rareHatchLevel),
     totalRitualsPerformed: normalizeTotalRitualsPerformed(rawData.totalRitualsPerformed, hasPrestigedOnce),
     currentEggCost: normalizeEggCost(rawData.currentEggCost),
     onboardingHintsSeen: normalizeOnboardingHints(rawData.onboardingHintsSeen),

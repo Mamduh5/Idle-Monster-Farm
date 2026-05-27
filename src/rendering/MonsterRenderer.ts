@@ -89,6 +89,16 @@ export class MonsterRenderer {
       return;
     }
 
+    if (monster.family === 'Cell') {
+      this.addCellVisual(container, monster.level, visualStyle, x, y, scale);
+      return;
+    }
+
+    if (monster.family === 'Plant') {
+      this.addPlantVisual(container, monster.level, visualStyle, x, y, scale);
+      return;
+    }
+
     this.addSlimeVisual(container, monster.level, visualStyle, x, y, scale);
   }
   private addSlimeVisual(
@@ -237,6 +247,100 @@ export class MonsterRenderer {
     this.addVisualIntensitySparkles(container, visualStyle, x, y - 5 * scale, scale);
   }
 
+  private addCellVisual(
+    container: Phaser.GameObjects.Container,
+    level: number,
+    visualStyle: MonsterVisualStyle,
+    x = 0,
+    y = 0,
+    scale = 1,
+  ): void {
+    this.addMonsterAura(container, visualStyle, x, y - 2 * scale, scale);
+
+    const strokeWidth = Math.max(1, Math.round(visualStyle.visualIntensity.outlineWidth * scale));
+
+    container.add(this.scene.add.ellipse(x, y + 17 * scale, visualStyle.bodyWidth * 0.75 * scale, 9 * scale, 0x2f7d40, 0.22));
+    container.add(this.scene.add.ellipse(x, y, visualStyle.bodyWidth * scale, visualStyle.bodyHeight * scale, visualStyle.bodyColor, 0.92)
+      .setStrokeStyle(strokeWidth, visualStyle.strokeColor, 0.9));
+    container.add(this.scene.add.ellipse(x + 2 * scale, y - 2 * scale, visualStyle.bodyWidth * 0.45 * scale, visualStyle.bodyHeight * 0.38 * scale, visualStyle.accentColor, 0.62)
+      .setStrokeStyle(Math.max(1, Math.round(1.1 * scale)), visualStyle.strokeColor, 0.36));
+    container.add(this.scene.add.circle(x - 10 * scale, y - 3 * scale, 3.2 * scale, 0x10291a));
+    container.add(this.scene.add.circle(x + 11 * scale, y - 3 * scale, 3.2 * scale, 0x10291a));
+    container.add(this.scene.add.circle(x - 9.2 * scale, y - 4 * scale, 1.1 * scale, 0xffffff, 0.85));
+    container.add(this.scene.add.circle(x + 11.8 * scale, y - 4 * scale, 1.1 * scale, 0xffffff, 0.85));
+
+    [
+      [-18, -13, 3.2],
+      [18, -12, 2.8],
+      [-16, 12, 2.6],
+      [17, 10, 3],
+    ].forEach(([bubbleX, bubbleY, radius], index) => {
+      container.add(this.scene.add.circle(
+        x + bubbleX * scale,
+        y + bubbleY * scale,
+        radius * scale,
+        index % 2 === 0 ? visualStyle.secondaryAccentColor : visualStyle.accentColor,
+        0.72,
+      ).setStrokeStyle(Math.max(1, Math.round(0.8 * scale)), visualStyle.strokeColor, 0.32));
+    });
+
+    if (level >= 6) {
+      container.add(this.scene.add.ellipse(x, y, visualStyle.bodyWidth * 0.82 * scale, visualStyle.bodyHeight * 0.82 * scale, 0xffffff, 0)
+        .setStrokeStyle(Math.max(1, Math.round(1.2 * scale)), visualStyle.secondaryAccentColor, 0.38));
+    }
+
+    if (level >= 10) {
+      container.add(this.scene.add.star(x, y - 24 * scale, 6, 2.4 * scale, 6 * scale, visualStyle.secondaryAccentColor, 0.92)
+        .setStrokeStyle(1, visualStyle.strokeColor, 0.45));
+    }
+
+    this.addVisualIntensitySparkles(container, visualStyle, x, y - 2 * scale, scale);
+  }
+
+  private addPlantVisual(
+    container: Phaser.GameObjects.Container,
+    level: number,
+    visualStyle: MonsterVisualStyle,
+    x = 0,
+    y = 0,
+    scale = 1,
+  ): void {
+    this.addMonsterAura(container, visualStyle, x, y - 7 * scale, scale);
+
+    const strokeWidth = Math.max(1, Math.round(visualStyle.visualIntensity.outlineWidth * scale));
+
+    container.add(this.scene.add.ellipse(x, y + 20 * scale, visualStyle.bodyWidth * 0.85 * scale, 10 * scale, 0x2f7d40, 0.24));
+    container.add(this.scene.add.rectangle(x, y + 6 * scale, 13 * scale, 31 * scale, visualStyle.baseColor, 0.95)
+      .setStrokeStyle(strokeWidth, visualStyle.strokeColor, 0.88));
+
+    const leftLeaf = this.scene.add.ellipse(x - 14 * scale, y - 4 * scale, 20 * scale, 34 * scale, visualStyle.bodyColor, 0.96)
+      .setStrokeStyle(strokeWidth, visualStyle.strokeColor, 0.9);
+    leftLeaf.setAngle(-30);
+    container.add(leftLeaf);
+
+    const rightLeaf = this.scene.add.ellipse(x + 15 * scale, y - 7 * scale, 20 * scale, 34 * scale, visualStyle.bodyColor, 0.96)
+      .setStrokeStyle(strokeWidth, visualStyle.strokeColor, 0.9);
+    rightLeaf.setAngle(32);
+    container.add(rightLeaf);
+
+    container.add(this.scene.add.circle(x - 5 * scale, y + 9 * scale, 3 * scale, 0x10291a));
+    container.add(this.scene.add.circle(x + 6 * scale, y + 9 * scale, 3 * scale, 0x10291a));
+    container.add(this.scene.add.circle(x - 4.2 * scale, y + 8.2 * scale, 1 * scale, 0xffffff, 0.85));
+    container.add(this.scene.add.circle(x + 6.8 * scale, y + 8.2 * scale, 1 * scale, 0xffffff, 0.85));
+
+    if (level >= 3) {
+      container.add(this.scene.add.star(x, y - 30 * scale, 6, 4 * scale, 9 * scale, visualStyle.secondaryAccentColor, 0.9)
+        .setStrokeStyle(1, visualStyle.strokeColor, 0.48));
+    }
+
+    if (level >= 8) {
+      container.add(this.scene.add.ellipse(x, y - 4 * scale, 56 * scale, 28 * scale, 0xffffff, 0)
+        .setStrokeStyle(Math.max(1, Math.round(1.2 * scale)), visualStyle.accentColor, 0.44));
+    }
+
+    this.addVisualIntensitySparkles(container, visualStyle, x, y - 8 * scale, scale);
+  }
+
   private addMonsterAura(
     container: Phaser.GameObjects.Container,
     visualStyle: MonsterVisualStyle,
@@ -313,6 +417,14 @@ export class MonsterRenderer {
 
     if (family === 'Cactus') {
       return this.getCactusVisualIdentity(monsterLevel, visualIntensity);
+    }
+
+    if (family === 'Cell') {
+      return this.getCellVisualIdentity(monsterLevel, visualIntensity);
+    }
+
+    if (family === 'Plant') {
+      return this.getPlantVisualIdentity(monsterLevel, visualIntensity);
     }
 
     return this.getSlimeVisualIdentity(monsterLevel, visualIntensity);
@@ -1219,6 +1331,52 @@ export class MonsterRenderer {
       level,
       visualIntensity,
       ...(paletteByLevel[level] ?? paletteByLevel[15]),
+    };
+  }
+
+  private getCellVisualIdentity(level: number, visualIntensity: MonsterVisualIntensity): MonsterVisualIdentity {
+    const tier = Math.min(14, Math.max(0, level - 1));
+    const bodyColors = [0x82e7d7, 0x7fd8ff, 0x9df27b, 0xc5a6ff, 0xffb5d5, 0x8ff7ff];
+    const accentColors = [0xfff0a8, 0xd8fbff, 0xffc3e0, 0xbad7ff, 0xf7e27c, 0xffffff];
+
+    return {
+      family: 'Cell',
+      level,
+      bodyColor: bodyColors[tier % bodyColors.length],
+      baseColor: bodyColors[(tier + 1) % bodyColors.length],
+      strokeColor: level >= 10 ? 0x31507a : 0x2b766f,
+      accentColor: accentColors[tier % accentColors.length],
+      secondaryAccentColor: accentColors[(tier + 2) % accentColors.length],
+      bodyWidth: 44 + Math.min(18, level * 1.8),
+      bodyHeight: 38 + Math.min(16, level * 1.5),
+      silhouetteVariant: `cell-${level}`,
+      patternVariant: level >= 10 ? 'star nucleus' : level >= 6 ? 'ring nucleus' : 'nucleus',
+      accessories: level >= 10 ? ['star bubble'] : level >= 6 ? ['cell ring'] : ['cell bubbles'],
+      auraType: level >= 10 ? 'plasma' : 'cell',
+      visualIntensity,
+    };
+  }
+
+  private getPlantVisualIdentity(level: number, visualIntensity: MonsterVisualIntensity): MonsterVisualIdentity {
+    const tier = Math.min(14, Math.max(0, level - 1));
+    const bodyColors = [0x7bd85b, 0x8fe070, 0x6bd18f, 0xa4dc72, 0x72c7a5, 0x9fe090];
+    const accentColors = [0xfff0a8, 0xff9fb1, 0xd8fbff, 0xf7e27c, 0xffc985, 0xd8bdff];
+
+    return {
+      family: 'Plant',
+      level,
+      bodyColor: bodyColors[tier % bodyColors.length],
+      baseColor: level >= 8 ? 0x4f944b : 0x6fbd64,
+      strokeColor: level >= 10 ? 0x315f2c : 0x2f6f34,
+      accentColor: bodyColors[(tier + 2) % bodyColors.length],
+      secondaryAccentColor: accentColors[tier % accentColors.length],
+      bodyWidth: 42 + Math.min(20, level * 1.8),
+      bodyHeight: 44 + Math.min(20, level * 1.6),
+      silhouetteVariant: `plant-${level}`,
+      patternVariant: level >= 10 ? 'solar bloom' : level >= 6 ? 'vine bloom' : 'sprout',
+      accessories: level >= 10 ? ['bloom crown'] : level >= 6 ? ['vine ring'] : ['leaves'],
+      auraType: level >= 10 ? 'bloom' : 'leaf',
+      visualIntensity,
     };
   }
 

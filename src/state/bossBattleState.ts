@@ -13,7 +13,13 @@ export type BattleSkillId =
   | 'dream-burst'
   | 'thorn-jab'
   | 'needle-guard'
-  | 'thorn-storm';
+  | 'thorn-storm'
+  | 'cell-tap'
+  | 'heal-pulse'
+  | 'split-burst'
+  | 'leaf-hit'
+  | 'root-guard'
+  | 'bloom-burst';
 
 export type BattleSkillDefinition = {
   id: BattleSkillId;
@@ -166,6 +172,52 @@ const SKILL_DEFINITIONS: BattleSkillDefinition[] = [
     labelKey: 'skill.thorn-storm.name',
     cooldownTurns: 2,
     damageMultiplier: 1.6,
+  },
+  {
+    id: 'cell-tap',
+    family: 'Cell',
+    levelRequired: 1,
+    labelKey: 'skill.cell-tap.name',
+    damageMultiplier: 1,
+  },
+  {
+    id: 'heal-pulse',
+    family: 'Cell',
+    levelRequired: 5,
+    labelKey: 'skill.heal-pulse.name',
+    cooldownTurns: 2,
+    healLowestPercentOfCasterMaxHp: 0.2,
+  },
+  {
+    id: 'split-burst',
+    family: 'Cell',
+    levelRequired: 10,
+    labelKey: 'skill.split-burst.name',
+    cooldownTurns: 2,
+    damageMultiplier: 1.7,
+  },
+  {
+    id: 'leaf-hit',
+    family: 'Plant',
+    levelRequired: 1,
+    labelKey: 'skill.leaf-hit.name',
+    damageMultiplier: 1,
+  },
+  {
+    id: 'root-guard',
+    family: 'Plant',
+    levelRequired: 5,
+    labelKey: 'skill.root-guard.name',
+    cooldownTurns: 2,
+    shieldPercent: 0.4,
+  },
+  {
+    id: 'bloom-burst',
+    family: 'Plant',
+    levelRequired: 10,
+    labelKey: 'skill.bloom-burst.name',
+    cooldownTurns: 2,
+    damageMultiplier: 1.75,
   },
 ];
 

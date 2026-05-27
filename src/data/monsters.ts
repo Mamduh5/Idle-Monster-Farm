@@ -92,6 +92,46 @@ export const MONSTER_FAMILY_DEFINITIONS: MonsterFamilyDefinition[] = [
       { level: 15, name: 'Eternal Cactus', incomePerSecond: 16000000 },
     ],
   },
+  {
+    family: 'Cell',
+    levels: [
+      { level: 1, name: 'Tiny Cell', incomePerSecond: 6 },
+      { level: 2, name: 'Bouncy Cell', incomePerSecond: 18 },
+      { level: 3, name: 'Glow Cell', incomePerSecond: 52 },
+      { level: 4, name: 'Split Cell', incomePerSecond: 145 },
+      { level: 5, name: 'Core Cell', incomePerSecond: 420 },
+      { level: 6, name: 'Crystal Cell', incomePerSecond: 1180 },
+      { level: 7, name: 'Pulse Cell', incomePerSecond: 3350 },
+      { level: 8, name: 'Nebula Cell', incomePerSecond: 9400 },
+      { level: 9, name: 'Plasma Cell', incomePerSecond: 26500 },
+      { level: 10, name: 'Solar Cell', incomePerSecond: 74000 },
+      { level: 11, name: 'Eclipse Cell', incomePerSecond: 190000 },
+      { level: 12, name: 'Cosmic Cell', incomePerSecond: 520000 },
+      { level: 13, name: 'Star Cell', incomePerSecond: 1420000 },
+      { level: 14, name: 'Nova Cell', incomePerSecond: 3900000 },
+      { level: 15, name: 'Eternal Cell', incomePerSecond: 10500000 },
+    ],
+  },
+  {
+    family: 'Plant',
+    levels: [
+      { level: 1, name: 'Tiny Sprout', incomePerSecond: 9 },
+      { level: 2, name: 'Leaf Sprout', incomePerSecond: 28 },
+      { level: 3, name: 'Bloom Sprout', incomePerSecond: 82 },
+      { level: 4, name: 'Vine Plant', incomePerSecond: 235 },
+      { level: 5, name: 'Guardian Plant', incomePerSecond: 680 },
+      { level: 6, name: 'Crystal Plant', incomePerSecond: 1950 },
+      { level: 7, name: 'Grove Plant', incomePerSecond: 5600 },
+      { level: 8, name: 'Dream Plant', incomePerSecond: 15800 },
+      { level: 9, name: 'Thornbloom Plant', incomePerSecond: 45000 },
+      { level: 10, name: 'Solar Plant', incomePerSecond: 128000 },
+      { level: 11, name: 'Oasis Plant', incomePerSecond: 360000 },
+      { level: 12, name: 'Ancient Plant', incomePerSecond: 1020000 },
+      { level: 13, name: 'Starbloom Plant', incomePerSecond: 2850000 },
+      { level: 14, name: 'Cosmic Plant', incomePerSecond: 8000000 },
+      { level: 15, name: 'Eternal Plant', incomePerSecond: 22000000 },
+    ],
+  },
 ];
 
 export const MONSTER_DEFINITIONS: MonsterDefinition[] = MONSTER_FAMILY_DEFINITIONS.flatMap((familyDefinition) => (
@@ -194,3 +234,9 @@ export const ANCIENT_CACTUS = requireMonsterDefinition('Cactus', 12);
 export const STARBLOOM_CACTUS = requireMonsterDefinition('Cactus', 13);
 export const COSMIC_CACTUS = requireMonsterDefinition('Cactus', 14);
 export const ETERNAL_CACTUS = requireMonsterDefinition('Cactus', 15);
+
+export const TINY_CELL = requireMonsterDefinition('Cell', 1);
+export const ETERNAL_CELL = requireMonsterDefinition('Cell', 15);
+
+export const TINY_SPROUT = requireMonsterDefinition('Plant', 1);
+export const ETERNAL_PLANT = requireMonsterDefinition('Plant', 15);

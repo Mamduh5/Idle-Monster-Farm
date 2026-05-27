@@ -26,6 +26,7 @@ export type SaveSourceState = {
   upgrades: Record<UpgradeId, number>;
   monsterEssence: number;
   essencePowerLevel: number;
+  rareHatchLevel: number;
   totalRitualsPerformed: number;
   currentEggCost: number;
   onboardingHintsSeen: ReadonlySet<OnboardingHintId>;
@@ -60,6 +61,7 @@ export function createLocalSaveData(sourceState: SaveSourceState): LocalSaveData
     upgrades: sourceState.upgrades,
     monsterEssence: sourceState.monsterEssence,
     essencePowerLevel: sourceState.essencePowerLevel,
+    rareHatchLevel: sourceState.rareHatchLevel,
     totalRitualsPerformed: sourceState.totalRitualsPerformed,
     currentEggCost: sourceState.currentEggCost,
     onboardingHintsSeen: Array.from(sourceState.onboardingHintsSeen),

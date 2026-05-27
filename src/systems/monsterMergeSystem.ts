@@ -1,8 +1,19 @@
 import { getMonsterDefinition, getNextMonsterDefinition } from '../data/monsters';
-import type { MonsterDefinition } from '../types/game-state';
+import type { MonsterDefinition, MonsterFamily } from '../types/game-state';
 
 // Pure monster merge rules. Keep this module free of Phaser, storage, and scene state.
 type MergeableMonster = Pick<MonsterDefinition, 'family' | 'level'>;
+type FusionRecipe = {
+  families: readonly [MonsterFamily, MonsterFamily];
+  result: MonsterFamily;
+};
+
+const FUSION_RECIPES: FusionRecipe[] = [
+  { families: ['Slime', 'Mushroom'], result: 'Spore' },
+  { families: ['Mushroom', 'Spore'], result: 'Cactus' },
+  { families: ['Slime', 'Spore'], result: 'Cell' },
+  { families: ['Cell', 'Cactus'], result: 'Plant' },
+];
 
 export function isSameFamilySameLevelMerge(
   sourceMonster: MergeableMonster | null | undefined,
@@ -32,9 +43,7 @@ export function getMonsterMergeResult(
   targetMonster: MergeableMonster | null | undefined,
 ): MonsterDefinition | undefined {
   return getSameFamilyNextMonsterDefinition(sourceMonster, targetMonster)
-    ?? getSlimeMushroomSporeFusionResult(sourceMonster, targetMonster)
-    ?? getMushroomSporeCactusFusionResult(sourceMonster, targetMonster)
-    ?? getSporeCatalystFusionResult(sourceMonster, targetMonster);
+    ?? getFusionRecipeResult(sourceMonster, targetMonster);
 }
 
 export function canMergeMonsters(
@@ -44,7 +53,7 @@ export function canMergeMonsters(
   return Boolean(getMonsterMergeResult(sourceMonster, targetMonster));
 }
 
-function getSlimeMushroomSporeFusionResult(
+function getFusionRecipeResult(
   sourceMonster: MergeableMonster | null | undefined,
   targetMonster: MergeableMonster | null | undefined,
 ): MonsterDefinition | undefined {
@@ -52,50 +61,12 @@ function getSlimeMushroomSporeFusionResult(
     return undefined;
   }
 
-  const isSlimeMushroomPair = (sourceMonster.family === 'Slime' && targetMonster.family === 'Mushroom')
-    || (sourceMonster.family === 'Mushroom' && targetMonster.family === 'Slime');
+  const recipe = FUSION_RECIPES.find((fusionRecipe) => {
+    const [leftFamily, rightFamily] = fusionRecipe.families;
 
-  if (!isSlimeMushroomPair) {
-    return undefined;
-  }
+    return (sourceMonster.family === leftFamily && targetMonster.family === rightFamily)
+      || (sourceMonster.family === rightFamily && targetMonster.family === leftFamily);
+  });
 
-  return getMonsterDefinition('Spore', sourceMonster.level);
-}
-
-function getMushroomSporeCactusFusionResult(
-  sourceMonster: MergeableMonster | null | undefined,
-  targetMonster: MergeableMonster | null | undefined,
-): MonsterDefinition | undefined {
-  if (!sourceMonster || !targetMonster || sourceMonster.level !== targetMonster.level) {
-    return undefined;
-  }
-
-  const isMushroomSporePair = (sourceMonster.family === 'Mushroom' && targetMonster.family === 'Spore')
-    || (sourceMonster.family === 'Spore' && targetMonster.family === 'Mushroom');
-
-  if (!isMushroomSporePair) {
-    return undefined;
-  }
-
-  return getMonsterDefinition('Cactus', sourceMonster.level);
-}
-
-function getSporeCatalystFusionResult(
-  sourceMonster: MergeableMonster | null | undefined,
-  targetMonster: MergeableMonster | null | undefined,
-): MonsterDefinition | undefined {
-  if (!sourceMonster || !targetMonster || sourceMonster.level !== targetMonster.level) {
-    return undefined;
-  }
-
-  const sourceFamily = sourceMonster.family;
-  const targetFamily = targetMonster.family;
-  const isSporeCatalystPair = (sourceFamily === 'Spore' && (targetFamily === 'Slime' || targetFamily === 'Mushroom'))
-    || (targetFamily === 'Spore' && (sourceFamily === 'Slime' || sourceFamily === 'Mushroom'));
-
-  if (!isSporeCatalystPair) {
-    return undefined;
-  }
-
-  return getNextMonsterDefinition('Spore', sourceMonster.level);
+  return recipe ? getMonsterDefinition(recipe.result, sourceMonster.level) : undefined;
 }

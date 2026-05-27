@@ -55,7 +55,13 @@ import {
   type CompendiumFamilyItem,
   type DiscoveryKey,
 } from '../state/discoveryState';
-import { applyHatchBlessingToMonsterDefinition, canAffordHatch as canAffordHatchInState, getAppliedAwayHatchCooldown, getCappedHatchCooldown, getHatchAttemptState, getHatchBlessingTierBonus, getHatchCooldownDurationForState, getHatchCost, getHatchedMonsterDefinition, getMushroomHatchChanceForState, getNextHatchCostAfterSuccess, getUpdatedHatchCooldown, isHatchReady as isHatchReadyInState } from '../state/hatchState';
+import { applyHatchBlessingToMonsterDefinition, canAffordHatch as canAffordHatchInState, getAppliedAwayHatchCooldown, getCappedHatchCooldown, getHatchAttemptState, getHatchBlessingTierBonus, getHatchCooldownDurationForState, getHatchCost, getNextHatchCostAfterSuccess, getUpdatedHatchCooldown, isHatchReady as isHatchReadyInState } from '../state/hatchState';
+import {
+  getHatchPoolEntries,
+  getRareHatchWeightMultiplier,
+  getWeightedHatchFamily,
+  type HatchPoolEntryState,
+} from '../state/hatchPoolState';
 import { getActiveTapFarmCombo as getActiveTapFarmComboFromState, getBaseTapFarmReward, getClampedTapFarmEnergy, getTapFarmComboMultiplier as getTapFarmComboMultiplierFromState, getTapFarmComboTimeoutResult, getTapFarmEnergyRatio as getTapFarmEnergyRatioFromState, getTapFarmRewardAmount, getTapFarmTapResult, resetTapFarmEnergy, TAP_FARM_BURST_THRESHOLD, TAP_FARM_COMBO_MAX_MULTIPLIER, TAP_FARM_COMBO_TIMEOUT_MS, TAP_FARM_COOLDOWN_MS, TAP_FARM_DEFAULT_CONFIG, TAP_FARM_MIN_REWARD, TAP_FARM_REWARD_SECONDS } from '../state/tapFarmState';
 import {
   canIncrementMission,
@@ -103,14 +109,13 @@ import {
   type UpgradeBuyMode,
   type UpgradePurchasePreview,
 } from '../state/upgradeState';
-import { canAffordEssencePower, canPerformRitual, canPerformSafeRitual, canSwitchToZone, createInitialUnlockedZones, getEssencePowerPurchaseResult, getFarmRitualPower, getRitualCompletionResult, getRitualIncomeMultiplier, getRitualRequirement, getRitualSacrificeCandidate, getSanitizedUnlockedZones, getZoneSelectionStatus, sanitizePrestigeInteger as sanitizePrestigeIntegerState, syncZoneUnlockFromPrestigeProgress as syncZoneUnlockFromPrestigeProgressState, type RitualCompletionResult } from '../state/prestigeZoneState';
+import { canAffordEssencePower, canAffordRareHatch, canPerformRitual, canPerformSafeRitual, canSwitchToZone, createInitialUnlockedZones, getEssencePowerPurchaseResult, getFarmRitualPower, getRitualCompletionResult, getRitualIncomeMultiplier, getRitualRequirement, getRitualSacrificeCandidate, getSanitizedUnlockedZones, getZoneSelectionStatus, sanitizePrestigeInteger as sanitizePrestigeIntegerState, syncZoneUnlockFromPrestigeProgress as syncZoneUnlockFromPrestigeProgressState, type RitualCompletionResult } from '../state/prestigeZoneState';
 import {
   createLoadedSetsFromSave,
   createLocalSaveData,
 } from '../state/saveState';
 import {
   BABY_SLIME,
-  BUTTON_MUSHROOM,
   getMonsterDefinition,
   getNextMonsterDefinition,
   MONSTER_DEFINITIONS,
@@ -124,6 +129,8 @@ import {
 import {
   GRASS_FARM_ZONE_ID,
   MUSHROOM_FOREST_ZONE_ID,
+  SPORE_GROVE_ZONE_ID,
+  CACTUS_DESERT_ZONE_ID,
   ZONE_DEFINITIONS,
   ZONE_IDS,
   type ZoneDefinition,
@@ -145,7 +152,6 @@ import {
   getSporeIncomeMultiplier,
   getTotalIncomePerSecond,
   HATCH_COOLDOWN_MS,
-  MUSHROOM_FOREST_HATCH_CHANCE_BONUS,
   sanitizeEggCost,
 } from '../systems/progressionSystem';
 import { getMonsterMergeResult } from '../systems/monsterMergeSystem';
@@ -175,6 +181,7 @@ const MILLISECONDS_PER_SECOND = 1000;
 const SAVE_THROTTLE_MS = 5000;
 const STARTING_COINS = STARTING_EGG_COST;
 const ESSENCE_POWER_COST = 1;
+const RARE_HATCH_COST = 1;
 const HATCH_POOL_HOLD_MS = 800;
 const HATCH_POOL_HINT_HATCH_COUNT = 3;
 const SHOW_DEBUG_PANEL = false;
@@ -343,6 +350,7 @@ export class FarmScene extends Phaser.Scene {
   private monsterEssence = 0;
   // Legacy save field name; this now represents the visible Hatch Blessing level.
   private essencePowerLevel = 0;
+  private rareHatchLevel = 0;
   private totalRitualsPerformed = 0;
   private expansionUnlocked = false;
   private nextMonsterId = 1;
@@ -629,6 +637,7 @@ export class FarmScene extends Phaser.Scene {
     this.currentEggCost = STARTING_EGG_COST;
     this.monsterEssence = 0;
     this.essencePowerLevel = 0;
+    this.rareHatchLevel = 0;
     this.totalRitualsPerformed = 0;
     this.expansionUnlocked = false;
     this.clearToast();
@@ -1181,6 +1190,10 @@ export class FarmScene extends Phaser.Scene {
 
   private getLocalizedZoneName(zone: ZoneDefinition): string {
     return this.t(`zone.${zone.id}.name`);
+  }
+
+  private getLocalizedZoneDescription(zone: ZoneDefinition): string {
+    return this.t(`zone.${zone.id}.description`);
   }
 
   private setLanguage(language: LanguageCode): void {
@@ -1948,10 +1961,10 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = getPanelSize(this.scale, 460, 360);
-    const firstRowY = -panelHeight / 2 + 104;
-    const rowGap = Math.min(96, Math.max(78, (panelHeight - 128) / ZONE_DEFINITIONS.length));
-    const rowHeight = Math.min(84, rowGap - 8);
+    const { width: panelWidth, height: panelHeight } = getPanelSize(this.scale, 460, 480);
+    const firstRowY = -panelHeight / 2 + 96;
+    const rowGap = Math.min(90, Math.max(72, (panelHeight - 118) / ZONE_DEFINITIONS.length));
+    const rowHeight = Math.min(78, rowGap - 8);
 
     panel.setDepth(24);
     addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
@@ -1990,9 +2003,7 @@ export class FarmScene extends Phaser.Scene {
       : status === 'unlocked'
         ? this.t('ui.zone.unlocked')
         : this.t('ui.zone.lockedPrestige');
-    const bonusText = zone.id === MUSHROOM_FOREST_ZONE_ID
-      ? this.t('ui.zone.mushroomBonus', { percent: Math.round(MUSHROOM_FOREST_HATCH_CHANCE_BONUS * 100) })
-      : this.t('ui.zone.defaultFarm');
+    const bonusText = this.t(zone.hatchSpecialtyKey);
 
     panel.add(this.add.rectangle(0, rowY, panelWidth - 48, rowHeight, isUnlocked ? THEME.panelAlt : 0x29362f, 0.92)
       .setStrokeStyle(2, isCurrent ? THEME.panelBorder : canSelect ? THEME.slot : THEME.lockedBorder, 0.78));
@@ -2013,8 +2024,8 @@ export class FarmScene extends Phaser.Scene {
       },
     }));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 51, bonusText, {
-      color: zone.id === MUSHROOM_FOREST_ZONE_ID ? '#fff4a8' : THEME.mutedText,
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 49, bonusText, {
+      color: isUnlocked ? '#fff4a8' : THEME.mutedText,
       fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '11px' : '12px',
       wordWrap: {
@@ -2085,11 +2096,22 @@ export class FarmScene extends Phaser.Scene {
       this.totalRitualsPerformed,
       GRASS_FARM_ZONE_ID,
       MUSHROOM_FOREST_ZONE_ID,
+      this.getDiscoveredFamilies(),
     );
 
     this.unlockedZones = syncResult.unlockedZones;
     this.currentZone = syncResult.currentZone;
     this.hasPrestigedOnce = syncResult.hasPrestigedOnce;
+  }
+
+  private getDiscoveredFamilies(): Set<MonsterFamily> {
+    const families = new Set<MonsterFamily>();
+
+    this.discoveredMonsters.forEach((discoveryKey) => {
+      families.add(discoveryKey.split(':')[0] as MonsterFamily);
+    });
+
+    return families;
   }
 
   private toggleMissionsPanel(): void {
@@ -4911,6 +4933,7 @@ export class FarmScene extends Phaser.Scene {
       `Ritual requirement: ${ritualRequirement}`,
       `Ritual income: x${this.getPrestigeIncomeMultiplier().toFixed(2)}`,
       `Hatch Blessing: Lv ${this.essencePowerLevel} (+1 ${Math.round(hatchBlessingBonus.plusOneChance * 100)}% / +2 ${Math.round(hatchBlessingBonus.plusTwoChance * 100)}% / +3 ${Math.round(hatchBlessingBonus.plusThreeChance * 100)}%)`,
+      `Rare Hatch: Lv ${this.rareHatchLevel} (rare weight x${getRareHatchWeightMultiplier(this.rareHatchLevel).toFixed(2)})`,
       `Hatch cooldown: ${(cooldownMs / MILLISECONDS_PER_SECOND).toFixed(1)}s`,
       `Hatch state: ${hatchState}`,
       `Offline cap: ${this.formatDuration(this.getOfflineCapSeconds())}`,
@@ -5134,6 +5157,7 @@ export class FarmScene extends Phaser.Scene {
     )
       && !this.safeRitualInProgress;
     const canBuyEssencePower = canAffordEssencePower(this.monsterEssence, ESSENCE_POWER_COST);
+    const canBuyRareHatch = canAffordRareHatch(this.monsterEssence, RARE_HATCH_COST);
 
     panel.setDepth(24);
     addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
@@ -5242,25 +5266,27 @@ export class FarmScene extends Phaser.Scene {
       },
     }));
 
-    this.addHatchBlessingSection(panel, panelWidth, panelHeight, canBuyEssencePower);
+    this.addEssenceUpgradeSection(panel, panelWidth, panelHeight, canBuyEssencePower, canBuyRareHatch);
     this.addPrestigeAction(panel, panelWidth, panelHeight, canPrestige, canSafeRitual);
 
     this.prestigePanel = panel;
   }
 
-  private addHatchBlessingSection(
+  private addEssenceUpgradeSection(
     panel: Phaser.GameObjects.Container,
     panelWidth: number,
     panelHeight: number,
     canBuyEssencePower: boolean,
+    canBuyRareHatch: boolean,
   ): void {
-    const y = panelHeight / 2 - 126;
+    const y = panelHeight / 2 - 145;
     const rowWidth = panelWidth - 52;
     const leftX = -panelWidth / 2 + 42;
     const actionX = panelWidth / 2 - 42;
     const actionColumnWidth = panelWidth < 390 ? 78 : 92;
     const textGap = panelWidth < 390 ? 10 : 14;
     const textWidth = Math.max(96, actionX - actionColumnWidth - textGap - leftX);
+    const rowHeight = 52;
     const hatchBlessingBonus = getHatchBlessingTierBonus(this.essencePowerLevel);
     const hatchBlessingParams = {
       plusOne: Math.round(hatchBlessingBonus.plusOneChance * 100),
@@ -5274,14 +5300,88 @@ export class FarmScene extends Phaser.Scene {
         : 'ui.prestige.hatchBlessingEffect',
       hatchBlessingParams,
     );
+    const rareBonusPercent = Math.round((getRareHatchWeightMultiplier(this.rareHatchLevel) - 1) * 100);
 
-    panel.add(this.add.rectangle(0, y, rowWidth, 74, THEME.panelAlt, 0.92)
-      .setStrokeStyle(2, canBuyEssencePower ? THEME.slot : THEME.lockedBorder, 0.78));
+    this.addEssenceUpgradeRow(panel, {
+      y,
+      rowWidth,
+      rowHeight,
+      leftX,
+      actionX,
+      actionColumnWidth,
+      textWidth,
+      title: this.t('ui.prestige.hatchBlessing'),
+      level: this.essencePowerLevel,
+      effectText,
+      cost: ESSENCE_POWER_COST,
+      canBuy: canBuyEssencePower,
+      onBuy: () => this.buyHatchBlessing(),
+      panelWidth,
+    });
 
-    panel.add(this.add.text(leftX, y - 27, this.t('ui.prestige.hatchBlessing'), {
+    this.addEssenceUpgradeRow(panel, {
+      y: y + rowHeight + 8,
+      rowWidth,
+      rowHeight,
+      leftX,
+      actionX,
+      actionColumnWidth,
+      textWidth,
+      title: this.t('ui.prestige.rareHatch'),
+      level: this.rareHatchLevel,
+      effectText: this.rareHatchLevel === 0
+        ? this.t('ui.prestige.rareHatchUnlockHint')
+        : this.t('ui.prestige.rareHatchEffectCompact', { percent: rareBonusPercent }),
+      cost: RARE_HATCH_COST,
+      canBuy: canBuyRareHatch,
+      onBuy: () => this.buyRareHatch(),
+      panelWidth,
+    });
+  }
+
+  private addEssenceUpgradeRow(
+    panel: Phaser.GameObjects.Container,
+    options: {
+      y: number;
+      rowWidth: number;
+      rowHeight: number;
+      leftX: number;
+      actionX: number;
+      actionColumnWidth: number;
+      textWidth: number;
+      title: string;
+      level: number;
+      effectText: string;
+      cost: number;
+      canBuy: boolean;
+      onBuy: () => void;
+      panelWidth: number;
+    },
+  ): void {
+    const {
+      y,
+      rowWidth,
+      rowHeight,
+      leftX,
+      actionX,
+      actionColumnWidth,
+      textWidth,
+      title,
+      level,
+      effectText,
+      cost,
+      canBuy,
+      onBuy,
+      panelWidth,
+    } = options;
+
+    panel.add(this.add.rectangle(0, y, rowWidth, rowHeight, THEME.panelAlt, 0.92)
+      .setStrokeStyle(2, canBuy ? THEME.slot : THEME.lockedBorder, 0.78));
+
+    panel.add(this.add.text(leftX, y - 20, title, {
       color: '#f7ffe8',
       fontFamily: UI_FONT_FAMILY,
-      fontSize: panelWidth < 390 ? '15px' : '17px',
+      fontSize: panelWidth < 390 ? '13px' : '15px',
       fontStyle: 'bold',
       fixedWidth: textWidth,
       wordWrap: {
@@ -5289,46 +5389,46 @@ export class FarmScene extends Phaser.Scene {
       },
     }));
 
-    panel.add(this.add.text(leftX, y - 4, this.t('common.level', {
-      level: this.essencePowerLevel,
+    panel.add(this.add.text(leftX, y - 1, this.t('common.level', {
+      level,
     }), {
       color: '#cdebb3',
       fontFamily: UI_FONT_FAMILY,
-      fontSize: '13px',
+      fontSize: panelWidth < 390 ? '11px' : '12px',
       fontStyle: 'bold',
-      fixedWidth: textWidth,
+      fixedWidth: 60,
     }));
 
-    panel.add(this.add.text(leftX, y + 18, effectText, {
+    panel.add(this.add.text(leftX + 62, y - 1, effectText, {
       color: THEME.mutedText,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: panelWidth < 390 ? '11px' : '12px',
-      fixedWidth: textWidth,
+      fontSize: panelWidth < 390 ? '10px' : '11px',
+      fixedWidth: Math.max(70, textWidth - 62),
       wordWrap: {
-        width: textWidth,
+        width: Math.max(70, textWidth - 62),
       },
     }));
 
-    panel.add(this.add.text(actionX, y - 30, this.t('common.cost', {
-      amount: this.formatCoinAmount(ESSENCE_POWER_COST),
+    panel.add(this.add.text(actionX, y - 22, this.t('common.cost', {
+      amount: this.formatCoinAmount(cost),
     }), {
       color: '#fff4a8',
       fontFamily: UI_FONT_FAMILY,
-      fontSize: '13px',
+      fontSize: panelWidth < 390 ? '11px' : '12px',
       fontStyle: 'bold',
       fixedWidth: actionColumnWidth,
       align: 'right',
     }).setOrigin(1, 0));
 
-    const buyText = this.add.text(actionX, y - 6, this.t('common.buy'), {
+    const buyText = this.add.text(actionX, y - 2, this.t('common.buy'), {
       color: '#ffffff',
       fontFamily: UI_FONT_FAMILY,
-      fontSize: '15px',
+      fontSize: panelWidth < 390 ? '12px' : '13px',
       fontStyle: 'bold',
-      backgroundColor: `#${(canBuyEssencePower ? THEME.buttonHover : THEME.danger).toString(16).padStart(6, '0')}`,
+      backgroundColor: `#${(canBuy ? THEME.buttonHover : THEME.danger).toString(16).padStart(6, '0')}`,
       padding: {
-        x: 13,
-        y: 6,
+        x: 11,
+        y: 5,
       },
     }).setOrigin(1, 0);
 
@@ -5336,7 +5436,7 @@ export class FarmScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
         this.playButtonClickSound();
-        this.buyHatchBlessing();
+        onBuy();
       });
 
     panel.add(buyText);
@@ -6418,7 +6518,7 @@ export class FarmScene extends Phaser.Scene {
       this.completeMission('unlock-expansion', showCompletionToast);
     }
 
-    if (this.monsterEssence > 0 || this.essencePowerLevel > 0 || this.totalRitualsPerformed > 0) {
+    if (this.monsterEssence > 0 || this.essencePowerLevel > 0 || this.rareHatchLevel > 0 || this.totalRitualsPerformed > 0) {
       this.completeMission('prestige-once', showCompletionToast);
     }
 
@@ -6587,6 +6687,23 @@ export class FarmScene extends Phaser.Scene {
     this.saveProgress();
     this.openPrestigePanel();
     this.showToast(this.t('toast.hatchBlessingUpgraded'), 'success');
+  }
+
+  private buyRareHatch(): void {
+    if (!canAffordRareHatch(this.monsterEssence, RARE_HATCH_COST)) {
+      this.showToast(this.t('toast.notEnoughEssence'), 'warning');
+      return;
+    }
+
+    this.monsterEssence = sanitizePrestigeIntegerState(this.monsterEssence - RARE_HATCH_COST);
+    this.rareHatchLevel = sanitizePrestigeIntegerState(this.rareHatchLevel + 1);
+    this.hasPrestigedOnce = true;
+    this.syncZoneUnlockFromPrestigeProgress();
+    this.prestigeConfirmationArmed = false;
+    this.updateHud();
+    this.saveProgress();
+    this.openPrestigePanel();
+    this.showToast(this.t('toast.rareHatchUpgraded'), 'success');
   }
 
   private tryPrestige(): void {
@@ -6807,7 +6924,7 @@ export class FarmScene extends Phaser.Scene {
 
     if (upgradeId === 'mushroom-chance') {
       return this.t('upgrade.current.mushroom-chance', {
-        percent: Math.round(this.getMushroomHatchChance() * 100),
+        percent: Math.round(this.getHatchChanceForFamily('Mushroom') * 100),
       });
     }
 
@@ -6871,8 +6988,17 @@ export class FarmScene extends Phaser.Scene {
     return getOfflineCapSeconds(this.getUpgradeLevel('offline-storage'));
   }
 
-  private getMushroomHatchChance(): number {
-    return getMushroomHatchChanceForState(this.getUpgradeLevel('mushroom-chance'), this.currentZone);
+  private getCurrentHatchPoolEntries(): HatchPoolEntryState[] {
+    return getHatchPoolEntries({
+      currentZone: this.currentZone,
+      discoveredFamilies: this.getDiscoveredFamilies(),
+      mushroomChanceLevel: this.getUpgradeLevel('mushroom-chance'),
+      rareHatchLevel: this.rareHatchLevel,
+    });
+  }
+
+  private getHatchChanceForFamily(family: MonsterFamily): number {
+    return this.getCurrentHatchPoolEntries().find((entry) => entry.family === family)?.chance ?? 0;
   }
 
   private getTapPowerMultiplier(): number {
@@ -6967,12 +7093,9 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private rollHatchMonsterDefinition(): MonsterDefinition {
-    const baseMonster = getHatchedMonsterDefinition(
-      Math.random(),
-      this.getMushroomHatchChance(),
-      BABY_SLIME,
-      BUTTON_MUSHROOM,
-    );
+    const hatchPoolEntries = this.getCurrentHatchPoolEntries();
+    const family = getWeightedHatchFamily(hatchPoolEntries, Math.random());
+    const baseMonster = getMonsterDefinition(family, 1) ?? BABY_SLIME;
 
     return applyHatchBlessingToMonsterDefinition(
       baseMonster,
@@ -7093,17 +7216,18 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = getPanelSize(this.scale, 350, 270);
+    const { width: panelWidth, height: panelHeight } = getPanelSize(this.scale, 390, 500);
     const contentX = -panelWidth / 2 + 24;
     const contentWidth = panelWidth - 48;
-    const mushroomChance = this.getMushroomHatchChance();
-    const slimeChance = Math.max(0, 1 - mushroomChance);
+    const hatchPoolEntries = this.getCurrentHatchPoolEntries();
     const hatchBlessingBonus = getHatchBlessingTierBonus(this.essencePowerLevel);
     const compactBlessingText = this.t('ui.prestige.hatchBlessingEffectCompact', {
       plusOne: Math.round(hatchBlessingBonus.plusOneChance * 100),
       plusTwo: Math.round(hatchBlessingBonus.plusTwoChance * 100),
       plusThree: Math.round(hatchBlessingBonus.plusThreeChance * 100),
     });
+    const rareBonusPercent = Math.round((getRareHatchWeightMultiplier(this.rareHatchLevel) - 1) * 100);
+    const currentZone = this.getCurrentZoneDefinition();
 
     panel.setDepth(24);
     addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
@@ -7127,35 +7251,70 @@ export class FarmScene extends Phaser.Scene {
       },
     }));
 
-    const chanceLabel = this.t('ui.hatchPool.chance');
-    const familyRows = [
-      { family: this.getLocalizedFamilyName('Slime'), chance: Math.round(slimeChance * 100) },
-      { family: this.getLocalizedFamilyName('Mushroom'), chance: Math.round(mushroomChance * 100) },
-    ];
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 92, this.t('ui.hatchPool.zone', {
+      zone: this.getLocalizedZoneName(currentZone),
+      specialty: this.t(currentZone.hatchSpecialtyKey),
+    }), {
+      color: '#fff4a8',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: panelWidth < 390 ? '11px' : '12px',
+      fixedWidth: contentWidth,
+      wordWrap: {
+        width: contentWidth,
+      },
+    }));
 
-    familyRows.forEach((row, index) => {
-      const rowY = -panelHeight / 2 + 118 + index * 34;
+    hatchPoolEntries.forEach((entry, index) => {
+      const rowY = -panelHeight / 2 + 132 + index * 38;
+      const chanceText = entry.unlocked
+        ? this.t('ui.hatchPool.chanceValue', { percent: Math.round(entry.chance * 100) })
+        : this.t(entry.unlockHintKey);
+      const zoneText = entry.zoneMultiplier !== 1
+        ? this.t('ui.hatchPool.zoneBoost', { multiplier: entry.zoneMultiplier.toFixed(2) })
+        : entry.rare
+          ? this.t('ui.hatchPool.rare')
+          : '';
 
-      panel.add(this.add.rectangle(0, rowY, panelWidth - 48, 26, THEME.panelAlt, 0.88)
-        .setStrokeStyle(1, THEME.lockedBorder, 0.5));
-      panel.add(this.add.text(contentX, rowY - 9, row.family, {
-        color: '#f7ffe8',
-        fontFamily: UI_FONT_FAMILY,
-        fontSize: panelWidth < 390 ? '13px' : '14px',
-        fontStyle: 'bold',
-        fixedWidth: Math.floor(contentWidth * 0.55),
-      }));
-      panel.add(this.add.text(panelWidth / 2 - 28, rowY - 9, `${row.chance}% ${chanceLabel}`, {
-        color: '#fff4a8',
+      panel.add(this.add.rectangle(0, rowY, panelWidth - 48, 31, entry.unlocked ? THEME.panelAlt : 0x29362f, 0.88)
+        .setStrokeStyle(1, entry.unlocked ? THEME.lockedBorder : THEME.locked, 0.5));
+      panel.add(this.add.text(contentX, rowY - 12, this.getLocalizedFamilyName(entry.family), {
+        color: entry.unlocked ? '#f7ffe8' : '#9ca79f',
         fontFamily: UI_FONT_FAMILY,
         fontSize: panelWidth < 390 ? '12px' : '13px',
         fontStyle: 'bold',
+        fixedWidth: Math.floor(contentWidth * 0.35),
+      }));
+      panel.add(this.add.text(contentX + Math.floor(contentWidth * 0.34), rowY - 12, zoneText, {
+        color: entry.unlocked ? THEME.mutedText : '#9ca79f',
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: panelWidth < 390 ? '10px' : '11px',
+        fixedWidth: Math.floor(contentWidth * 0.24),
+      }));
+      panel.add(this.add.text(panelWidth / 2 - 28, rowY - 12, chanceText, {
+        color: entry.unlocked ? '#fff4a8' : THEME.mutedText,
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: panelWidth < 390 ? '10px' : '11px',
+        fontStyle: 'bold',
         align: 'right',
-        fixedWidth: Math.floor(contentWidth * 0.42),
-      }).setOrigin(1, 0));
+        fixedWidth: Math.floor(contentWidth * 0.4),
+        wordWrap: {
+          width: Math.floor(contentWidth * 0.4),
+        },
+      }).setOrigin(1, 0).setMaxLines(2));
     });
 
-    panel.add(this.add.text(contentX, panelHeight / 2 - 76, this.t('ui.prestige.hatchBlessing'), {
+    panel.add(this.add.text(contentX, panelHeight / 2 - 90, this.t('ui.prestige.rareHatchLevel', {
+      level: this.rareHatchLevel,
+      percent: rareBonusPercent,
+    }), {
+      color: '#cdebb3',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: panelWidth < 390 ? '12px' : '13px',
+      fontStyle: 'bold',
+      fixedWidth: contentWidth,
+    }));
+
+    panel.add(this.add.text(contentX, panelHeight / 2 - 64, this.t('ui.prestige.hatchBlessing'), {
       color: '#f7ffe8',
       fontFamily: UI_FONT_FAMILY,
       fontSize: panelWidth < 390 ? '13px' : '14px',
@@ -7163,7 +7322,7 @@ export class FarmScene extends Phaser.Scene {
       fixedWidth: contentWidth,
     }));
 
-    panel.add(this.add.text(contentX, panelHeight / 2 - 52, compactBlessingText, {
+    panel.add(this.add.text(contentX, panelHeight / 2 - 40, compactBlessingText, {
       color: THEME.mutedText,
       fontFamily: UI_FONT_FAMILY,
       fontSize: panelWidth < 390 ? '12px' : '13px',
@@ -7189,6 +7348,7 @@ export class FarmScene extends Phaser.Scene {
 
   private discoverMonster(monster: MonsterDefinition): void {
     this.discoveredMonsters = discoverMonsterInState(this.discoveredMonsters, monster);
+    this.syncZoneUnlockFromPrestigeProgress();
     this.refreshCompendiumPanel();
     this.refreshOrdersPanel();
     this.refreshOrderWidget();
@@ -7993,6 +8153,7 @@ export class FarmScene extends Phaser.Scene {
     };
     this.monsterEssence = saveData.monsterEssence;
     this.essencePowerLevel = saveData.essencePowerLevel;
+    this.rareHatchLevel = saveData.rareHatchLevel;
     this.totalRitualsPerformed = saveData.totalRitualsPerformed;
     this.currentEggCost = this.sanitizeEggCost(saveData.currentEggCost);
     const loadedSets = createLoadedSetsFromSave(saveData);
@@ -8084,6 +8245,7 @@ export class FarmScene extends Phaser.Scene {
       upgrades: this.getSanitizedUpgradeLevels(),
       monsterEssence: sanitizePrestigeIntegerState(this.monsterEssence),
       essencePowerLevel: sanitizePrestigeIntegerState(this.essencePowerLevel),
+      rareHatchLevel: sanitizePrestigeIntegerState(this.rareHatchLevel),
       totalRitualsPerformed: sanitizePrestigeIntegerState(this.totalRitualsPerformed),
       currentEggCost: this.sanitizeEggCost(this.currentEggCost),
       onboardingHintsSeen: this.onboardingHintsSeen,
@@ -8156,6 +8318,7 @@ export class FarmScene extends Phaser.Scene {
     this.hasPrestigedOnce = false;
     this.monsterEssence = 0;
     this.essencePowerLevel = 0;
+    this.rareHatchLevel = 0;
     this.totalRitualsPerformed = 0;
     this.currentEggCost = STARTING_EGG_COST;
     this.expansionUnlocked = false;
@@ -8229,6 +8392,7 @@ export class FarmScene extends Phaser.Scene {
       || this.currentEggCost !== STARTING_EGG_COST
       || this.monsterEssence > 0
       || this.essencePowerLevel > 0
+      || this.rareHatchLevel > 0
       || this.totalRitualsPerformed > 0
       || this.expansionUnlocked
       || this.hasPrestigedOnce

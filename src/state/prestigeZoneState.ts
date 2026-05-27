@@ -1,5 +1,9 @@
-import type { ZoneId } from '../data/zones';
-import type { FarmSlotState, MonsterInstance } from '../types/game-state';
+import {
+  CACTUS_DESERT_ZONE_ID,
+  SPORE_GROVE_ZONE_ID,
+  type ZoneId,
+} from '../data/zones';
+import type { FarmSlotState, MonsterFamily, MonsterInstance } from '../types/game-state';
 
 export type EssencePowerPurchaseResult =
   | {
@@ -63,6 +67,10 @@ export function sanitizePrestigeInteger(value: number): number {
 
 export function canAffordEssencePower(monsterEssence: number, essencePowerCost: number): boolean {
   return monsterEssence >= essencePowerCost;
+}
+
+export function canAffordRareHatch(monsterEssence: number, rareHatchCost: number): boolean {
+  return monsterEssence >= rareHatchCost;
 }
 
 export function getEssencePowerPurchaseResult(
@@ -299,6 +307,7 @@ export function syncZoneUnlockFromPrestigeProgress(
   totalRitualsPerformed: number,
   defaultZoneId: ZoneId,
   mushroomForestZoneId: ZoneId,
+  discoveredFamilies: ReadonlySet<MonsterFamily> = new Set<MonsterFamily>(),
 ): ZoneUnlockSyncResult {
   const nextUnlockedZones = new Set(unlockedZones);
   let nextHasPrestigedOnce = hasPrestigedOnce;
@@ -311,6 +320,14 @@ export function syncZoneUnlockFromPrestigeProgress(
   )) {
     nextHasPrestigedOnce = true;
     nextUnlockedZones.add(mushroomForestZoneId);
+  }
+
+  if (totalRitualsPerformed >= 2 || discoveredFamilies.has('Spore')) {
+    nextUnlockedZones.add(SPORE_GROVE_ZONE_ID);
+  }
+
+  if (totalRitualsPerformed >= 4 || discoveredFamilies.has('Cactus')) {
+    nextUnlockedZones.add(CACTUS_DESERT_ZONE_ID);
   }
 
   nextUnlockedZones.add(defaultZoneId);

@@ -5,10 +5,11 @@ export type CurrencyState = {
 export type PrestigeState = {
   monsterEssence: number;
   essencePowerLevel: number;
+  rareHatchLevel: number;
   totalRitualsPerformed: number;
 };
 
-export const MONSTER_FAMILIES = ['Slime', 'Mushroom', 'Spore', 'Cactus'] as const;
+export const MONSTER_FAMILIES = ['Slime', 'Mushroom', 'Spore', 'Cactus', 'Cell', 'Plant'] as const;
 
 export type MonsterFamily = typeof MONSTER_FAMILIES[number];
 
