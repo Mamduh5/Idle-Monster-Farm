@@ -358,7 +358,8 @@ export function applyBossTurn(session: BattleSessionState): BattleTurnResult {
     });
   }
 
-  const targetIndex = getLivingActiveIndex(nextSession);
+  const activeIndexBeforeBossAttack = getLivingActiveIndex(nextSession);
+  const targetIndex = getRandomLivingMonsterIndex(nextSession.team);
   const target = targetIndex >= 0 ? nextSession.team[targetIndex] : undefined;
 
   if (!target) {
@@ -408,7 +409,7 @@ export function applyBossTurn(session: BattleSessionState): BattleTurnResult {
     });
   }
 
-  nextSession.activeMonsterIndex = getNextLivingMonsterIndex(nextSession.team, targetIndex);
+  nextSession.activeMonsterIndex = getNextLivingMonsterIndex(nextSession.team, activeIndexBeforeBossAttack);
   nextSession.turnNumber += 1;
 
   return createTurnResult(nextSession, {
@@ -557,6 +558,20 @@ function getLivingActiveIndex(session: BattleSessionState): number {
   }
 
   return session.team.findIndex((monster) => monster.hp > 0);
+}
+
+function getRandomLivingMonsterIndex(team: readonly Pick<BattleMonsterSnapshot, 'hp'>[]): number {
+  const livingIndexes = team.flatMap((monster, index) => (monster.hp > 0 ? [index] : []));
+
+  if (livingIndexes.length === 0) {
+    return -1;
+  }
+
+  if (livingIndexes.length === 1) {
+    return livingIndexes[0];
+  }
+
+  return livingIndexes[Math.floor(Math.random() * livingIndexes.length)];
 }
 
 function getNextLivingMonsterIndex(team: readonly Pick<BattleMonsterSnapshot, 'hp'>[], currentIndex: number): number {
