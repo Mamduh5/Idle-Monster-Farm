@@ -3554,48 +3554,71 @@ export class FarmScene extends Phaser.Scene {
   ): void {
     const y = panelHeight / 2 - 126;
     const rowWidth = panelWidth - 52;
+    const leftX = -panelWidth / 2 + 42;
+    const actionX = panelWidth / 2 - 42;
+    const actionColumnWidth = panelWidth < 390 ? 78 : 92;
+    const textGap = panelWidth < 390 ? 10 : 14;
+    const textWidth = Math.max(96, actionX - actionColumnWidth - textGap - leftX);
     const hatchBlessingBonus = getHatchBlessingTierBonus(this.essencePowerLevel);
+    const hatchBlessingParams = {
+      plusOne: Math.round(hatchBlessingBonus.plusOneChance * 100),
+      plusTwo: Math.round(hatchBlessingBonus.plusTwoChance * 100),
+      plusThree: Math.round(hatchBlessingBonus.plusThreeChance * 100),
+    };
+    const usesCompactEffect = panelWidth < 430 || this.getUiLayoutMode() === 'mobile' || textWidth < 300;
+    const effectText = this.t(
+      usesCompactEffect
+        ? 'ui.prestige.hatchBlessingEffectCompact'
+        : 'ui.prestige.hatchBlessingEffect',
+      hatchBlessingParams,
+    );
 
     panel.add(this.add.rectangle(0, y, rowWidth, 74, THEME.panelAlt, 0.92)
       .setStrokeStyle(2, canBuyEssencePower ? THEME.slot : THEME.lockedBorder, 0.78));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, y - 27, this.t('ui.prestige.hatchBlessing'), {
+    panel.add(this.add.text(leftX, y - 27, this.t('ui.prestige.hatchBlessing'), {
       color: '#f7ffe8',
       fontFamily: UI_FONT_FAMILY,
       fontSize: panelWidth < 390 ? '15px' : '17px',
       fontStyle: 'bold',
+      fixedWidth: textWidth,
+      wordWrap: {
+        width: textWidth,
+      },
     }));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, y - 4, this.t('common.level', {
+    panel.add(this.add.text(leftX, y - 4, this.t('common.level', {
       level: this.essencePowerLevel,
     }), {
       color: '#cdebb3',
       fontFamily: UI_FONT_FAMILY,
       fontSize: '13px',
       fontStyle: 'bold',
+      fixedWidth: textWidth,
     }));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, y + 18, this.t('ui.prestige.hatchBlessingEffect', {
-      plusOne: Math.round(hatchBlessingBonus.plusOneChance * 100),
-      plusTwo: Math.round(hatchBlessingBonus.plusTwoChance * 100),
-      plusThree: Math.round(hatchBlessingBonus.plusThreeChance * 100),
-    }), {
+    panel.add(this.add.text(leftX, y + 18, effectText, {
       color: THEME.mutedText,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: '12px',
-      fixedWidth: Math.max(160, rowWidth - 118),
+      fontSize: panelWidth < 390 ? '11px' : '12px',
+      fixedWidth: textWidth,
+      wordWrap: {
+        width: textWidth,
+      },
     }));
 
-    panel.add(this.add.text(panelWidth / 2 - 42, y - 30, this.t('common.cost', {
+    panel.add(this.add.text(actionX, y - 30, this.t('common.cost', {
       amount: this.formatCoinAmount(ESSENCE_POWER_COST),
     }), {
       color: '#fff4a8',
       fontFamily: UI_FONT_FAMILY,
       fontSize: '13px',
       fontStyle: 'bold',
+      fixedWidth: actionColumnWidth,
+      align: 'right',
     }).setOrigin(1, 0));
 
-    const buyText = this.add.text(panelWidth / 2 - 42, y - 6, this.t('common.buy'), {
+    const buyText = this.add.text(actionX, y - 6, this.t('common.buy'), {
       color: '#ffffff',
       fontFamily: UI_FONT_FAMILY,
       fontSize: '15px',
