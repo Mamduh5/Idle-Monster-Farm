@@ -1,6 +1,5 @@
 import type { MissionId } from '../data/missions';
 import type { OrderId } from '../data/orders';
-import type { ExpeditionId } from '../data/expeditions';
 import type { UpgradeId } from '../data/upgrades';
 import type { ZoneId } from '../data/zones';
 import type {
@@ -35,7 +34,6 @@ export type SaveSourceState = {
   completedMissionIds: ReadonlySet<MissionId>;
   claimedMissionIds: ReadonlySet<MissionId>;
   claimedOrderIds: ReadonlySet<OrderId>;
-  claimedExpeditionIds: ReadonlySet<ExpeditionId>;
   claimedBossBattleStageIds: ReadonlySet<string>;
   unlockedZones: ReadonlySet<ZoneId>;
   currentZone: ZoneId;
@@ -47,7 +45,6 @@ export type LoadedSceneStateFragments = {
   completedMissionIds: Set<MissionId>;
   claimedMissionIds: Set<MissionId>;
   claimedOrderIds: Set<OrderId>;
-  claimedExpeditionIds: Set<ExpeditionId>;
   claimedBossBattleStageIds: Set<string>;
 };
 
@@ -69,7 +66,6 @@ export function createLocalSaveData(sourceState: SaveSourceState): LocalSaveData
     completedMissionIds: Array.from(sourceState.completedMissionIds),
     claimedMissionIds: Array.from(sourceState.claimedMissionIds),
     claimedOrderIds: Array.from(sourceState.claimedOrderIds),
-    claimedExpeditionIds: Array.from(sourceState.claimedExpeditionIds),
     claimedBossBattleStageIds: Array.from(sourceState.claimedBossBattleStageIds),
     unlockedZones: Array.from(sourceState.unlockedZones),
     currentZone: sourceState.currentZone,
@@ -122,7 +118,6 @@ export function createLoadedSetsFromSave(saveData: LocalSaveData): LoadedSceneSt
     completedMissionIds,
     claimedMissionIds,
     claimedOrderIds: new Set(saveData.claimedOrderIds),
-    claimedExpeditionIds: new Set(saveData.claimedExpeditionIds),
     claimedBossBattleStageIds: new Set(saveData.claimedBossBattleStageIds),
   };
 }

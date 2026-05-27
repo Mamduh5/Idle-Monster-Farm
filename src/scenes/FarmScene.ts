@@ -27,13 +27,6 @@ import {
   type BossBattleStage,
   type BossVisualTheme,
 } from '../data/bossBattles';
-import {
-  EXPEDITION_DEFINITIONS,
-  EXPEDITION_IDS,
-  type ExpeditionDefinition,
-  type ExpeditionId,
-  type ExpeditionReward,
-} from '../data/expeditions';
 import { MISSION_DEFINITIONS, type MissionDefinition, type MissionId, type MissionReward } from '../data/missions';
 import { ORDER_DEFINITIONS, type OrderDefinition, type OrderId, type OrderReward } from '../data/orders';
 import {
@@ -81,21 +74,6 @@ import {
   isOrderComplete as isOrderCompleteState,
   isOrderUnlocked as isOrderUnlockedState,
 } from '../state/orderState';
-import {
-  canClaimExpedition,
-  getBattleDamageTicks,
-  getBattlePower,
-  getBattleResult,
-  getBattleStageStatus,
-  getCurrentBattleStage,
-  getEnemyHpAfterBattle,
-  canClaimBattleReward,
-  getExpeditionStatus,
-  getMonsterBattlePower,
-  getSanitizedClaimedExpeditionIds as getSanitizedClaimedExpeditionIdsFromState,
-  getTopBattleMonsters,
-  type ExpeditionStatus,
-} from '../state/expeditionState';
 import {
   applyBossTurn,
   applyPlayerSkill,
@@ -243,7 +221,7 @@ const THEME = {
 
 type MonsterDragZone = Phaser.GameObjects.Zone;
 type UiLayoutMode = 'mobile' | 'desktop';
-type ModalKind = 'compendium' | 'upgrade-shop' | 'goals' | 'orders' | 'expedition' | 'default';
+type ModalKind = 'compendium' | 'upgrade-shop' | 'goals' | 'orders' | 'battle' | 'default';
 type BossBattlePlayerVisualEffect = {
   kind: 'damage' | 'support';
   amount: number;
@@ -254,7 +232,7 @@ type BossBattleBossVisualEffect = {
   targetId?: string;
   visualTheme: BossVisualTheme;
 };
-type ExpeditionPanelRefreshOptions = {
+type BossBattlePanelRefreshOptions = {
   preserveBattleAnimation?: boolean;
 };
 type CoinBug = {
@@ -371,7 +349,7 @@ export class FarmScene extends Phaser.Scene {
   private zonePanel?: Phaser.GameObjects.Container;
   private missionsPanel?: Phaser.GameObjects.Container;
   private ordersPanel?: Phaser.GameObjects.Container;
-  private expeditionPanel?: Phaser.GameObjects.Container;
+  private bossBattlePanel?: Phaser.GameObjects.Container;
   private upgradeShopPanel?: Phaser.GameObjects.Container;
   private prestigePanel?: Phaser.GameObjects.Container;
   private hatchPoolPanel?: Phaser.GameObjects.Container;
@@ -386,7 +364,6 @@ export class FarmScene extends Phaser.Scene {
   private completedMissionIds = new Set<MissionId>();
   private claimedMissionIds = new Set<MissionId>();
   private claimedOrderIds = new Set<OrderId>();
-  private claimedExpeditionIds = new Set<ExpeditionId>();
   private claimedBossBattleStageIds = new Set<string>();
   private unlockedZones = createInitialUnlockedZones(GRASS_FARM_ZONE_ID);
   private currentZone: ZoneId = GRASS_FARM_ZONE_ID;
@@ -401,7 +378,6 @@ export class FarmScene extends Phaser.Scene {
   private upgradeShopPageIndex = 0;
   private missionsPageIndex = 0;
   private ordersPageIndex = 0;
-  private expeditionPageIndex = 0;
   private bossBattleBossPageIndex = 0;
   private bossBattleStagePageIndex = 0;
   private selectedBossBattleBossId?: BossBattleBossId;
@@ -577,7 +553,7 @@ export class FarmScene extends Phaser.Scene {
     this.zonePanel = undefined;
     this.missionsPanel = undefined;
     this.ordersPanel = undefined;
-    this.expeditionPanel = undefined;
+    this.bossBattlePanel = undefined;
     this.upgradeShopPanel = undefined;
     this.prestigePanel = undefined;
     this.hatchPoolPanel = undefined;
@@ -593,7 +569,6 @@ export class FarmScene extends Phaser.Scene {
     this.completedMissionIds = new Set<MissionId>();
     this.claimedMissionIds = new Set<MissionId>();
     this.claimedOrderIds = new Set<OrderId>();
-    this.claimedExpeditionIds = new Set<ExpeditionId>();
     this.unlockedZones = createInitialUnlockedZones(GRASS_FARM_ZONE_ID);
     this.currentZone = GRASS_FARM_ZONE_ID;
     this.hasPrestigedOnce = false;
@@ -608,7 +583,6 @@ export class FarmScene extends Phaser.Scene {
     this.upgradeShopPageIndex = 0;
     this.missionsPageIndex = 0;
     this.ordersPageIndex = 0;
-    this.expeditionPageIndex = 0;
     this.clearBattleAnimationEvents();
     this.battleAnimationInProgress = false;
     this.upgradeBuyMode = 'x1';
@@ -1089,7 +1063,7 @@ export class FarmScene extends Phaser.Scene {
     }
 
     if (action === 'battle') {
-      this.openExpeditionPanel();
+      this.openBossBattlePanel();
       return;
     }
 
@@ -1131,7 +1105,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
-    this.closeExpeditionPanel();
+    this.closeBossBattlePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -1225,7 +1199,7 @@ export class FarmScene extends Phaser.Scene {
 
     if (mode === 'mobile') {
       const inset = 12;
-      const isListModal = kind === 'compendium' || kind === 'upgrade-shop' || kind === 'goals' || kind === 'orders' || kind === 'expedition';
+      const isListModal = kind === 'compendium' || kind === 'upgrade-shop' || kind === 'goals' || kind === 'orders' || kind === 'battle';
       const mobileMaxWidth = isListModal ? 390 : preferredWidth;
 
       return getInsetPanelSize(
@@ -1355,7 +1329,7 @@ export class FarmScene extends Phaser.Scene {
       || this.zonePanel
       || this.missionsPanel
       || this.ordersPanel
-      || this.expeditionPanel
+      || this.bossBattlePanel
       || this.upgradeShopPanel
       || this.prestigePanel
       || this.hatchPoolPanel
@@ -1413,8 +1387,8 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    if (this.expeditionPanel) {
-      this.closeExpeditionPanel();
+    if (this.bossBattlePanel) {
+      this.closeBossBattlePanel();
       return;
     }
 
@@ -1627,7 +1601,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
-    this.closeExpeditionPanel();
+    this.closeBossBattlePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -1834,7 +1808,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
-    this.closeExpeditionPanel();
+    this.closeBossBattlePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -1950,7 +1924,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
-    this.closeExpeditionPanel();
+    this.closeBossBattlePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -2120,7 +2094,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closeZonePanel();
     this.closeOrdersPanel();
-    this.closeExpeditionPanel();
+    this.closeBossBattlePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -2264,7 +2238,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
-    this.closeExpeditionPanel();
+    this.closeBossBattlePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -2521,17 +2495,17 @@ export class FarmScene extends Phaser.Scene {
     });
   }
 
-  private toggleExpeditionPanel(): void {
-    if (this.expeditionPanel) {
-      this.closeExpeditionPanel();
+  private toggleBossBattlePanel(): void {
+    if (this.bossBattlePanel) {
+      this.closeBossBattlePanel();
       return;
     }
 
-    this.openExpeditionPanel();
+    this.openBossBattlePanel();
   }
 
-  private openExpeditionPanel(useDefaultStage = true, options: ExpeditionPanelRefreshOptions = {}): void {
-    this.closeExpeditionPanel(false, options);
+  private openBossBattlePanel(useDefaultStage = true, options: BossBattlePanelRefreshOptions = {}): void {
+    this.closeBossBattlePanel(false, options);
     this.closeNavigationMenuPanel();
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
@@ -2569,7 +2543,7 @@ export class FarmScene extends Phaser.Scene {
       fixedWidth: panelWidth - 118,
     }));
 
-    this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closeExpeditionPanel(), {
+    this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closeBossBattlePanel(), {
       stopPropagation: true,
     });
 
@@ -2581,7 +2555,7 @@ export class FarmScene extends Phaser.Scene {
         fixedWidth: contentWidth,
         wordWrap: { width: contentWidth },
       }));
-      this.expeditionPanel = panel;
+      this.bossBattlePanel = panel;
       return;
     }
 
@@ -2607,7 +2581,7 @@ export class FarmScene extends Phaser.Scene {
       }
     }
 
-    this.expeditionPanel = panel;
+    this.bossBattlePanel = panel;
   }
 
   private addBossBattleSelectContent(
@@ -3836,312 +3810,6 @@ export class FarmScene extends Phaser.Scene {
       .setStrokeStyle(2, 0x342052, 0.78));
   }
 
-  private addBattleTrainingContent(
-    panel: Phaser.GameObjects.Container,
-    stage: ExpeditionDefinition,
-    panelWidth: number,
-    panelHeight: number,
-  ): void {
-    const isCompactPanel = panelWidth < 420;
-    const contentLeft = -panelWidth / 2 + 24;
-    const contentWidth = panelWidth - 48;
-    const stageStatus = getBattleStageStatus(stage, this.farmSlots, this.claimedExpeditionIds);
-    const isClaimed = stageStatus === 'claimed';
-    const allBattlesCleared = this.claimedExpeditionIds.size >= EXPEDITION_DEFINITIONS.length;
-    const battlePower = this.getCurrentExpeditionPower();
-    const finalHp = isClaimed ? 0 : getEnemyHpAfterBattle(battlePower, stage.requiredPower);
-    const initialHpRatio = isClaimed ? 0 : 1;
-    const teamMonsters = getTopBattleMonsters(this.farmSlots, 3);
-    const stageY = -panelHeight / 2 + (isCompactPanel ? 58 : 62);
-    const powerY = stageY + (isCompactPanel ? 30 : 34);
-    const arenaTop = powerY + (isCompactPanel ? 30 : 34);
-    const actionY = panelHeight / 2 - (isCompactPanel ? 104 : 108);
-    const arenaHeight = Math.max(
-      isCompactPanel ? 244 : 268,
-      Math.min(isCompactPanel ? 286 : 304, actionY - arenaTop - 54),
-    );
-    const arenaCenterY = arenaTop + arenaHeight / 2;
-    const playerX = -panelWidth * 0.23;
-    const enemyX = panelWidth * 0.24;
-    const enemyY = arenaTop + arenaHeight * 0.6;
-    const hpWidth = Math.min(isCompactPanel ? 150 : 178, contentWidth * 0.5);
-    const hpY = arenaTop + (isCompactPanel ? 48 : 52);
-    const statusText = isClaimed
-      ? this.t('ui.battle.claimed')
-      : stageStatus === 'ready'
-        ? this.t('ui.battle.readyBadge')
-        : this.t('ui.battle.needPowerBadge');
-    const statusColor = isClaimed
-      ? THEME.lockedInner
-      : stageStatus === 'ready'
-        ? THEME.buttonHover
-        : THEME.buttonWarm;
-
-    panel.add(this.add.text(contentLeft, stageY, this.getLocalizedExpeditionName(stage), {
-      color: THEME.goldText,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '17px' : '19px',
-      fontStyle: 'bold',
-      fixedWidth: contentWidth - 104,
-    }));
-    panel.add(this.add.text(contentLeft + contentWidth, stageY - 2, statusText, {
-      align: 'center',
-      backgroundColor: `#${statusColor.toString(16).padStart(6, '0')}`,
-      color: '#ffffff',
-      fixedWidth: isCompactPanel ? 86 : 98,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '11px' : '12px',
-      fontStyle: 'bold',
-      padding: { y: 4 },
-    }).setOrigin(1, 0));
-
-    panel.add(this.add.text(contentLeft, powerY, this.t('ui.battle.yourPower', {
-      amount: battlePower,
-    }), {
-      color: '#fff4a8',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '12px' : '14px',
-      fontStyle: 'bold',
-    }));
-    panel.add(this.add.text(contentLeft + contentWidth, powerY, this.t('ui.battle.enemyPower', {
-      amount: stage.requiredPower,
-    }), {
-      color: THEME.mutedText,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '12px' : '14px',
-      fontStyle: 'bold',
-    }).setOrigin(1, 0));
-
-    panel.add(this.add.rectangle(0, arenaCenterY, contentWidth, arenaHeight, 0x102a1c, 0.42)
-      .setStrokeStyle(2, THEME.panelBorder, 0.34));
-
-    panel.add(this.add.text(playerX, arenaTop + 16, this.t('ui.battle.yourTeam'), {
-      color: THEME.text,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '12px' : '13px',
-      fontStyle: 'bold',
-    }).setOrigin(0.5));
-
-    panel.add(this.add.text(enemyX, arenaTop + 16, this.t('ui.battle.enemy'), {
-      color: THEME.text,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '12px' : '13px',
-      fontStyle: 'bold',
-    }).setOrigin(0.5));
-
-    const hpTrack = this.add.rectangle(enemyX - hpWidth / 2, hpY + 14, hpWidth, 12, 0x14231a, 0.9)
-      .setOrigin(0)
-      .setStrokeStyle(1, THEME.panelBorder, 0.76);
-    const hpFill = this.add.rectangle(enemyX - hpWidth / 2 + 2, hpY + 16, Math.max(1, hpWidth - 4), 8, 0xd9574f, 0.96)
-      .setOrigin(0, 0.5)
-      .setScale(initialHpRatio, 1);
-    const hpText = this.add.text(enemyX, hpY - 2, this.t('ui.battle.enemyHp', {
-      current: finalHp,
-      max: stage.requiredPower,
-    }), {
-      color: THEME.mutedText,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '10px' : '11px',
-    }).setOrigin(0.5);
-    panel.add([hpTrack, hpFill, hpText]);
-
-    this.addBattleTeamVisuals(panel, teamMonsters, playerX, arenaTop + arenaHeight * 0.58, isCompactPanel);
-    const enemyContainer = this.add.container(enemyX, enemyY);
-    this.addBattleEnemyVisual(enemyContainer, stage, isCompactPanel ? 1.03 : 1.12);
-    panel.add(enemyContainer);
-
-    const damageText = this.add.text(enemyX + (isCompactPanel ? 38 : 48), enemyY - 40, '', {
-      color: '#fff0a8',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '21px' : '25px',
-      fontStyle: 'bold',
-      stroke: '#8f3044',
-      strokeThickness: 4,
-    }).setOrigin(0.5).setAlpha(0);
-    panel.add(damageText);
-
-    const resultText = this.add.text(0, arenaTop + arenaHeight + (isCompactPanel ? 10 : 12), isClaimed ? this.t('ui.battle.clearedReady') : this.t('ui.battle.ready'), {
-      align: 'center',
-      color: isClaimed ? '#cdebb3' : THEME.mutedText,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '12px' : '14px',
-      fontStyle: 'bold',
-      fixedWidth: contentWidth,
-      wordWrap: { width: contentWidth },
-    }).setOrigin(0.5, 0);
-    panel.add(resultText);
-
-    const buttonHeight = isCompactPanel ? 34 : 38;
-    const buttonGap = 10;
-    const buttonWidth = Math.min(isCompactPanel ? 126 : 150, (contentWidth - buttonGap) / 2);
-    const fightButton = this.addBattleButton(
-      panel,
-      -buttonWidth / 2 - buttonGap / 2,
-      actionY,
-      buttonWidth,
-      buttonHeight,
-      isClaimed ? this.t('ui.battle.replayFight') : this.t('ui.battle.fight'),
-      THEME.buttonWarm,
-      '#ffffff',
-      () => {
-        this.startBattleTrainingAnimation({
-          battlePower,
-          isClaimed,
-          damageText,
-          enemyContainer,
-          fightButton,
-          hpFill,
-          hpText,
-          resultText,
-          stage,
-          claimButton,
-        });
-      },
-      true,
-    );
-
-    const claimButton = this.addBattleButton(
-      panel,
-      buttonWidth / 2 + buttonGap / 2,
-      actionY,
-      buttonWidth,
-      buttonHeight,
-      isClaimed ? this.t('ui.battle.claimed') : this.t('ui.battle.claimReward'),
-      isClaimed ? THEME.lockedInner : THEME.buttonHover,
-      isClaimed ? '#cdebb3' : '#ffffff',
-      () => {
-        this.claimExpeditionReward(stage.id);
-      },
-      !isClaimed,
-    );
-    claimButton.setVisible(isClaimed);
-
-    panel.add(this.add.text(0, actionY + buttonHeight / 2 + 14, allBattlesCleared ? this.t('ui.battle.allClearedNote') : this.t('common.reward', {
-      reward: this.getExpeditionRewardText(stage.reward),
-    }), {
-      align: 'center',
-      color: allBattlesCleared ? '#cdebb3' : THEME.goldText,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '11px' : '12px',
-      fixedWidth: contentWidth,
-      wordWrap: { width: contentWidth },
-    }).setOrigin(0.5, 0));
-
-    if (isClaimed) {
-      hpText.setText(this.t('ui.battle.enemyHp', {
-        current: 0,
-        max: stage.requiredPower,
-      }));
-    }
-  }
-
-  private addBattleTeamVisuals(
-    panel: Phaser.GameObjects.Container,
-    monsters: MonsterInstance[],
-    centerX: number,
-    centerY: number,
-    isCompactPanel: boolean,
-  ): void {
-    if (monsters.length === 0) {
-      panel.add(this.add.text(centerX, centerY, this.t('ui.battle.noTeam'), {
-        align: 'center',
-        color: THEME.mutedText,
-        fontFamily: UI_FONT_FAMILY,
-        fontSize: isCompactPanel ? '11px' : '13px',
-        fixedWidth: isCompactPanel ? 108 : 130,
-        wordWrap: { width: isCompactPanel ? 108 : 130 },
-      }).setOrigin(0.5));
-      return;
-    }
-
-    const spacing = isCompactPanel ? 45 : 52;
-    const cardWidth = isCompactPanel ? 42 : 48;
-    const cardHeight = isCompactPanel ? 72 : 78;
-    const startX = centerX - spacing * (monsters.length - 1) / 2;
-
-    monsters.forEach((monster, index) => {
-      const x = startX + index * spacing;
-      const cardY = centerY + (isCompactPanel ? 24 : 28);
-
-      panel.add(this.add.rectangle(x, cardY, cardWidth, cardHeight, THEME.slot, 0.88)
-        .setStrokeStyle(2, THEME.slotBorder, 0.72));
-      this.monsterRenderer.addMonsterVisual(panel, monster, x, cardY - (isCompactPanel ? 12 : 14), isCompactPanel ? 0.46 : 0.52);
-      panel.add(this.add.text(x, cardY + cardHeight / 2 - 17, this.t('common.levelShort', {
-        level: monster.level,
-      }), {
-        align: 'center',
-        color: '#173c27',
-        fontFamily: UI_FONT_FAMILY,
-        fontSize: isCompactPanel ? '10px' : '11px',
-        fontStyle: 'bold',
-      }).setOrigin(0.5));
-      panel.add(this.add.text(x, cardY + cardHeight / 2 - 3, getMonsterBattlePower(monster).toString(), {
-        align: 'center',
-        color: '#173c27',
-        fontFamily: UI_FONT_FAMILY,
-        fontSize: isCompactPanel ? '9px' : '10px',
-        fontStyle: 'bold',
-      }).setOrigin(0.5));
-    });
-  }
-
-  private addBattleEnemyVisual(
-    container: Phaser.GameObjects.Container,
-    stage: ExpeditionDefinition,
-    scale: number,
-  ): void {
-    const shadow = this.add.ellipse(0, 36 * scale, 82 * scale, 18 * scale, THEME.shadow, 0.24);
-    container.add(shadow);
-
-    if (stage.id === 'training-dummy') {
-      container.add(this.add.rectangle(0, 4 * scale, 24 * scale, 62 * scale, 0x9b7446, 0.96)
-        .setStrokeStyle(3, 0x5b3a21, 0.85));
-      container.add(this.add.circle(0, -34 * scale, 20 * scale, 0xc68a4c, 0.96)
-        .setStrokeStyle(3, 0x5b3a21, 0.85));
-      container.add(this.add.rectangle(0, -4 * scale, 64 * scale, 10 * scale, 0xc68a4c, 0.96)
-        .setStrokeStyle(2, 0x5b3a21, 0.75));
-      return;
-    }
-
-    if (stage.id === 'wobbly-sprout') {
-      container.add(this.add.ellipse(0, 12 * scale, 44 * scale, 48 * scale, 0x75c85b, 0.96)
-        .setStrokeStyle(3, 0x2f6d35, 0.85));
-      container.add(this.add.ellipse(-16 * scale, -18 * scale, 22 * scale, 36 * scale, 0x9de06f, 0.9).setAngle(-26));
-      container.add(this.add.ellipse(17 * scale, -18 * scale, 22 * scale, 36 * scale, 0x9de06f, 0.9).setAngle(26));
-      return;
-    }
-
-    if (stage.id === 'forest-guardian') {
-      container.add(this.add.rectangle(0, 8 * scale, 44 * scale, 70 * scale, 0x76512d, 0.96)
-        .setStrokeStyle(3, 0x3d2615, 0.86));
-      container.add(this.add.circle(-22 * scale, -24 * scale, 28 * scale, 0x4f944b, 0.95));
-      container.add(this.add.circle(18 * scale, -32 * scale, 32 * scale, 0x5da957, 0.95));
-      container.add(this.add.circle(0, -46 * scale, 28 * scale, 0x6fbd64, 0.95));
-      return;
-    }
-
-    if (stage.id === 'ancient-stump') {
-      container.add(this.add.ellipse(0, 5 * scale, 62 * scale, 74 * scale, 0x7a5734, 0.96)
-        .setStrokeStyle(4, 0x3d2615, 0.86));
-      container.add(this.add.ellipse(0, -24 * scale, 52 * scale, 20 * scale, 0xb58650, 0.94)
-        .setStrokeStyle(2, 0x3d2615, 0.7));
-      container.add(this.add.circle(-13 * scale, 1 * scale, 4 * scale, 0x14351f));
-      container.add(this.add.circle(13 * scale, 1 * scale, 4 * scale, 0x14351f));
-      return;
-    }
-
-    const dragonScale = stage.id === 'tiny-dragon' ? 1.12 * scale : scale;
-    const bodyColor = stage.id === 'tiny-dragon' ? 0x5a54c8 : 0x7554c8;
-    container.add(this.add.ellipse(0, 12 * dragonScale, 58 * dragonScale, 44 * dragonScale, bodyColor, 0.96)
-      .setStrokeStyle(3, 0x342052, 0.9));
-    container.add(this.add.circle(0, -24 * dragonScale, 28 * dragonScale, 0x8e67da, 0.96)
-      .setStrokeStyle(3, 0x342052, 0.9));
-    container.add(this.add.triangle(-36 * dragonScale, 5 * dragonScale, 0, 20 * dragonScale, -28 * dragonScale, -28 * dragonScale, 16 * dragonScale, -10 * dragonScale, 0xb956bf, 0.9)
-      .setStrokeStyle(2, 0x342052, 0.78));
-    container.add(this.add.triangle(36 * dragonScale, 5 * dragonScale, 0, 20 * dragonScale, 28 * dragonScale, -28 * dragonScale, -16 * dragonScale, -10 * dragonScale, 0xb956bf, 0.9)
-      .setStrokeStyle(2, 0x342052, 0.78));
-  }
-
   private addBattleButton(
     panel: Phaser.GameObjects.Container,
     x: number,
@@ -4181,114 +3849,6 @@ export class FarmScene extends Phaser.Scene {
     return button;
   }
 
-  private startBattleTrainingAnimation(options: {
-    battlePower: number;
-    claimButton: Phaser.GameObjects.Text;
-    damageText: Phaser.GameObjects.Text;
-    enemyContainer: Phaser.GameObjects.Container;
-    fightButton: Phaser.GameObjects.Text;
-    hpFill: Phaser.GameObjects.Rectangle;
-    hpText: Phaser.GameObjects.Text;
-    isClaimed: boolean;
-    resultText: Phaser.GameObjects.Text;
-    stage: ExpeditionDefinition;
-  }): void {
-    if (this.battleAnimationInProgress) {
-      return;
-    }
-
-    this.clearBattleAnimationEvents();
-    this.battleAnimationInProgress = true;
-    options.claimButton.setVisible(options.isClaimed);
-    options.fightButton.disableInteractive();
-    options.fightButton.setAlpha(0.62);
-    options.resultText.setColor(THEME.mutedText);
-    options.resultText.setText(this.t('ui.battle.fighting'));
-    options.hpFill.setScale(1, 1);
-    options.hpText.setText(this.t('ui.battle.enemyHp', {
-      current: options.stage.requiredPower,
-      max: options.stage.requiredPower,
-    }));
-
-    const tickCount = 4;
-    const damageTicks = getBattleDamageTicks(options.battlePower, options.stage.requiredPower, tickCount);
-    const finalHp = getEnemyHpAfterBattle(options.battlePower, options.stage.requiredPower);
-    let currentHp = options.stage.requiredPower;
-
-    damageTicks.forEach((damage, index) => {
-      const event = this.time.delayedCall(220 + index * 260, () => {
-        currentHp = index === damageTicks.length - 1
-          ? finalHp
-          : Math.max(finalHp, currentHp - damage);
-        const hpRatio = Phaser.Math.Clamp(currentHp / options.stage.requiredPower, 0, 1);
-
-        this.tweens.add({
-          duration: 180,
-          ease: 'Sine.easeOut',
-          scaleX: hpRatio,
-          targets: options.hpFill,
-        });
-        options.hpText.setText(this.t('ui.battle.enemyHp', {
-          current: currentHp,
-          max: options.stage.requiredPower,
-        }));
-
-        if (damage > 0) {
-          options.damageText.setText(`-${damage}`);
-          options.damageText.setAlpha(1);
-          options.damageText.setY(options.enemyContainer.y - 40);
-          this.tweens.add({
-            alpha: 0,
-            duration: 360,
-            ease: 'Sine.easeOut',
-            targets: options.damageText,
-            y: options.enemyContainer.y - 64,
-          });
-        }
-
-        this.tweens.add({
-          duration: 90,
-          ease: 'Sine.easeOut',
-          scaleX: 1.06,
-          scaleY: 0.94,
-          targets: options.enemyContainer,
-          yoyo: true,
-        });
-      });
-      this.battleAnimationEvents.push(event);
-    });
-
-    const finishEvent = this.time.delayedCall(220 + tickCount * 260 + 160, () => {
-      const result = getBattleResult(options.battlePower, options.stage.requiredPower);
-
-      this.battleAnimationInProgress = false;
-      options.fightButton.setAlpha(1);
-      options.fightButton.setInteractive({ useHandCursor: true });
-
-      if (result === 'victory') {
-        options.resultText.setColor('#fff4a8');
-        options.resultText.setText(this.t('ui.battle.victory'));
-        options.claimButton.setText(options.isClaimed ? this.t('ui.battle.claimed') : this.t('ui.battle.claimReward'));
-        options.claimButton.setBackgroundColor(`#${(options.isClaimed ? THEME.lockedInner : THEME.buttonHover).toString(16).padStart(6, '0')}`);
-        if (!options.isClaimed) {
-          options.claimButton.setInteractive({ useHandCursor: true });
-        }
-        options.claimButton.setVisible(options.isClaimed || canClaimBattleReward(options.stage, this.farmSlots, this.claimedExpeditionIds));
-        return;
-      }
-
-      options.resultText.setColor('#fff4a8');
-      options.resultText.setText(this.t('ui.battle.needMorePower'));
-      if (!options.isClaimed) {
-        options.claimButton.setText(this.t('ui.battle.needMorePower'));
-        options.claimButton.setBackgroundColor(`#${THEME.lockedInner.toString(16).padStart(6, '0')}`);
-        options.claimButton.disableInteractive();
-        options.claimButton.setVisible(true);
-      }
-    });
-    this.battleAnimationEvents.push(finishEvent);
-  }
-
   private clearBattleAnimationEvents(): void {
     this.battleAnimationEvents.forEach((event) => {
       event.remove(false);
@@ -4297,93 +3857,16 @@ export class FarmScene extends Phaser.Scene {
     this.battleAnimationInProgress = false;
   }
 
-  private addExpeditionRow(
-    panel: Phaser.GameObjects.Container,
-    expedition: ExpeditionDefinition,
-    rowY: number,
-    panelWidth: number,
-    rowHeight: number,
-  ): Phaser.GameObjects.Text {
-    const status = this.getExpeditionStatus(expedition);
-    const canClaim = status === 'ready';
-    const isClaimed = status === 'claimed';
-    const isCompactPanel = panelWidth < 420 || rowHeight < 64;
-    const rowTop = rowY - rowHeight / 2;
-    const rowWidth = panelWidth - 48;
-    const leftX = -panelWidth / 2 + 42;
-    const leftTextWidth = panelWidth - (isCompactPanel ? 166 : 196);
-
-    panel.add(this.add.rectangle(0, rowY, rowWidth, rowHeight, isClaimed ? 0x29362f : THEME.panelAlt, 0.92)
-      .setStrokeStyle(2, canClaim ? THEME.slot : THEME.lockedBorder, 0.72));
-
-    panel.add(this.add.text(leftX, rowTop + 7, this.getLocalizedExpeditionName(expedition), {
-      color: isClaimed ? '#cdebb3' : THEME.text,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '13px' : '15px',
-      fontStyle: 'bold',
-      wordWrap: {
-        width: leftTextWidth,
-      },
-    }));
-
-    panel.add(this.add.text(leftX, rowTop + (isCompactPanel ? 27 : 29), this.t('ui.expedition.requiredPower', {
-      amount: expedition.requiredPower,
-    }), {
-      color: canClaim ? '#fff4a8' : THEME.mutedText,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '11px' : '12px',
-      wordWrap: {
-        width: leftTextWidth,
-      },
-    }));
-
-    panel.add(this.add.text(leftX, rowTop + (isCompactPanel ? 44 : 47), this.t('common.reward', {
-      reward: this.getExpeditionRewardText(expedition.reward),
-    }), {
-      color: canClaim ? '#fff4a8' : THEME.mutedText,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '11px' : '12px',
-      wordWrap: {
-        width: leftTextWidth,
-      },
-    }));
-
-    const actionText = this.add.text(panelWidth / 2 - 42, rowY, this.getExpeditionStatusText(status), {
-      color: isClaimed ? '#cdebb3' : '#ffffff',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '11px' : '13px',
-      fontStyle: 'bold',
-      backgroundColor: `#${(canClaim ? THEME.buttonHover : THEME.lockedInner).toString(16).padStart(6, '0')}`,
-      padding: {
-        x: isCompactPanel ? 7 : 10,
-        y: 5,
-      },
-    }).setOrigin(1, 0.5);
-
-    if (canClaim) {
-      actionText
-        .setInteractive({ useHandCursor: true })
-        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-          pointer.event?.stopPropagation();
-          this.playButtonClickSound();
-          this.claimExpeditionReward(expedition.id);
-        });
-    }
-
-    panel.add(actionText);
-    return actionText;
-  }
-
-  private closeExpeditionPanel(
+  private closeBossBattlePanel(
     resetBossBattleState = true,
-    options: ExpeditionPanelRefreshOptions = {},
+    options: BossBattlePanelRefreshOptions = {},
   ): void {
-    if (this.expeditionPanel) {
+    if (this.bossBattlePanel) {
       if (!options.preserveBattleAnimation) {
         this.clearBattleAnimationEvents();
       }
-      this.expeditionPanel.destroy();
-      this.expeditionPanel = undefined;
+      this.bossBattlePanel.destroy();
+      this.bossBattlePanel = undefined;
       if (resetBossBattleState) {
         this.selectedBossBattleBossId = undefined;
         this.bossBattleSession = undefined;
@@ -4399,9 +3882,9 @@ export class FarmScene extends Phaser.Scene {
     }
   }
 
-  private refreshExpeditionPanel(options: ExpeditionPanelRefreshOptions = { preserveBattleAnimation: true }): void {
-    if (this.expeditionPanel) {
-      this.openExpeditionPanel(false, options);
+  private refreshBossBattlePanel(options: BossBattlePanelRefreshOptions = { preserveBattleAnimation: true }): void {
+    if (this.bossBattlePanel) {
+      this.openBossBattlePanel(false, options);
     }
   }
 
@@ -4411,7 +3894,7 @@ export class FarmScene extends Phaser.Scene {
     }
 
     this.bossBattleBossPageIndex = this.getClampedBossBattleBossPageIndex(pageIndex);
-    this.refreshExpeditionPanel();
+    this.refreshBossBattlePanel();
   }
 
   private selectBossBattleStagePage(pageIndex: number): void {
@@ -4426,7 +3909,7 @@ export class FarmScene extends Phaser.Scene {
     }
 
     this.bossBattleStagePageIndex = this.getClampedBossBattleStagePageIndex(pageIndex, boss);
-    this.refreshExpeditionPanel();
+    this.refreshBossBattlePanel();
   }
 
   private selectBossBattleStage(stageIndex: number): void {
@@ -4450,7 +3933,7 @@ export class FarmScene extends Phaser.Scene {
     this.bossBattleTurnBanner = '';
     this.bossBattlePlayerVisualEffect = undefined;
     this.bossBattleBossVisualEffect = undefined;
-    this.refreshExpeditionPanel();
+    this.refreshBossBattlePanel();
   }
 
   private enterBossBattleRoom(bossId: BossBattleBossId): void {
@@ -4475,7 +3958,7 @@ export class FarmScene extends Phaser.Scene {
     this.bossBattleTurnBanner = '';
     this.bossBattlePlayerVisualEffect = undefined;
     this.bossBattleBossVisualEffect = undefined;
-    this.refreshExpeditionPanel();
+    this.refreshBossBattlePanel();
   }
 
   private backToBossBattleSelect(): void {
@@ -4493,7 +3976,7 @@ export class FarmScene extends Phaser.Scene {
     this.bossBattlePlayerVisualEffect = undefined;
     this.bossBattleBossVisualEffect = undefined;
     this.bossBattleStagePageIndex = 0;
-    this.refreshExpeditionPanel();
+    this.refreshBossBattlePanel();
   }
 
   private getSelectedBossBattleDefinition(): BossBattleDefinition | undefined {
@@ -4549,7 +4032,7 @@ export class FarmScene extends Phaser.Scene {
 
     if (team.length === 0) {
       this.bossBattleStatusText = this.t('ui.bossBattle.noTeam');
-      this.refreshExpeditionPanel();
+      this.refreshBossBattlePanel();
       return;
     }
 
@@ -4560,7 +4043,7 @@ export class FarmScene extends Phaser.Scene {
     this.bossBattleTurnBanner = 'player';
     this.bossBattlePlayerVisualEffect = undefined;
     this.bossBattleBossVisualEffect = undefined;
-    this.refreshExpeditionPanel();
+    this.refreshBossBattlePanel();
   }
 
   private useBossBattleSkill(skillId: BattleSkillId): void {
@@ -4625,15 +4108,15 @@ export class FarmScene extends Phaser.Scene {
     this.bossBattleSession = nextSession;
     this.bossBattleStatusText = resultParts.join('  ');
     this.bossBattleLogText = resultParts.join('  ');
-    this.refreshExpeditionPanel();
+    this.refreshBossBattlePanel();
 
     if (nextSession.status !== 'ready') {
       this.handleBossBattleResult(stage);
-      this.refreshExpeditionPanel();
+      this.refreshBossBattlePanel();
       const finishPlayerOnlyEvent = this.time.delayedCall(460, () => {
         this.battleAnimationInProgress = false;
         this.bossBattlePlayerVisualEffect = undefined;
-        this.refreshExpeditionPanel();
+        this.refreshBossBattlePanel();
       });
       this.battleAnimationEvents.push(finishPlayerOnlyEvent);
       return;
@@ -4693,7 +4176,7 @@ export class FarmScene extends Phaser.Scene {
       this.bossBattleStatusText = turnLogParts.join('  ');
       this.bossBattleLogText = turnLogParts.join('  ');
       this.handleBossBattleResult(stage);
-      this.refreshExpeditionPanel();
+      this.refreshBossBattlePanel();
 
       const finishBossEvent = this.time.delayedCall(620, () => {
         if (this.bossBattleSession?.stageId !== stage.id) {
@@ -4712,7 +4195,7 @@ export class FarmScene extends Phaser.Scene {
           this.bossBattleTargetMonsterId = undefined;
         }
 
-        this.refreshExpeditionPanel();
+        this.refreshBossBattlePanel();
       });
       this.battleAnimationEvents.push(finishBossEvent);
     });
@@ -4782,7 +4265,7 @@ export class FarmScene extends Phaser.Scene {
     this.bossBattleStatusText = this.t('ui.bossBattle.claimedReward', {
       reward: this.getBossBattleRewardText(stage.firstClearReward),
     });
-    this.refreshExpeditionPanel();
+    this.refreshBossBattlePanel();
     this.showToast(this.t('toast.bossBattleReward', {
       reward: this.getBossBattleRewardText(stage.firstClearReward),
     }), 'success');
@@ -4809,7 +4292,7 @@ export class FarmScene extends Phaser.Scene {
     this.bossBattleTurnBanner = 'player';
     this.bossBattlePlayerVisualEffect = undefined;
     this.bossBattleBossVisualEffect = undefined;
-    this.refreshExpeditionPanel();
+    this.refreshBossBattlePanel();
   }
 
   private grantBossBattleReward(reward: BossBattleReward): void {
@@ -4926,70 +4409,6 @@ export class FarmScene extends Phaser.Scene {
     return this.getCompactBossBattleText(text, maxLength);
   }
 
-  private getExpeditionDefinition(expeditionId: ExpeditionId): ExpeditionDefinition | undefined {
-    return EXPEDITION_DEFINITIONS.find((expedition) => expedition.id === expeditionId);
-  }
-
-  private getLocalizedExpeditionName(expedition: ExpeditionDefinition): string {
-    return this.t(`expedition.${expedition.id}.name`);
-  }
-
-  private getCurrentExpeditionPower(): number {
-    return getBattlePower(this.farmSlots);
-  }
-
-  private getExpeditionStatus(expedition: ExpeditionDefinition): ExpeditionStatus {
-    return getExpeditionStatus(expedition, this.farmSlots, this.claimedExpeditionIds);
-  }
-
-  private getExpeditionStatusText(status: ExpeditionStatus): string {
-    if (status === 'claimed') {
-      return this.t('ui.expedition.claimed');
-    }
-
-    if (status === 'ready') {
-      return this.t('ui.expedition.claim');
-    }
-
-    return this.t('ui.expedition.needPower');
-  }
-
-  private claimExpeditionReward(expeditionId: ExpeditionId): void {
-    const expedition = this.getExpeditionDefinition(expeditionId);
-
-    if (!expedition || !canClaimExpedition(expedition, this.farmSlots, this.claimedExpeditionIds)) {
-      return;
-    }
-
-    if (expedition.reward.type === 'coins') {
-      this.currency.coins = this.sanitizeCoins(this.currency.coins + expedition.reward.amount);
-    } else {
-      this.monsterEssence = sanitizePrestigeIntegerState(this.monsterEssence + expedition.reward.amount);
-      this.syncZoneUnlockFromPrestigeProgress();
-    }
-
-    this.claimedExpeditionIds.add(expeditionId);
-    this.skipSavingUntilProgress = false;
-    this.updateHud();
-    this.saveProgress();
-    this.refreshExpeditionPanel();
-    this.showToast(this.t('toast.expeditionCleared', {
-      reward: this.getExpeditionRewardText(expedition.reward),
-    }), 'success');
-  }
-
-  private getExpeditionRewardText(reward: ExpeditionReward): string {
-    if (reward.type === 'coins') {
-      return this.t('common.coins', {
-        amount: this.formatCoinAmount(reward.amount),
-      });
-    }
-
-    return this.t('common.essence', {
-      amount: reward.amount,
-    });
-  }
-
   private toggleEconomyDebugPanel(): void {
     if (this.economyDebugPanel) {
       this.closeEconomyDebugPanel();
@@ -5008,7 +4427,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
-    this.closeExpeditionPanel();
+    this.closeBossBattlePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.clearSelectedSlot();
@@ -5117,7 +4536,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
-    this.closeExpeditionPanel();
+    this.closeBossBattlePanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
     this.cancelActiveDrag();
@@ -5289,7 +4708,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
-    this.closeExpeditionPanel();
+    this.closeBossBattlePanel();
     this.closeUpgradeShopPanel();
     this.closeEconomyDebugPanel();
     this.cancelActiveDrag();
@@ -7263,7 +6682,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
-    this.closeExpeditionPanel();
+    this.closeBossBattlePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -7442,7 +6861,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
-    this.closeExpeditionPanel();
+    this.closeBossBattlePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -8184,7 +7603,6 @@ export class FarmScene extends Phaser.Scene {
     this.completedMissionIds = loadedSets.completedMissionIds;
     this.claimedMissionIds = loadedSets.claimedMissionIds;
     this.claimedOrderIds = loadedSets.claimedOrderIds;
-    this.claimedExpeditionIds = getSanitizedClaimedExpeditionIdsFromState(saveData.claimedExpeditionIds, EXPEDITION_IDS);
     this.claimedBossBattleStageIds = loadedSets.claimedBossBattleStageIds;
     this.syncMissionStateFromCurrentProgress(false);
     this.unlockedZones = getSanitizedUnlockedZones(saveData.unlockedZones, ZONE_IDS, GRASS_FARM_ZONE_ID);
@@ -8267,7 +7685,6 @@ export class FarmScene extends Phaser.Scene {
       completedMissionIds: this.completedMissionIds,
       claimedMissionIds: this.claimedMissionIds,
       claimedOrderIds: this.claimedOrderIds,
-      claimedExpeditionIds: this.claimedExpeditionIds,
       claimedBossBattleStageIds: this.claimedBossBattleStageIds,
       unlockedZones: this.unlockedZones,
       currentZone: this.currentZone,
@@ -8309,7 +7726,6 @@ export class FarmScene extends Phaser.Scene {
     this.completedMissionIds = new Set<MissionId>();
     this.claimedMissionIds = new Set<MissionId>();
     this.claimedOrderIds = new Set<OrderId>();
-    this.claimedExpeditionIds = new Set<ExpeditionId>();
     this.claimedBossBattleStageIds = new Set<string>();
     this.selectedBossBattleBossId = undefined;
     this.bossBattleSession = undefined;
@@ -8359,7 +7775,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
-    this.closeExpeditionPanel();
+    this.closeBossBattlePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeHatchPoolPanel();
@@ -8408,7 +7824,6 @@ export class FarmScene extends Phaser.Scene {
       || this.completedMissionIds.size > 0
       || this.claimedMissionIds.size > 0
       || this.claimedOrderIds.size > 0
-      || this.claimedExpeditionIds.size > 0
       || this.claimedBossBattleStageIds.size > 0
       || Object.values(this.missionProgress).some((progress) => progress > 0)
       || this.farmSlots.some((slot) => slot.monster !== null)
