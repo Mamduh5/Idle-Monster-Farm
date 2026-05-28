@@ -1,19 +1,22 @@
 # Idle Monster Farm
 
-Idle Monster Farm is a browser alpha idle merge game. Hatch monsters, merge matching creatures, earn passive coins, buy upgrades, complete goals, prestige for Monster Essence, and unlock Mushroom Forest.
+Idle Monster Farm is a browser alpha idle merge game. Hatch monsters from a progress-based Hatch Pool, merge and fuse creatures, earn passive coins, buy upgrades, complete goals, prestige for Monster Essence, and unlock new zones.
 
 ## Current Alpha Features
 
 - Idle coin income from owned monsters
 - Hatch and merge loop
-- Slime and Mushroom monster families
+- Slime, Mushroom, Spore, Cactus, Cell, and Plant monster families
+- Hatch Pool panel with family odds, rare-family locks, zone bonuses, and Hatch Blessing level odds
+- Cross-family fusion recipes for Spore, Cactus, Cell, and Plant
 - Unlockable expansion slots
 - Upgrade Shop
 - Egg Discount, Tap Power, Fusion Power, Order Bonus, and Coin Bug Value upgrade depth
 - Goals/Missions
 - Tap Farm combo reaction stack and Farm Burst feedback
-- Monster Essence prestige
-- Zone 2: Mushroom Forest
+- Monster Essence prestige with Hatch Blessing and Rare Hatch upgrades
+- Zones: Grass Farm, Mushroom Forest, Spore Grove, and Cactus Desert
+- Boss Battle teams and skills for all monster families
 - Compact Menu navigation for panels
 - Local save/load
 - Offline earnings

@@ -1140,6 +1140,7 @@ export class FarmScene extends Phaser.Scene {
     const menuItems: NavigationMenuPanelItem[] = [
       { label: this.t('ui.menu.settings'), openPanel: () => this.openSettingsPanel() },
       { label: this.t('ui.menu.help'), openPanel: () => this.openHelpPanel() },
+      { label: this.t('ui.menu.hatchPool'), openPanel: () => this.openHatchPoolPanel() },
       { label: this.t('ui.menu.compendium'), openPanel: () => this.openCompendiumPanel() },
       { label: this.t('ui.menu.zone'), openPanel: () => this.openZonePanel() },
     ];

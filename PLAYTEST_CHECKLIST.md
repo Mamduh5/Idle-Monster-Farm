@@ -4,10 +4,11 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 
 ## Fresh Save
 - Start with 10 coins and an empty 3x3 grid.
-- Open Zone and confirm Grass Farm is selected and Mushroom Forest is locked with a prestige requirement.
+- Open Zone and confirm Grass Farm is selected and later zones are locked until Ritual/discovery progress.
 - Open Goals and confirm starter missions are listed with progress, rewards, and disabled claim states.
 - Hatch the first Baby Slime and confirm passive coin ticks begin.
 - Hatch three monsters and confirm the hatch mission completes.
+- Open Hatch Pool from Menu, then hold Hatch to open it again, and confirm family odds, locked-family hints, Rare Hatch level, Hatch Blessing odds, and current zone specialty are visible.
 - Hatch until a Button Mushroom appears, then confirm it earns coins and appears in the Compendium.
 - Hatch multiple Slimes, merge two matching Slimes, and confirm the merged monster remains selected.
 - Merge one valid pair and confirm the merge mission completes.
@@ -15,10 +16,12 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Merge Slime + Mushroom of the same level, and Mushroom + Slime of the same level, and confirm both create the matching-level Spore.
 - Try Slime + Mushroom at different levels and confirm the invalid fusion rejects safely.
 - Merge two same-level Spores and confirm they create the next Spore level; confirm max-level Spore + max-level Spore rejects safely.
-- Merge Spore + Slime and Mushroom + Spore at the same level and confirm both create the next Spore level.
-- Confirm Spore Level 10 exists, looks distinct, and Spore Level 10 + same-level Slime/Mushroom rejects safely because no Level 11 Spore exists.
+- Merge Mushroom + Spore at the same level and confirm it creates matching-level Cactus.
+- Merge Slime + Spore at the same level and confirm it creates matching-level Cell.
+- Merge Cell + Cactus at the same level and confirm it creates matching-level Plant.
+- Confirm Spore, Cactus, Cell, and Plant each support 15 levels, and max-level same-family merges reject safely.
 - Confirm Mushroom Level 5 and Mushroom Level 6 look visually distinct on the farm and in the Compendium.
-- Open Compendium after discovering a Spore and confirm the Spore family appears with locked/visible rows as expected.
+- Open Compendium after discovering Spore, Cactus, Cell, and Plant and confirm each family appears with locked/visible rows as expected.
 - Confirm Mushroom Levels 5-8 and high-level Slimes look visually distinguishable and more impressive at higher levels.
 - Confirm the Next Order widget is visible on the main farm screen and does not overlap Hatch, Tap Farm, Menu, grid, or expansion controls.
 - Own or seed a claimable Order, claim it from the Next Order widget, and confirm the required monster remains on the farm.
@@ -32,7 +35,7 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Buy Coin Bug Value and confirm Coin Bug pickup rewards increase.
 - Use x10 or Max on Egg Discount, Tap Power, Fusion Power, Order Bonus, or Coin Bug Value and confirm bulk buying respects cost, coins, and max level.
 - Claim a completed coin mission, confirm coins increase, and confirm the mission cannot be claimed again.
-- Buy Mushroom Income Boost and Mushroom Chance, then confirm Mushroom income and hatch odds text update.
+- Buy Mushroom Income Boost and Mushroom Chance, then confirm Mushroom income and Hatch Pool odds update.
 - Fill the grid, confirm the hatch panel says the farm is full, then merge a valid pair to free space.
 - Tap Tap Farm and confirm coins increase immediately with a compact `+coins` popup.
 - Tap Tap Farm repeatedly and confirm the combo badge keeps reward text separate while the combo number and multiplier stay readable.
@@ -97,9 +100,9 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Confirm claimed Orders persist as Done after reload and cannot be claimed again.
 - Confirm reloading after claiming an Order does not delete the monster that completed it.
 - Reload after unlocking expansion and confirm expanded-slot monsters persist.
-- After owning a Level 6+ Slime or Level 5 Mushroom, open Prestige, confirm reset grants Monster Essence, buy Essence Power, and reload to confirm both persist.
-- After prestiging once, confirm Mushroom Forest unlocks in Zone, can be selected, changes the background, and shows the Mushroom hatch +5% bonus.
-- Reload after switching zones and confirm the selected zone and Mushroom Forest unlock persist.
+- After owning a Level 6+ Slime or Level 5 Mushroom, open Ritual, confirm reset grants Monster Essence, buy Hatch Blessing and Rare Hatch, and reload to confirm both persist.
+- After Ritual/discovery progress, confirm Mushroom Forest, Spore Grove, and Cactus Desert unlock in Zone, can be selected, change the background, and alter Hatch Pool odds.
+- Reload after switching zones and confirm the selected zone and unlocked zone set persist.
 - After egg costs grow large, confirm Hatch Egg and Production next-egg costs use compact formatting.
 - Confirm Settings persist separately from gameplay save.
 
@@ -118,6 +121,6 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Confirm expansion returns to locked after reset.
 
 ## Max Level And Console
-- Confirm Level 12 + Level 12 Slime and Level 8 + Level 8 Mushroom fail safely and both monsters remain.
+- Confirm Level 15 + Level 15 monsters fail safely and both monsters remain.
 - Try an invalid drag and confirm no monster is duplicated or deleted.
 - Confirm browser console errors are `0`.
