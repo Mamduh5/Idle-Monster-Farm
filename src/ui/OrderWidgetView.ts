@@ -49,11 +49,6 @@ export class OrderWidgetView {
     this.destroy();
 
     const order = this.options.getRecommendedOrder();
-
-    if (!order) {
-      return;
-    }
-
     const { fontFamily, theme } = this.options;
     const layout = this.options.getLayout();
     const x = layout.orderWidgetX;
@@ -61,7 +56,7 @@ export class OrderWidgetView {
     const width = layout.orderWidgetWidth;
     const height = layout.orderWidgetHeight;
     const isCompact = layout.isNarrow || width < 190;
-    const isClaimable = this.options.isOrderComplete(order) && !this.options.isOrderClaimed(order.id);
+    const isClaimable = order ? this.options.isOrderComplete(order) && !this.options.isOrderClaimed(order.id) : false;
     const container = this.scene.add.container(0, 0).setDepth(7);
 
     container.add(this.scene.add.rectangle(x + 3, y + 4, width, height, theme.shadow, 0.22)
@@ -92,6 +87,22 @@ export class OrderWidgetView {
       fontStyle: 'bold',
       fixedWidth: width - 20,
     }));
+
+    if (!order) {
+      container.add(this.scene.add.text(x + 10, y + (isCompact ? 27 : 30), this.options.t('ui.orderWidget.allDone'), {
+        color: theme.text,
+        fontFamily,
+        fontSize: isCompact ? '11px' : '12px',
+        fontStyle: 'bold',
+        fixedWidth: width - 20,
+        wordWrap: {
+          width: width - 20,
+        },
+      }));
+
+      this.container = container;
+      return;
+    }
 
     container.add(this.scene.add.text(x + 10, y + (isCompact ? 23 : 25), this.options.getOrderRequirementText(order), {
       color: theme.text,

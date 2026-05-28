@@ -1,5 +1,7 @@
 import {
+  BLOOM_GARDEN_ZONE_ID,
   CACTUS_DESERT_ZONE_ID,
+  CELL_MARSH_ZONE_ID,
   SPORE_GROVE_ZONE_ID,
   type ZoneId,
 } from '../data/zones';
@@ -328,6 +330,14 @@ export function syncZoneUnlockFromPrestigeProgress(
 
   if (totalRitualsPerformed >= 4 || discoveredFamilies.has('Cactus')) {
     nextUnlockedZones.add(CACTUS_DESERT_ZONE_ID);
+  }
+
+  if (totalRitualsPerformed >= 5 || discoveredFamilies.has('Cell')) {
+    nextUnlockedZones.add(CELL_MARSH_ZONE_ID);
+  }
+
+  if (totalRitualsPerformed >= 7 || discoveredFamilies.has('Plant')) {
+    nextUnlockedZones.add(BLOOM_GARDEN_ZONE_ID);
   }
 
   nextUnlockedZones.add(defaultZoneId);

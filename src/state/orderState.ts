@@ -75,5 +75,5 @@ export function getRecommendedOrder(
 ): OrderDefinition | undefined {
   return orderDefinitions.find((order) => !claimedOrderIds.has(order.id) && isOrderComplete(order, farmSlots, discoveredMonsters))
     ?? orderDefinitions.find((order) => !claimedOrderIds.has(order.id) && isOrderUnlocked(order, discoveredMonsters))
-    ?? orderDefinitions.find((order) => !claimedOrderIds.has(order.id));
+    ?? orderDefinitions.find((order) => !claimedOrderIds.has(order.id) && !order.unlockCondition);
 }

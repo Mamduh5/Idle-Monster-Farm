@@ -26,6 +26,15 @@ export type OrderId =
   | 'own-spore-7'
   | 'own-spore-8'
   | 'own-spore-10'
+  | 'own-cactus-1'
+  | 'own-cactus-3'
+  | 'own-cactus-6'
+  | 'own-cell-1'
+  | 'own-cell-3'
+  | 'own-cell-6'
+  | 'own-plant-1'
+  | 'own-plant-3'
+  | 'own-plant-6'
   | 'own-mushroom-3'
   | 'own-slime-6'
   | 'own-mushroom-6'
@@ -159,6 +168,141 @@ export const ORDER_DEFINITIONS: OrderDefinition[] = [
       type: 'discovered',
       family: 'Spore',
       level: 8,
+    },
+  },
+  {
+    id: 'own-cactus-1',
+    title: 'Own Tiny Cactus',
+    requiredFamily: 'Cactus',
+    requiredLevel: 1,
+    reward: {
+      type: 'coins',
+      amount: 900,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Cactus',
+      level: 1,
+    },
+  },
+  {
+    id: 'own-cactus-3',
+    title: 'Own Bloom Cactus',
+    requiredFamily: 'Cactus',
+    requiredLevel: 3,
+    reward: {
+      type: 'essence',
+      amount: 1,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Cactus',
+      level: 1,
+    },
+  },
+  {
+    id: 'own-cactus-6',
+    title: 'Own Crystal Cactus',
+    requiredFamily: 'Cactus',
+    requiredLevel: 6,
+    reward: {
+      type: 'essence',
+      amount: 2,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Cactus',
+      level: 3,
+    },
+  },
+  {
+    id: 'own-cell-1',
+    title: 'Own Tiny Cell',
+    requiredFamily: 'Cell',
+    requiredLevel: 1,
+    reward: {
+      type: 'coins',
+      amount: 1200,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Cell',
+      level: 1,
+    },
+  },
+  {
+    id: 'own-cell-3',
+    title: 'Own Glow Cell',
+    requiredFamily: 'Cell',
+    requiredLevel: 3,
+    reward: {
+      type: 'essence',
+      amount: 1,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Cell',
+      level: 1,
+    },
+  },
+  {
+    id: 'own-cell-6',
+    title: 'Own Crystal Cell',
+    requiredFamily: 'Cell',
+    requiredLevel: 6,
+    reward: {
+      type: 'essence',
+      amount: 2,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Cell',
+      level: 3,
+    },
+  },
+  {
+    id: 'own-plant-1',
+    title: 'Own Tiny Sprout',
+    requiredFamily: 'Plant',
+    requiredLevel: 1,
+    reward: {
+      type: 'coins',
+      amount: 1600,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Plant',
+      level: 1,
+    },
+  },
+  {
+    id: 'own-plant-3',
+    title: 'Own Bloom Sprout',
+    requiredFamily: 'Plant',
+    requiredLevel: 3,
+    reward: {
+      type: 'essence',
+      amount: 1,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Plant',
+      level: 1,
+    },
+  },
+  {
+    id: 'own-plant-6',
+    title: 'Own Crystal Plant',
+    requiredFamily: 'Plant',
+    requiredLevel: 6,
+    reward: {
+      type: 'essence',
+      amount: 2,
+    },
+    unlockCondition: {
+      type: 'discovered',
+      family: 'Plant',
+      level: 3,
     },
   },
   {

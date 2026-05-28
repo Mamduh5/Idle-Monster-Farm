@@ -11,6 +11,7 @@ export const MUSHROOM_HATCH_CHANCE_PER_LEVEL = 0.04;
 export const MIN_HATCH_COOLDOWN_MS = 1200;
 export const SLIME_INCOME_BOOST_PER_LEVEL = 0.2;
 export const MUSHROOM_INCOME_BOOST_PER_LEVEL = 0.22;
+export const RARE_FAMILY_INCOME_BOOST_PER_LEVEL = 0.18;
 export const FUSION_POWER_INCOME_BOOST_PER_LEVEL = 0.15;
 export const RITUAL_INCOME_BOOST_PER_COMPLETION = 0.1;
 export const HATCH_SPEED_REDUCTION_PER_LEVEL = 0.07;
@@ -65,6 +66,9 @@ export function getFamilyIncomeMultiplier(
   slimeIncomeBoostLevel: number,
   mushroomIncomeBoostLevel: number,
   fusionPowerLevel = 0,
+  cactusIncomeBoostLevel = 0,
+  cellIncomeBoostLevel = 0,
+  plantIncomeBoostLevel = 0,
 ): number {
   if (family === 'Mushroom') {
     return 1 + sanitizeProgressionLevel(mushroomIncomeBoostLevel) * MUSHROOM_INCOME_BOOST_PER_LEVEL;
@@ -78,11 +82,27 @@ export function getFamilyIncomeMultiplier(
     return getSporeIncomeMultiplier(fusionPowerLevel);
   }
 
+  if (family === 'Cactus') {
+    return getRareFamilyIncomeMultiplier(cactusIncomeBoostLevel);
+  }
+
+  if (family === 'Cell') {
+    return getRareFamilyIncomeMultiplier(cellIncomeBoostLevel);
+  }
+
+  if (family === 'Plant') {
+    return getRareFamilyIncomeMultiplier(plantIncomeBoostLevel);
+  }
+
   return 1;
 }
 
 export function getSporeIncomeMultiplier(fusionPowerLevel: number): number {
   return 1 + sanitizeProgressionLevel(fusionPowerLevel) * FUSION_POWER_INCOME_BOOST_PER_LEVEL;
+}
+
+export function getRareFamilyIncomeMultiplier(upgradeLevel: number): number {
+  return 1 + sanitizeProgressionLevel(upgradeLevel) * RARE_FAMILY_INCOME_BOOST_PER_LEVEL;
 }
 
 export function getPrestigeIncomeMultiplier(totalRitualsPerformed: number): number {
@@ -95,6 +115,9 @@ export function getEffectiveMonsterIncome(
   mushroomIncomeBoostLevel: number,
   totalRitualsPerformed: number,
   fusionPowerLevel = 0,
+  cactusIncomeBoostLevel = 0,
+  cellIncomeBoostLevel = 0,
+  plantIncomeBoostLevel = 0,
 ): number {
   if (!monster || !Number.isFinite(monster.incomePerSecond) || monster.incomePerSecond <= 0) {
     return 0;
@@ -102,7 +125,15 @@ export function getEffectiveMonsterIncome(
 
   return roundCurrency(
     monster.incomePerSecond
-    * getFamilyIncomeMultiplier(monster.family, slimeIncomeBoostLevel, mushroomIncomeBoostLevel, fusionPowerLevel)
+    * getFamilyIncomeMultiplier(
+      monster.family,
+      slimeIncomeBoostLevel,
+      mushroomIncomeBoostLevel,
+      fusionPowerLevel,
+      cactusIncomeBoostLevel,
+      cellIncomeBoostLevel,
+      plantIncomeBoostLevel,
+    )
     * getPrestigeIncomeMultiplier(totalRitualsPerformed),
   );
 }
@@ -113,6 +144,9 @@ export function getTotalIncomePerSecond(
   mushroomIncomeBoostLevel: number,
   totalRitualsPerformed: number,
   fusionPowerLevel = 0,
+  cactusIncomeBoostLevel = 0,
+  cellIncomeBoostLevel = 0,
+  plantIncomeBoostLevel = 0,
 ): number {
   return roundCurrency(farmSlots.reduce((totalIncome, slot) => {
     const income = getEffectiveMonsterIncome(
@@ -121,6 +155,9 @@ export function getTotalIncomePerSecond(
       mushroomIncomeBoostLevel,
       totalRitualsPerformed,
       fusionPowerLevel,
+      cactusIncomeBoostLevel,
+      cellIncomeBoostLevel,
+      plantIncomeBoostLevel,
     );
 
     if (!Number.isFinite(income) || income <= 0) {

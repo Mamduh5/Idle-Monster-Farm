@@ -1,6 +1,9 @@
 export type UpgradeId =
   | 'slime-income-boost'
   | 'mushroom-income-boost'
+  | 'cactus-income-boost'
+  | 'cell-income-boost'
+  | 'plant-income-boost'
   | 'hatch-speed'
   | 'mushroom-chance'
   | 'offline-storage'
@@ -34,6 +37,30 @@ export const UPGRADE_DEFINITIONS: UpgradeDefinition[] = [
     effect: '+22% Mushroom income per level',
     baseCost: 35,
     costMultiplier: 1.5,
+    maxLevel: 20,
+  },
+  {
+    id: 'cactus-income-boost',
+    name: 'Cactus Income Boost',
+    effect: '+18% Cactus income per level',
+    baseCost: 420,
+    costMultiplier: 1.58,
+    maxLevel: 20,
+  },
+  {
+    id: 'cell-income-boost',
+    name: 'Cell Income Boost',
+    effect: '+18% Cell income per level',
+    baseCost: 650,
+    costMultiplier: 1.6,
+    maxLevel: 20,
+  },
+  {
+    id: 'plant-income-boost',
+    name: 'Plant Income Boost',
+    effect: '+18% Plant income per level',
+    baseCost: 900,
+    costMultiplier: 1.62,
     maxLevel: 20,
   },
   {

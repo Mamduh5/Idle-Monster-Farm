@@ -131,6 +131,8 @@ import {
   MUSHROOM_FOREST_ZONE_ID,
   SPORE_GROVE_ZONE_ID,
   CACTUS_DESERT_ZONE_ID,
+  CELL_MARSH_ZONE_ID,
+  BLOOM_GARDEN_ZONE_ID,
   ZONE_DEFINITIONS,
   ZONE_IDS,
   type ZoneDefinition,
@@ -323,6 +325,14 @@ type FarmSceneLayout = {
   hatchY: number;
   hatchWidth: number;
   hatchHeight: number;
+};
+type ZoneBackgroundTheme = {
+  skyColor: number;
+  groundColor: number;
+  groundPatchColor: number;
+  lowerGroundColor: number;
+  lowerGroundDarkColor: number;
+  motif: 'grass' | 'mushroom' | 'spore' | 'desert' | 'marsh' | 'garden';
 };
 
 export class FarmScene extends Phaser.Scene {
@@ -722,36 +732,109 @@ export class FarmScene extends Phaser.Scene {
 
   private createFarmBackground(): void {
     const { width, height } = this.scale;
-    const isMushroomForest = this.currentZone === MUSHROOM_FOREST_ZONE_ID;
-    const skyColor = isMushroomForest ? 0x637d68 : THEME.sky;
-    const groundColor = isMushroomForest ? 0x355f3f : THEME.grass;
-    const groundPatchColor = isMushroomForest ? 0x4e7a4a : THEME.grassPatch;
-    const lowerGroundColor = isMushroomForest ? 0x3b2f28 : THEME.dirt;
-    const lowerGroundDarkColor = isMushroomForest ? 0x231f1b : THEME.dirtDark;
+    const zoneTheme = this.getZoneBackgroundTheme(this.currentZone);
 
     this.backgroundContainer?.destroy();
     const backgroundContainer = this.add.container(0, 0).setDepth(-30);
 
-    backgroundContainer.add(this.add.rectangle(0, 0, width, height, groundColor).setOrigin(0));
-    backgroundContainer.add(this.add.rectangle(0, 0, width, 92, skyColor).setOrigin(0).setAlpha(0.9));
-    backgroundContainer.add(this.add.rectangle(0, 92, width, 18, groundPatchColor).setOrigin(0).setAlpha(0.7));
-    backgroundContainer.add(this.add.rectangle(0, height - 96, width, 96, lowerGroundColor).setOrigin(0).setAlpha(0.56));
-    backgroundContainer.add(this.add.rectangle(0, height - 96, width, 8, lowerGroundDarkColor).setOrigin(0).setAlpha(0.3));
+    backgroundContainer.add(this.add.rectangle(0, 0, width, height, zoneTheme.groundColor).setOrigin(0));
+    backgroundContainer.add(this.add.rectangle(0, 0, width, 92, zoneTheme.skyColor).setOrigin(0).setAlpha(0.9));
+    backgroundContainer.add(this.add.rectangle(0, 92, width, 18, zoneTheme.groundPatchColor).setOrigin(0).setAlpha(0.7));
+    backgroundContainer.add(this.add.rectangle(0, height - 96, width, 96, zoneTheme.lowerGroundColor).setOrigin(0).setAlpha(0.56));
+    backgroundContainer.add(this.add.rectangle(0, height - 96, width, 8, zoneTheme.lowerGroundDarkColor).setOrigin(0).setAlpha(0.3));
 
     const graphics = this.add.graphics();
 
     for (let x = 24; x < width; x += 72) {
       const y = 116 + ((x / 24) % 5) * 34;
-      graphics.fillStyle(groundPatchColor, isMushroomForest ? 0.32 : 0.24);
+      graphics.fillStyle(zoneTheme.groundPatchColor, zoneTheme.motif === 'mushroom' ? 0.32 : 0.24);
       graphics.fillEllipse(x, y, 34, 10);
     }
 
     for (let x = 36; x < width; x += 92) {
-      graphics.fillStyle(lowerGroundDarkColor, 0.18);
+      graphics.fillStyle(zoneTheme.lowerGroundDarkColor, 0.18);
       graphics.fillEllipse(x, height - 52 + (x % 3) * 5, 26, 8);
     }
 
-    if (isMushroomForest) {
+    this.addZoneBackgroundMotifs(graphics, zoneTheme, width, height);
+
+    backgroundContainer.add(graphics);
+    this.backgroundContainer = backgroundContainer;
+  }
+
+  private getZoneBackgroundTheme(zoneId: ZoneId): ZoneBackgroundTheme {
+    if (zoneId === MUSHROOM_FOREST_ZONE_ID) {
+      return {
+        skyColor: 0x637d68,
+        groundColor: 0x355f3f,
+        groundPatchColor: 0x4e7a4a,
+        lowerGroundColor: 0x3b2f28,
+        lowerGroundDarkColor: 0x231f1b,
+        motif: 'mushroom',
+      };
+    }
+
+    if (zoneId === SPORE_GROVE_ZONE_ID) {
+      return {
+        skyColor: 0x536b95,
+        groundColor: 0x315568,
+        groundPatchColor: 0x6aa77d,
+        lowerGroundColor: 0x3f355f,
+        lowerGroundDarkColor: 0x24213f,
+        motif: 'spore',
+      };
+    }
+
+    if (zoneId === CACTUS_DESERT_ZONE_ID) {
+      return {
+        skyColor: 0xdb8b54,
+        groundColor: 0xc99a58,
+        groundPatchColor: 0xe5bd73,
+        lowerGroundColor: 0x9b6738,
+        lowerGroundDarkColor: 0x6f472b,
+        motif: 'desert',
+      };
+    }
+
+    if (zoneId === CELL_MARSH_ZONE_ID) {
+      return {
+        skyColor: 0x5f93a6,
+        groundColor: 0x2f6a64,
+        groundPatchColor: 0x64b8a5,
+        lowerGroundColor: 0x27555f,
+        lowerGroundDarkColor: 0x173943,
+        motif: 'marsh',
+      };
+    }
+
+    if (zoneId === BLOOM_GARDEN_ZONE_ID) {
+      return {
+        skyColor: 0x8ccf9b,
+        groundColor: 0x62a84e,
+        groundPatchColor: 0xa7d86b,
+        lowerGroundColor: 0x6b9f47,
+        lowerGroundDarkColor: 0x3c6d36,
+        motif: 'garden',
+      };
+    }
+
+    return {
+      skyColor: THEME.sky,
+      groundColor: THEME.grass,
+      groundPatchColor: THEME.grassPatch,
+      lowerGroundColor: THEME.dirt,
+      lowerGroundDarkColor: THEME.dirtDark,
+      motif: 'grass',
+    };
+  }
+
+  private addZoneBackgroundMotifs(
+    graphics: Phaser.GameObjects.Graphics,
+    zoneTheme: ZoneBackgroundTheme,
+    width: number,
+    height: number,
+  ): void {
+    if (zoneTheme.motif === 'mushroom') {
       for (let x = 30; x < width; x += 86) {
         const y = 118 + ((x / 43) % 4) * 42;
         graphics.fillStyle(0x5b3f74, 0.24);
@@ -764,10 +847,58 @@ export class FarmScene extends Phaser.Scene {
         graphics.fillStyle(0x253f2f, 0.32);
         graphics.fillTriangle(x, 100, x - 34, 184, x + 34, 184);
       }
+      return;
     }
 
-    backgroundContainer.add(graphics);
-    this.backgroundContainer = backgroundContainer;
+    if (zoneTheme.motif === 'spore') {
+      for (let x = 32; x < width; x += 58) {
+        const y = 126 + ((x / 29) % 6) * 30;
+        graphics.fillStyle(0xa7f0c4, 0.18);
+        graphics.fillCircle(x, y, 10 + (x % 3) * 3);
+        graphics.fillStyle(0x7f69c9, 0.2);
+        graphics.fillCircle(x + 18, y + 16, 7);
+      }
+      return;
+    }
+
+    if (zoneTheme.motif === 'desert') {
+      for (let x = 40; x < width; x += 104) {
+        const y = height - 140 + (x % 4) * 6;
+        graphics.fillStyle(0x6f7d3f, 0.34);
+        graphics.fillRoundedRect(x, y - 42, 12, 54, 5);
+        graphics.fillRoundedRect(x - 14, y - 24, 10, 28, 5);
+        graphics.fillRoundedRect(x + 14, y - 30, 10, 32, 5);
+        graphics.fillStyle(0x9b6738, 0.24);
+        graphics.fillEllipse(x + 4, y + 18, 62, 12);
+      }
+      return;
+    }
+
+    if (zoneTheme.motif === 'marsh') {
+      for (let x = 26; x < width; x += 70) {
+        const y = 126 + ((x / 35) % 5) * 38;
+        graphics.fillStyle(0x7bd4c3, 0.23);
+        graphics.fillEllipse(x, y, 52, 18);
+        graphics.fillStyle(0xbef5ee, 0.2);
+        graphics.fillCircle(x + 16, y - 20, 8);
+        graphics.fillCircle(x - 12, y - 12, 5);
+      }
+      return;
+    }
+
+    if (zoneTheme.motif === 'garden') {
+      for (let x = 28; x < width; x += 64) {
+        const y = 130 + ((x / 32) % 5) * 34;
+        graphics.fillStyle(0x3f8c43, 0.28);
+        graphics.fillEllipse(x, y + 10, 34, 12);
+        graphics.fillStyle(0xf5d76e, 0.55);
+        graphics.fillCircle(x, y, 6);
+        graphics.fillStyle(0xf08bb0, 0.34);
+        graphics.fillCircle(x - 8, y, 5);
+        graphics.fillCircle(x + 8, y, 5);
+        graphics.fillCircle(x, y - 8, 5);
+      }
+    }
   }
 
   private getLayout(): FarmSceneLayout {
@@ -1990,6 +2121,7 @@ export class FarmScene extends Phaser.Scene {
       'ui.patchNotes.cellPlantHint',
       'ui.patchNotes.zones',
       'ui.patchNotes.families',
+      'ui.patchNotes.upgrades',
       'ui.patchNotes.recipes',
       'ui.patchNotes.remove',
     ];
@@ -2065,9 +2197,9 @@ export class FarmScene extends Phaser.Scene {
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
     const { width: panelWidth, height: panelHeight } = getPanelSize(this.scale, 460, 480);
-    const firstRowY = -panelHeight / 2 + 96;
-    const rowGap = Math.min(90, Math.max(72, (panelHeight - 118) / ZONE_DEFINITIONS.length));
-    const rowHeight = Math.min(78, rowGap - 8);
+    const firstRowY = -panelHeight / 2 + 88;
+    const rowGap = Math.min(84, Math.max(56, (panelHeight - 138) / ZONE_DEFINITIONS.length));
+    const rowHeight = Math.min(68, rowGap - 6);
 
     panel.setDepth(24);
     addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
@@ -2111,35 +2243,36 @@ export class FarmScene extends Phaser.Scene {
     panel.add(this.add.rectangle(0, rowY, panelWidth - 48, rowHeight, isUnlocked ? THEME.panelAlt : 0x29362f, 0.92)
       .setStrokeStyle(2, isCurrent ? THEME.panelBorder : canSelect ? THEME.slot : THEME.lockedBorder, 0.78));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 9, this.getLocalizedZoneName(zone), {
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + (isCompactPanel ? 6 : 8), this.getLocalizedZoneName(zone), {
       color: isUnlocked ? THEME.text : '#9ca79f',
       fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '15px' : '17px',
+      fontSize: isCompactPanel ? '13px' : '16px',
       fontStyle: 'bold',
+      fixedWidth: panelWidth - (isCompactPanel ? 160 : 178),
     }));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 33, statusText, {
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + (isCompactPanel ? 26 : 31), statusText, {
       color: isUnlocked ? '#cdebb3' : THEME.mutedText,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '12px' : '13px',
+      fontSize: isCompactPanel ? '10px' : '12px',
       wordWrap: {
-        width: panelWidth - 170,
+        width: panelWidth - (isCompactPanel ? 160 : 170),
       },
     }));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 49, bonusText, {
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + (isCompactPanel ? 40 : 48), bonusText, {
       color: isUnlocked ? '#fff4a8' : THEME.mutedText,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '11px' : '12px',
+      fontSize: isCompactPanel ? '10px' : '11px',
       wordWrap: {
-        width: panelWidth - 170,
+        width: panelWidth - (isCompactPanel ? 160 : 170),
       },
     }));
 
     const actionText = this.add.text(panelWidth / 2 - 42, rowY, isCurrent ? this.t('ui.zone.current') : isUnlocked ? this.t('ui.zone.switch') : this.t('ui.zone.locked'), {
       color: isUnlocked ? '#ffffff' : '#9ca79f',
       fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '13px' : '14px',
+      fontSize: isCompactPanel ? '11px' : '14px',
       fontStyle: 'bold',
       backgroundColor: `#${(canSelect ? THEME.buttonHover : THEME.lockedInner).toString(16).padStart(6, '0')}`,
       padding: {
@@ -7025,6 +7158,24 @@ export class FarmScene extends Phaser.Scene {
       });
     }
 
+    if (upgradeId === 'cactus-income-boost') {
+      return this.t('upgrade.current.cactus-income-boost', {
+        value: this.getFamilyIncomeMultiplier('Cactus').toFixed(2),
+      });
+    }
+
+    if (upgradeId === 'cell-income-boost') {
+      return this.t('upgrade.current.cell-income-boost', {
+        value: this.getFamilyIncomeMultiplier('Cell').toFixed(2),
+      });
+    }
+
+    if (upgradeId === 'plant-income-boost') {
+      return this.t('upgrade.current.plant-income-boost', {
+        value: this.getFamilyIncomeMultiplier('Plant').toFixed(2),
+      });
+    }
+
     if (upgradeId === 'hatch-speed') {
       return this.t('upgrade.current.hatch-speed', {
         seconds: (this.getHatchCooldownMs() / MILLISECONDS_PER_SECOND).toFixed(1),
@@ -7078,6 +7229,9 @@ export class FarmScene extends Phaser.Scene {
       this.getUpgradeLevel('slime-income-boost'),
       this.getUpgradeLevel('mushroom-income-boost'),
       this.getUpgradeLevel('fusion-power'),
+      this.getUpgradeLevel('cactus-income-boost'),
+      this.getUpgradeLevel('cell-income-boost'),
+      this.getUpgradeLevel('plant-income-boost'),
     );
   }
 
@@ -8797,6 +8951,9 @@ export class FarmScene extends Phaser.Scene {
       this.getUpgradeLevel('mushroom-income-boost'),
       this.totalRitualsPerformed,
       this.getUpgradeLevel('fusion-power'),
+      this.getUpgradeLevel('cactus-income-boost'),
+      this.getUpgradeLevel('cell-income-boost'),
+      this.getUpgradeLevel('plant-income-boost'),
     );
   }
 
@@ -8807,6 +8964,9 @@ export class FarmScene extends Phaser.Scene {
       this.getUpgradeLevel('mushroom-income-boost'),
       this.totalRitualsPerformed,
       this.getUpgradeLevel('fusion-power'),
+      this.getUpgradeLevel('cactus-income-boost'),
+      this.getUpgradeLevel('cell-income-boost'),
+      this.getUpgradeLevel('plant-income-boost'),
     );
   }
 
@@ -8824,6 +8984,10 @@ export class FarmScene extends Phaser.Scene {
 
   private formatCoinAmount(coins: number): string {
     const safeCoins = this.sanitizeCoins(coins);
+
+    if (safeCoins >= 1_000_000_000_000) {
+      return `${this.formatCompactAmount(safeCoins / 1_000_000_000_000)}T`;
+    }
 
     if (safeCoins >= 1_000_000_000) {
       return `${this.formatCompactAmount(safeCoins / 1_000_000_000)}B`;
