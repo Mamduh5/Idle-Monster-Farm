@@ -372,6 +372,7 @@ export class FarmScene extends Phaser.Scene {
   private compendiumPanel?: Phaser.GameObjects.Container;
   private settingsPanel?: Phaser.GameObjects.Container;
   private helpPanel?: Phaser.GameObjects.Container;
+  private patchNotesPanel?: Phaser.GameObjects.Container;
   private zonePanel?: Phaser.GameObjects.Container;
   private missionsPanel?: Phaser.GameObjects.Container;
   private ordersPanel?: Phaser.GameObjects.Container;
@@ -581,6 +582,7 @@ export class FarmScene extends Phaser.Scene {
     this.compendiumPanel = undefined;
     this.settingsPanel = undefined;
     this.helpPanel = undefined;
+    this.patchNotesPanel = undefined;
     this.zonePanel = undefined;
     this.missionsPanel = undefined;
     this.ordersPanel = undefined;
@@ -1137,6 +1139,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closePatchNotesPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
@@ -1151,6 +1154,7 @@ export class FarmScene extends Phaser.Scene {
     const menuItems: NavigationMenuPanelItem[] = [
       { label: this.t('ui.menu.settings'), openPanel: () => this.openSettingsPanel() },
       { label: this.t('ui.menu.help'), openPanel: () => this.openHelpPanel() },
+      { label: this.t('ui.menu.patchNotes'), openPanel: () => this.openPatchNotesPanel() },
       { label: this.t('ui.menu.hatchPool'), openPanel: () => this.openHatchPoolPanel() },
       { label: this.t('ui.menu.compendium'), openPanel: () => this.openCompendiumPanel() },
       { label: this.t('ui.menu.zone'), openPanel: () => this.openZonePanel() },
@@ -1367,6 +1371,7 @@ export class FarmScene extends Phaser.Scene {
       this.compendiumPanel
       || this.settingsPanel
       || this.helpPanel
+      || this.patchNotesPanel
       || this.zonePanel
       || this.missionsPanel
       || this.ordersPanel
@@ -1435,6 +1440,11 @@ export class FarmScene extends Phaser.Scene {
 
     if (this.helpPanel) {
       this.closeHelpPanel();
+      return;
+    }
+
+    if (this.patchNotesPanel) {
+      this.closePatchNotesPanel();
       return;
     }
 
@@ -1639,6 +1649,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeNavigationMenuPanel();
     this.closeCompendiumPanel();
     this.closeHelpPanel();
+    this.closePatchNotesPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
@@ -1846,6 +1857,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeNavigationMenuPanel();
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
+    this.closePatchNotesPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
@@ -1948,6 +1960,83 @@ export class FarmScene extends Phaser.Scene {
     }
   }
 
+  private openPatchNotesPanel(): void {
+    this.closePatchNotesPanel(false);
+    this.closeNavigationMenuPanel();
+    this.closeCompendiumPanel();
+    this.closeSettingsPanel();
+    this.closeHelpPanel();
+    this.closeZonePanel();
+    this.closeMissionsPanel();
+    this.closeOrdersPanel();
+    this.closeBossBattlePanel();
+    this.closeUpgradeShopPanel();
+    this.closePrestigePanel();
+    this.closeHatchPoolPanel();
+    this.closeEconomyDebugPanel();
+    this.cancelActiveDrag();
+    this.clearSelectedSlot();
+    this.showModalOverlay();
+
+    const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
+    const { width: panelWidth, height: panelHeight } = getPanelSize(this.scale, 500, 540);
+    const contentX = -panelWidth / 2 + 24;
+    const contentWidth = panelWidth - 48;
+    const patchNoteKeys = [
+      'ui.patchNotes.hatchPool',
+      'ui.patchNotes.rareHatch',
+      'ui.patchNotes.hatchBlessing',
+      'ui.patchNotes.sporeHint',
+      'ui.patchNotes.cellPlantHint',
+      'ui.patchNotes.zones',
+      'ui.patchNotes.families',
+      'ui.patchNotes.recipes',
+      'ui.patchNotes.remove',
+    ];
+    let y = -panelHeight / 2 + 66;
+
+    panel.setDepth(26);
+    addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
+
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 20, this.t('ui.patchNotes.title'), {
+      color: THEME.text,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: getPanelTitleFontSize(panelWidth),
+      fontStyle: 'bold',
+    }));
+
+    this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closePatchNotesPanel());
+
+    patchNoteKeys.forEach((key) => {
+      const line = this.add.text(contentX, y, `- ${this.t(key)}`, {
+        color: '#f7ffe8',
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: panelWidth < 390 ? '11px' : '13px',
+        fixedWidth: contentWidth,
+        wordWrap: {
+          width: contentWidth,
+          useAdvancedWrap: true,
+        },
+      });
+
+      panel.add(line);
+      y += line.height + (panelWidth < 390 ? 7 : 9);
+    });
+
+    this.patchNotesPanel = panel;
+  }
+
+  private closePatchNotesPanel(hideOverlay = true): void {
+    if (this.patchNotesPanel) {
+      this.patchNotesPanel.destroy();
+      this.patchNotesPanel = undefined;
+
+      if (hideOverlay) {
+        this.hideModalOverlay();
+      }
+    }
+  }
+
   private toggleZonePanel(): void {
     if (this.zonePanel) {
       this.closeZonePanel();
@@ -1963,6 +2052,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closePatchNotesPanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
     this.closeBossBattlePanel();
@@ -2142,6 +2232,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closePatchNotesPanel();
     this.closeZonePanel();
     this.closeOrdersPanel();
     this.closeBossBattlePanel();
@@ -2286,6 +2377,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closePatchNotesPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeBossBattlePanel();
@@ -2560,6 +2652,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closePatchNotesPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
@@ -4861,6 +4954,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closePatchNotesPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
@@ -4971,6 +5065,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closePatchNotesPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
@@ -5143,6 +5238,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closePatchNotesPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
@@ -7217,6 +7313,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closePatchNotesPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
@@ -7433,6 +7530,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeNavigationMenuPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
+    this.closePatchNotesPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
@@ -8499,6 +8597,7 @@ export class FarmScene extends Phaser.Scene {
     this.clearSelectedSlot();
     this.closeCompendiumPanel();
     this.closeHelpPanel();
+    this.closePatchNotesPanel();
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
