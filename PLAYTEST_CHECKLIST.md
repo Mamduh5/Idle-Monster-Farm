@@ -12,6 +12,7 @@ Use a fresh browser profile or clear `idle-monster-farm-save` before the fresh-s
 - Hatch until a Button Mushroom appears, then confirm it earns coins and appears in the Compendium.
 - Hatch multiple Slimes, merge two matching Slimes, and confirm the merged monster remains selected.
 - Merge one valid pair and confirm the merge mission completes.
+- Drag a monster to the Remove zone and confirm the slot clears without granting coins.
 - Merge two matching Mushrooms, confirm Slime + Mushroom drops return safely, and confirm Level 5 Mushroom + Level 5 Mushroom does not merge.
 - Merge Slime + Mushroom of the same level, and Mushroom + Slime of the same level, and confirm both create the matching-level Spore.
 - Try Slime + Mushroom at different levels and confirm the invalid fusion rejects safely.

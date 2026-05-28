@@ -260,6 +260,15 @@ type CoinBug = {
   sparkleTween?: Phaser.Tweens.Tween;
   ringTween?: Phaser.Tweens.Tween;
 };
+type MonsterRemoveDropZone = {
+  background: Phaser.GameObjects.Rectangle;
+  bounds: Phaser.Geom.Rectangle;
+  container: Phaser.GameObjects.Container;
+  helperText: Phaser.GameObjects.Text;
+  isHot: boolean;
+  pulseTween?: Phaser.Tweens.Tween;
+  titleText: Phaser.GameObjects.Text;
+};
 type TapFarmReactionTier = {
   fillColor: number;
   ringColor: number;
@@ -376,6 +385,7 @@ export class FarmScene extends Phaser.Scene {
   private activeDragSlotId: number | null = null;
   private activeDragVisual?: MonsterVisual;
   private activeDragPointerId: number | null = null;
+  private monsterRemoveDropZone?: MonsterRemoveDropZone;
   private upgradeLevels: Record<UpgradeId, number> = this.createInitialUpgradeLevels();
   private missionProgress: Record<MissionId, number> = this.createInitialMissionProgress();
   private completedMissionIds = new Set<MissionId>();
@@ -585,6 +595,7 @@ export class FarmScene extends Phaser.Scene {
     this.activeDragSlotId = null;
     this.activeDragVisual = undefined;
     this.activeDragPointerId = null;
+    this.hideMonsterRemoveZone();
     this.upgradeLevels = this.createInitialUpgradeLevels();
     this.missionProgress = this.createInitialMissionProgress();
     this.completedMissionIds = new Set<MissionId>();
@@ -1319,6 +1330,7 @@ export class FarmScene extends Phaser.Scene {
 
   private showModalOverlay(): void {
     this.cancelHatchPoolHold();
+    this.cancelActiveDrag();
     this.hideModalOverlay();
     this.setModalOpenVisualState(true);
 
@@ -7767,6 +7779,7 @@ export class FarmScene extends Phaser.Scene {
 
   private cancelActiveDrag(): void {
     if (this.activeDragSlotId === null || !this.activeDragVisual) {
+      this.hideMonsterRemoveZone();
       return;
     }
 
@@ -7796,8 +7809,9 @@ export class FarmScene extends Phaser.Scene {
     this.activeDragPointerId = pointer.id;
     this.clearSelectedSlot();
     visual.setScale(1.08);
-    visual.setDepth(10);
+    visual.setDepth(16);
     visual.setPosition(pointer.worldX, pointer.worldY);
+    this.showMonsterRemoveZone();
   }
 
   private updateManualMonsterDrag(pointer: Phaser.Input.Pointer): void {
@@ -7817,6 +7831,7 @@ export class FarmScene extends Phaser.Scene {
     }
 
     this.activeDragVisual.setPosition(pointer.worldX, pointer.worldY);
+    this.setMonsterRemoveZoneHot(this.isPointInMonsterRemoveZone(pointer.worldX, pointer.worldY));
   }
 
   private finishManualMonsterDrag(pointer: Phaser.Input.Pointer): void {
@@ -7830,12 +7845,23 @@ export class FarmScene extends Phaser.Scene {
 
     pointer.event?.stopPropagation();
 
+    if (this.isModalOpen()) {
+      this.cancelActiveDrag();
+      return;
+    }
+
     const sourceSlotId = this.activeDragSlotId;
     const visual = this.activeDragVisual;
+    const shouldRemoveMonster = this.isPointInMonsterRemoveZone(pointer.worldX, pointer.worldY);
 
     visual.setScale(1);
     visual.setDepth(0);
     this.resetManualDragState();
+
+    if (shouldRemoveMonster) {
+      this.removeMonsterFromSlot(sourceSlotId);
+      return;
+    }
 
     this.handleMonsterDrop(sourceSlotId, pointer.worldX, pointer.worldY, visual);
   }
@@ -7844,6 +7870,112 @@ export class FarmScene extends Phaser.Scene {
     this.activeDragSlotId = null;
     this.activeDragVisual = undefined;
     this.activeDragPointerId = null;
+    this.hideMonsterRemoveZone();
+  }
+
+  private showMonsterRemoveZone(): void {
+    if (this.isModalOpen()) {
+      return;
+    }
+
+    this.hideMonsterRemoveZone();
+
+    const bounds = this.getMonsterRemoveZoneBounds();
+    const container = this.add.container(bounds.centerX, bounds.centerY).setDepth(12);
+    const shadow = this.add.rectangle(3, 4, bounds.width, bounds.height, THEME.shadow, 0.32)
+      .setOrigin(0.5);
+    const background = this.add.rectangle(0, 0, bounds.width, bounds.height, THEME.danger, 0.92)
+      .setOrigin(0.5)
+      .setStrokeStyle(3, 0xffcfb8, 0.82);
+    const titleText = this.add.text(0, -8, this.t('ui.monsterRemove.title'), {
+      color: '#ffffff',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: bounds.width < 170 ? '16px' : '18px',
+      fontStyle: 'bold',
+      align: 'center',
+      fixedWidth: bounds.width - 20,
+    }).setOrigin(0.5);
+    const helperText = this.add.text(0, 15, this.t('ui.monsterRemove.dragHere'), {
+      color: '#ffe7da',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: bounds.width < 170 ? '11px' : '12px',
+      align: 'center',
+      fixedWidth: bounds.width - 20,
+    }).setOrigin(0.5);
+
+    container.add([shadow, background, titleText, helperText]);
+    this.monsterRemoveDropZone = {
+      background,
+      bounds,
+      container,
+      helperText,
+      isHot: false,
+      titleText,
+    };
+  }
+
+  private hideMonsterRemoveZone(): void {
+    this.monsterRemoveDropZone?.pulseTween?.stop();
+    this.monsterRemoveDropZone?.container.destroy();
+    this.monsterRemoveDropZone = undefined;
+  }
+
+  private getMonsterRemoveZoneBounds(): Phaser.Geom.Rectangle {
+    const layout = this.getLayout();
+    const width = layout.isNarrow
+      ? Math.min(172, this.scale.width - layout.margin * 4)
+      : 208;
+    const height = layout.isNarrow ? 54 : 62;
+    const bottomLimit = Math.min(layout.hatchY, layout.tapFarmY, layout.actionBarY) - (layout.isNarrow ? 8 : 12);
+    const centerY = Math.max(layout.margin + height / 2, bottomLimit - height / 2);
+    const centerX = this.scale.width / 2;
+
+    return new Phaser.Geom.Rectangle(
+      centerX - width / 2,
+      centerY - height / 2,
+      width,
+      height,
+    );
+  }
+
+  private isPointInMonsterRemoveZone(worldX: number, worldY: number): boolean {
+    return Boolean(
+      this.monsterRemoveDropZone
+      && Number.isFinite(worldX)
+      && Number.isFinite(worldY)
+      && Phaser.Geom.Rectangle.Contains(this.monsterRemoveDropZone.bounds, worldX, worldY),
+    );
+  }
+
+  private setMonsterRemoveZoneHot(isHot: boolean): void {
+    const dropZone = this.monsterRemoveDropZone;
+
+    if (!dropZone || dropZone.isHot === isHot) {
+      return;
+    }
+
+    dropZone.isHot = isHot;
+    dropZone.background.setFillStyle(isHot ? 0xb93a48 : THEME.danger, isHot ? 0.98 : 0.92);
+    dropZone.background.setStrokeStyle(3, isHot ? 0xfff0a8 : 0xffcfb8, isHot ? 1 : 0.82);
+    dropZone.titleText.setText(isHot ? this.t('ui.monsterRemove.release') : this.t('ui.monsterRemove.title'));
+    dropZone.helperText.setText(isHot ? '' : this.t('ui.monsterRemove.dragHere'));
+
+    if (isHot) {
+      dropZone.pulseTween?.stop();
+      dropZone.pulseTween = this.tweens.add({
+        targets: dropZone.container,
+        scale: 1.04,
+        duration: 180,
+        ease: 'Sine.easeInOut',
+        yoyo: true,
+        repeat: -1,
+      });
+      return;
+    }
+
+    dropZone.pulseTween?.stop();
+    dropZone.pulseTween = undefined;
+    dropZone.container.setScale(1);
   }
 
   private renderMonsterInSlot(slot: FarmSlotState): void {
@@ -8031,6 +8163,24 @@ export class FarmScene extends Phaser.Scene {
     this.updateHud();
     this.skipSavingUntilProgress = false;
     this.saveProgress();
+  }
+
+  private removeMonsterFromSlot(slotId: number): void {
+    const monster = this.farmSlots[slotId]?.monster;
+
+    if (!monster) {
+      return;
+    }
+
+    this.clearSelectedSlot();
+    this.farmSlots = clearSlotMonster(this.farmSlots, slotId);
+    this.clearMonsterVisual(slotId);
+    this.updateHud();
+    this.skipSavingUntilProgress = false;
+    this.saveProgress();
+    this.showToast(this.t('toast.monsterRemoved', {
+      monster: this.getLocalizedMonsterName(monster),
+    }), 'info');
   }
 
   private mergeSlots(sourceSlotId: number, targetSlotId: number): void {

@@ -6,5 +6,4 @@
 - Android packaging is not implemented yet.
 - Ads are not implemented yet.
 - Cloud save is not implemented.
-- Monster remove/sell is not implemented yet, so unwanted monsters still need to be merged or replaced through normal play.
 - Balance values may change during alpha testing.
