@@ -2,29 +2,33 @@ import { STARTING_EGG_COST } from '../data/economy';
 import { BOSS_BATTLE_DEFINITIONS, BOSS_BATTLE_STAGE_IDS } from '../data/bossBattles';
 import {
   isElementType,
+  normalizeElementLevel,
   sanitizeElementFragmentInventory,
+  type ElementLevel,
   type ElementFragmentInventory,
   type ElementType,
 } from '../data/elements';
-import { MISSION_DEFINITIONS, MISSION_IDS, type MissionId } from '../data/missions';
-import { ORDER_IDS, type OrderId } from '../data/orders';
+import { QUEST_DEFINITIONS, QUEST_IDS, type QuestId } from '../data/quests';
 import { UPGRADE_DEFINITIONS, type UpgradeId } from '../data/upgrades';
 import { GRASS_FARM_ZONE_ID, ZONE_IDS, type ZoneId } from '../data/zones';
 import {
   isMonsterFamily,
   ONBOARDING_HINT_IDS,
+  QUEST_GUIDE_STEP_IDS,
   type MonsterFamily,
   type OnboardingHintId,
+  type QuestGuideStepId,
 } from '../types/game-state';
 
 export const SAVE_STORAGE_KEY = 'idle-monster-farm-save';
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 const BOSS_DAILY_CLEAR_LIMIT = 2;
 
 export type SavedMonsterSlot = {
   family: MonsterFamily;
   level: number;
   element?: ElementType;
+  elementLevel?: ElementLevel;
 } | null;
 
 export type SavedMonsterDiscovery = {
@@ -45,11 +49,14 @@ export type LocalSaveData = {
   totalRitualsPerformed: number;
   currentEggCost: number;
   onboardingHintsSeen: OnboardingHintId[];
+  activeQuestGuideStepId?: QuestGuideStepId;
+  completedQuestGuideStepIds: QuestGuideStepId[];
+  isFirstGuideComplete: boolean;
+  isFirstGuideSkipped: boolean;
   expansionUnlocked: boolean;
-  missionProgress: Record<MissionId, number>;
-  completedMissionIds: MissionId[];
-  claimedMissionIds: MissionId[];
-  claimedOrderIds: OrderId[];
+  questProgress: Record<QuestId, number>;
+  completedQuestIds: QuestId[];
+  claimedQuestIds: QuestId[];
   claimedBossBattleStageIds: string[];
   elementFragments: ElementFragmentInventory;
   bossDailyClearCounts: Record<string, number>;
@@ -132,11 +139,14 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
     totalRitualsPerformed: normalizeTotalRitualsPerformed(rawData.totalRitualsPerformed, hasPrestigedOnce),
     currentEggCost: normalizeEggCost(rawData.currentEggCost),
     onboardingHintsSeen: normalizeOnboardingHints(rawData.onboardingHintsSeen),
+    activeQuestGuideStepId: normalizeQuestGuideStepId(rawData.activeQuestGuideStepId),
+    completedQuestGuideStepIds: normalizeQuestGuideStepIds(rawData.completedQuestGuideStepIds),
+    isFirstGuideComplete: rawData.isFirstGuideComplete === true,
+    isFirstGuideSkipped: rawData.isFirstGuideSkipped === true,
     expansionUnlocked: rawData.expansionUnlocked === true,
-    missionProgress: normalizeMissionProgress(rawData.missionProgress),
-    completedMissionIds: normalizeMissionIds(rawData.completedMissionIds),
-    claimedMissionIds: normalizeMissionIds(rawData.claimedMissionIds),
-    claimedOrderIds: normalizeOrderIds(rawData.claimedOrderIds),
+    questProgress: normalizeQuestProgress(rawData.questProgress),
+    completedQuestIds: normalizeQuestIds(rawData.completedQuestIds),
+    claimedQuestIds: normalizeQuestIds(rawData.claimedQuestIds),
     claimedBossBattleStageIds: normalizeBossBattleStageIds(rawData.claimedBossBattleStageIds),
     elementFragments: sanitizeElementFragmentInventory(rawData.elementFragments),
     bossDailyClearCounts: normalizeBossDailyClearCounts(rawData.bossDailyClearCounts),
@@ -183,45 +193,35 @@ function normalizeCurrentZone(rawCurrentZone: unknown, rawUnlockedZones: unknown
   return GRASS_FARM_ZONE_ID;
 }
 
-function normalizeMissionProgress(rawProgress: unknown): Record<MissionId, number> {
-  const missionProgress = Object.fromEntries(
-    MISSION_DEFINITIONS.map((mission) => [mission.id, 0]),
-  ) as Record<MissionId, number>;
+function normalizeQuestProgress(rawProgress: unknown): Record<QuestId, number> {
+  const questProgress = Object.fromEntries(
+    QUEST_DEFINITIONS.map((quest) => [quest.id, 0]),
+  ) as Record<QuestId, number>;
 
   if (!isRecord(rawProgress)) {
-    return missionProgress;
+    return questProgress;
   }
 
-  MISSION_DEFINITIONS.forEach((mission) => {
-    const progress = Number(rawProgress[mission.id]);
+  QUEST_DEFINITIONS.forEach((quest) => {
+    const progress = Number(rawProgress[quest.id]);
 
     if (!Number.isFinite(progress)) {
       return;
     }
 
-    missionProgress[mission.id] = Math.min(Math.max(Math.floor(progress), 0), mission.goal);
+    questProgress[quest.id] = Math.min(Math.max(Math.floor(progress), 0), quest.goal);
   });
 
-  return missionProgress;
+  return questProgress;
 }
 
-function normalizeMissionIds(rawMissionIds: unknown): MissionId[] {
-  if (!Array.isArray(rawMissionIds)) {
+function normalizeQuestIds(rawQuestIds: unknown): QuestId[] {
+  if (!Array.isArray(rawQuestIds)) {
     return [];
   }
 
-  return Array.from(new Set(rawMissionIds.filter((missionId): missionId is MissionId => (
-    typeof missionId === 'string' && MISSION_IDS.includes(missionId as MissionId)
-  ))));
-}
-
-function normalizeOrderIds(rawOrderIds: unknown): OrderId[] {
-  if (!Array.isArray(rawOrderIds)) {
-    return [];
-  }
-
-  return Array.from(new Set(rawOrderIds.filter((orderId): orderId is OrderId => (
-    typeof orderId === 'string' && ORDER_IDS.includes(orderId as OrderId)
+  return Array.from(new Set(rawQuestIds.filter((questId): questId is QuestId => (
+    typeof questId === 'string' && QUEST_IDS.includes(questId as QuestId)
   ))));
 }
 
@@ -267,6 +267,22 @@ function normalizeOnboardingHints(rawHints: unknown): OnboardingHintId[] {
   return rawHints.filter((hint): hint is OnboardingHintId => (
     typeof hint === 'string' && ONBOARDING_HINT_IDS.includes(hint as OnboardingHintId)
   ));
+}
+
+function normalizeQuestGuideStepId(rawStepId: unknown): QuestGuideStepId | undefined {
+  return typeof rawStepId === 'string' && QUEST_GUIDE_STEP_IDS.includes(rawStepId as QuestGuideStepId)
+    ? rawStepId as QuestGuideStepId
+    : undefined;
+}
+
+function normalizeQuestGuideStepIds(rawStepIds: unknown): QuestGuideStepId[] {
+  if (!Array.isArray(rawStepIds)) {
+    return [];
+  }
+
+  return Array.from(new Set(rawStepIds.filter((stepId): stepId is QuestGuideStepId => (
+    typeof stepId === 'string' && QUEST_GUIDE_STEP_IDS.includes(stepId as QuestGuideStepId)
+  ))));
 }
 
 function normalizeEggCost(rawEggCost: unknown): number {
@@ -340,6 +356,7 @@ function normalizeSavedMonsterReference(rawMonster: unknown): NonNullable<SavedM
 
   if (isElementType(rawMonster.element)) {
     savedMonster.element = rawMonster.element;
+    savedMonster.elementLevel = normalizeElementLevel(rawMonster.elementLevel);
   }
 
   return savedMonster;

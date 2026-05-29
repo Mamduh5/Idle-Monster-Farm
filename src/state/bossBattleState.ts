@@ -4,8 +4,10 @@ import {
   type BossBattleStage,
 } from '../data/bossBattles';
 import {
-  ELEMENT_BOSS_DAMAGE_MATCH_MULTIPLIER,
+  ELEMENT_BOSS_DAMAGE_MATCH_MULTIPLIER_BY_LEVEL,
   getElementBossDamageMultiplier,
+  normalizeElementLevel,
+  type ElementLevel,
   type ElementType,
 } from '../data/elements';
 import type { FarmSlotState, MonsterFamily, MonsterInstance } from '../types/game-state';
@@ -52,6 +54,7 @@ export type BattleMonsterSnapshot = {
   name: string;
   incomePerSecond: number;
   element?: ElementType;
+  elementLevel?: ElementLevel;
   power: number;
   maxHp: number;
   hp: number;
@@ -342,11 +345,11 @@ export function applyPlayerSkill(session: BattleSessionState, skillId: BattleSki
 
   if (skill.damageMultiplier) {
     const baseDamage = Math.max(1, Math.floor(caster.attack * skill.damageMultiplier));
-    const elementMultiplier = getElementBossDamageMultiplier(caster.element, session.bossElementTheme);
+    const elementMultiplier = getElementBossDamageMultiplier(caster.element, caster.elementLevel, session.bossElementTheme);
     damage = elementMultiplier > 1
       ? Math.max(1, Math.ceil(baseDamage * elementMultiplier))
       : baseDamage;
-    if (caster.element && elementMultiplier === ELEMENT_BOSS_DAMAGE_MATCH_MULTIPLIER) {
+    if (caster.element && elementMultiplier === ELEMENT_BOSS_DAMAGE_MATCH_MULTIPLIER_BY_LEVEL[normalizeElementLevel(caster.elementLevel)]) {
       elementMatch = {
         element: caster.element,
         multiplier: elementMultiplier,
@@ -549,10 +552,6 @@ export function canClaimBossFirstClearReward(
     && !isBossStageCleared(stage.id, claimedStageIds);
 }
 
-export function getBossReplayReward(stage: BossBattleStage): BossBattleStage['replayReward'] {
-  return stage.replayReward;
-}
-
 export function reviveBattleSession(session: BattleSessionState): BattleSessionState {
   return {
     ...session,
@@ -577,6 +576,7 @@ function createBattleMonsterSnapshot(monster: MonsterInstance): BattleMonsterSna
     name: monster.name,
     incomePerSecond: monster.incomePerSecond,
     element: monster.element,
+    elementLevel: monster.element ? normalizeElementLevel(monster.elementLevel) : undefined,
     power: stats.power,
     maxHp: stats.maxHp,
     hp: stats.maxHp,

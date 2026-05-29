@@ -1,14 +1,9 @@
 import type { ElementType } from './elements';
 
-export type BossBattleReward =
-  | {
-    type: 'coins';
-    amount: number;
-  }
-  | {
+export type BossBattleReward = {
     type: 'essence';
     amount: number;
-  };
+};
 
 export type BossBattleBossId = string;
 
@@ -27,8 +22,7 @@ export type BossBattleStage = {
   hp: number;
   attack: number;
   teamSize: number;
-  firstClearReward: BossBattleReward;
-  replayReward: Extract<BossBattleReward, { type: 'coins' }>;
+  firstClearReward?: BossBattleReward;
   firstClearFragmentReward?: ElementFragmentReward;
   replayFragmentReward?: ElementFragmentReward;
 };
@@ -64,8 +58,6 @@ export const BOSS_BATTLE_DEFINITIONS: BossBattleDefinition[] = [
         hp: 520,
         attack: 32,
         teamSize: 1,
-        firstClearReward: { type: 'coins', amount: 1600 },
-        replayReward: { type: 'coins', amount: 90 },
         firstClearFragmentReward: { element: 'Spark', amount: 10 },
         replayFragmentReward: { element: 'Spark', amount: 3 },
       },
@@ -77,8 +69,6 @@ export const BOSS_BATTLE_DEFINITIONS: BossBattleDefinition[] = [
         hp: 1300,
         attack: 68,
         teamSize: 1,
-        firstClearReward: { type: 'coins', amount: 3800 },
-        replayReward: { type: 'coins', amount: 200 },
         firstClearFragmentReward: { element: 'Spark', amount: 18 },
         replayFragmentReward: { element: 'Spark', amount: 5 },
       },
@@ -91,7 +81,6 @@ export const BOSS_BATTLE_DEFINITIONS: BossBattleDefinition[] = [
         attack: 150,
         teamSize: 1,
         firstClearReward: { type: 'essence', amount: 1 },
-        replayReward: { type: 'coins', amount: 380 },
         firstClearFragmentReward: { element: 'Spark', amount: 30 },
         replayFragmentReward: { element: 'Spark', amount: 8 },
       },
@@ -115,8 +104,6 @@ export const BOSS_BATTLE_DEFINITIONS: BossBattleDefinition[] = [
         hp: 650,
         attack: 30,
         teamSize: 1,
-        firstClearReward: { type: 'coins', amount: 1800 },
-        replayReward: { type: 'coins', amount: 100 },
         firstClearFragmentReward: { element: 'Fire', amount: 10 },
         replayFragmentReward: { element: 'Fire', amount: 3 },
       },
@@ -128,8 +115,6 @@ export const BOSS_BATTLE_DEFINITIONS: BossBattleDefinition[] = [
         hp: 1600,
         attack: 70,
         teamSize: 1,
-        firstClearReward: { type: 'coins', amount: 4300 },
-        replayReward: { type: 'coins', amount: 220 },
         firstClearFragmentReward: { element: 'Fire', amount: 18 },
         replayFragmentReward: { element: 'Fire', amount: 5 },
       },
@@ -142,7 +127,6 @@ export const BOSS_BATTLE_DEFINITIONS: BossBattleDefinition[] = [
         attack: 145,
         teamSize: 1,
         firstClearReward: { type: 'essence', amount: 1 },
-        replayReward: { type: 'coins', amount: 420 },
         firstClearFragmentReward: { element: 'Fire', amount: 30 },
         replayFragmentReward: { element: 'Fire', amount: 8 },
       },
@@ -166,8 +150,6 @@ export const BOSS_BATTLE_DEFINITIONS: BossBattleDefinition[] = [
         hp: 560,
         attack: 40,
         teamSize: 2,
-        firstClearReward: { type: 'coins', amount: 2000 },
-        replayReward: { type: 'coins', amount: 120 },
         firstClearFragmentReward: { element: 'Metal', amount: 10 },
         replayFragmentReward: { element: 'Metal', amount: 3 },
       },
@@ -179,8 +161,6 @@ export const BOSS_BATTLE_DEFINITIONS: BossBattleDefinition[] = [
         hp: 1400,
         attack: 85,
         teamSize: 2,
-        firstClearReward: { type: 'coins', amount: 4800 },
-        replayReward: { type: 'coins', amount: 260 },
         firstClearFragmentReward: { element: 'Metal', amount: 18 },
         replayFragmentReward: { element: 'Metal', amount: 5 },
       },
@@ -193,7 +173,6 @@ export const BOSS_BATTLE_DEFINITIONS: BossBattleDefinition[] = [
         attack: 180,
         teamSize: 2,
         firstClearReward: { type: 'essence', amount: 1 },
-        replayReward: { type: 'coins', amount: 480 },
         firstClearFragmentReward: { element: 'Metal', amount: 30 },
         replayFragmentReward: { element: 'Metal', amount: 8 },
       },
@@ -217,8 +196,6 @@ export const BOSS_BATTLE_DEFINITIONS: BossBattleDefinition[] = [
         hp: 850,
         attack: 24,
         teamSize: 3,
-        firstClearReward: { type: 'coins', amount: 2200 },
-        replayReward: { type: 'coins', amount: 140 },
         firstClearFragmentReward: { element: 'Dream', amount: 10 },
         replayFragmentReward: { element: 'Dream', amount: 3 },
       },
@@ -230,8 +207,6 @@ export const BOSS_BATTLE_DEFINITIONS: BossBattleDefinition[] = [
         hp: 2200,
         attack: 55,
         teamSize: 3,
-        firstClearReward: { type: 'coins', amount: 5600 },
-        replayReward: { type: 'coins', amount: 290 },
         firstClearFragmentReward: { element: 'Dream', amount: 18 },
         replayFragmentReward: { element: 'Dream', amount: 5 },
       },
@@ -244,7 +219,6 @@ export const BOSS_BATTLE_DEFINITIONS: BossBattleDefinition[] = [
         attack: 120,
         teamSize: 3,
         firstClearReward: { type: 'essence', amount: 2 },
-        replayReward: { type: 'coins', amount: 540 },
         firstClearFragmentReward: { element: 'Dream', amount: 30 },
         replayFragmentReward: { element: 'Dream', amount: 8 },
       },

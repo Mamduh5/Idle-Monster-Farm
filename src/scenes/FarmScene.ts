@@ -5,7 +5,7 @@ import { HatchPanelView } from '../ui/HatchPanelView';
 import { HudView } from '../ui/HudView';
 import { NavigationControlView } from '../ui/NavigationControlView';
 import { NavigationMenuPanelView, type NavigationMenuPanelItem } from '../ui/NavigationMenuPanelView';
-import { OrderWidgetView } from '../ui/OrderWidgetView';
+import { NextQuestWidgetView } from '../ui/NextQuestWidgetView';
 import {
   addPanelBackground,
   getInsetPanelSize,
@@ -34,15 +34,17 @@ import {
   createInitialElementFragments,
   ELEMENT_TYPES,
   ELEMENT_FORGE_APPLY_COST,
+  getElementForgeCost,
   getElementDefinition,
   getElementIncomeMultiplier,
   isElementStrongAgainstBoss,
+  normalizeElementLevel,
   spendElementFragments,
+  type ElementLevel,
   type ElementFragmentInventory,
   type ElementType,
 } from '../data/elements';
-import { MISSION_DEFINITIONS, type MissionDefinition, type MissionId, type MissionReward } from '../data/missions';
-import { ORDER_DEFINITIONS, type OrderDefinition, type OrderId, type OrderReward } from '../data/orders';
+import { QUEST_DEFINITIONS, type QuestDefinition, type QuestId, type QuestReward } from '../data/quests';
 import {
   canMergeSlots as canMergeFarmSlots,
   canMoveSlots as canMoveFarmSlots,
@@ -78,22 +80,14 @@ import {
 } from '../state/hatchPoolState';
 import { getActiveTapFarmCombo as getActiveTapFarmComboFromState, getBaseTapFarmReward, getClampedTapFarmEnergy, getTapFarmComboMultiplier as getTapFarmComboMultiplierFromState, getTapFarmComboTimeoutResult, getTapFarmEnergyRatio as getTapFarmEnergyRatioFromState, getTapFarmRewardAmount, getTapFarmTapResult, resetTapFarmEnergy, TAP_FARM_BURST_THRESHOLD, TAP_FARM_COMBO_MAX_MULTIPLIER, TAP_FARM_COMBO_TIMEOUT_MS, TAP_FARM_COOLDOWN_MS, TAP_FARM_DEFAULT_CONFIG, TAP_FARM_MIN_REWARD, TAP_FARM_REWARD_SECONDS } from '../state/tapFarmState';
 import {
-  canIncrementMission,
-  createInitialMissionProgress as createInitialMissionProgressState,
-  getIncrementedMissionProgress,
-  getMissionClaimStatus,
-  getMissionDefinition as getMissionDefinitionFromState,
-  getMissionProgress as getMissionProgressFromState,
-  getSanitizedMissionProgress as getSanitizedMissionProgressFromState,
-} from '../state/missionState';
-import {
-  canClaimOrder,
-  getOrderDefinition as getOrderDefinitionFromState,
-  getOrderStatus,
-  getRecommendedOrder as getRecommendedOrderFromState,
-  isOrderComplete as isOrderCompleteState,
-  isOrderUnlocked as isOrderUnlockedState,
-} from '../state/orderState';
+  canIncrementQuest,
+  createInitialQuestProgress as createInitialQuestProgressState,
+  getIncrementedQuestProgress,
+  getQuestClaimStatus,
+  getQuestDefinition as getQuestDefinitionFromState,
+  getQuestProgress as getQuestProgressFromState,
+  getSanitizedQuestProgress as getSanitizedQuestProgressFromState,
+} from '../state/questState';
 import {
   applyBossTurn,
   applyPlayerSkill,
@@ -103,7 +97,6 @@ import {
   getActiveBattleMonster,
   getAutoBattleTeam,
   getAvailableSkillsForMonster,
-  getBossReplayReward,
   getDefaultBossStageIndexForBoss,
   isBossStageCleared,
   reviveBattleSession,
@@ -164,7 +157,7 @@ import {
   getEffectiveMonsterIncome,
   getFamilyIncomeMultiplier,
   getOfflineCapSeconds,
-  getOrderCoinReward,
+  getQuestCoinReward,
   getSporeIncomeMultiplier,
   getTotalIncomePerSecond,
   HATCH_COOLDOWN_MS,
@@ -182,6 +175,7 @@ import type {
   MonsterFamily,
   MonsterInstance,
   OnboardingHintId,
+  QuestGuideStepId,
 } from '../types/game-state';
 
 const GRID_COLUMNS = 3;
@@ -209,6 +203,30 @@ const BOSS_DAILY_CLEAR_LIMIT = 2;
 const ELEMENT_FORGE_MONSTERS_PER_PAGE = 4;
 const COMPENDIUM_FAMILIES_PER_PAGE = 9;
 const COMPENDIUM_MONSTERS_PER_PAGE = 15;
+const QUEST_GUIDE_SEQUENCE: QuestGuideStepId[] = [
+  'hatch-1',
+  'hatch-2',
+  'merge-1',
+  'income',
+  'shop-open',
+  'shop-buy',
+  'remove-tip',
+  'ritual-open',
+  'battle-open',
+  'forge-open',
+];
+const QUEST_GUIDE_TEXT: Record<QuestGuideStepId, string> = {
+  'hatch-1': 'Tap Hatch to get your first monster.',
+  'hatch-2': 'Hatch another monster.',
+  'merge-1': 'Drag matching monsters together to merge.',
+  income: 'Monsters earn coins over time.',
+  'shop-open': 'Use coins to buy upgrades.',
+  'shop-buy': 'Buy one upgrade.',
+  'remove-tip': 'Drag unwanted monsters to Remove when the farm is stuck.',
+  'ritual-open': 'Ritual resets your farm for Essence later.',
+  'battle-open': 'Fight bosses to earn Element Fragments.',
+  'forge-open': 'Use fragments here to infuse monsters.',
+};
 const UI_FONT_FAMILY = 'Arial, Tahoma, "Noto Sans Thai", sans-serif';
 const MONO_FONT_FAMILY = 'Consolas, monospace';
 const THEME = {
@@ -244,7 +262,7 @@ const THEME = {
 
 type MonsterDragZone = Phaser.GameObjects.Zone;
 type UiLayoutMode = 'mobile' | 'desktop';
-type ModalKind = 'compendium' | 'upgrade-shop' | 'goals' | 'orders' | 'battle' | 'element-forge' | 'default';
+type ModalKind = 'compendium' | 'upgrade-shop' | 'quests' | 'battle' | 'element-forge' | 'default';
 type BossBattlePlayerVisualEffect = {
   kind: 'damage' | 'support';
   amount: number;
@@ -256,12 +274,11 @@ type BossBattleBossVisualEffect = {
   visualTheme: BossVisualTheme;
 };
 type BossBattleRewardX2Source = 'first-clear' | 'auto-clear';
-type BossBattleCoinReward = Extract<BossBattleReward, { type: 'coins' }>;
 type BossBattleRewardX2Opportunity = {
   id: number;
   source: BossBattleRewardX2Source;
   stageId: string;
-  reward: BossBattleCoinReward;
+  reward: ElementFragmentReward;
   consumed: boolean;
   adInProgress: boolean;
 };
@@ -315,10 +332,10 @@ type FarmSceneLayout = {
   statsY: number;
   statsWidth: number;
   statsHeight: number;
-  orderWidgetX: number;
-  orderWidgetY: number;
-  orderWidgetWidth: number;
-  orderWidgetHeight: number;
+  questWidgetX: number;
+  questWidgetY: number;
+  questWidgetWidth: number;
+  questWidgetHeight: number;
   menuX: number;
   menuY: number;
   menuGap: number;
@@ -357,7 +374,7 @@ export class FarmScene extends Phaser.Scene {
   private readonly monsterRenderer: MonsterRenderer;
   private readonly navigationControlView: NavigationControlView;
   private readonly navigationMenuPanelView: NavigationMenuPanelView;
-  private readonly orderWidgetView: OrderWidgetView;
+  private readonly nextQuestWidgetView: NextQuestWidgetView;
   private readonly tapFarmView: TapFarmView;
   private readonly toastView: ToastView;
   private currency: CurrencyState = {
@@ -394,13 +411,18 @@ export class FarmScene extends Phaser.Scene {
   private skipSavingUntilProgress = false;
   private discoveredMonsters = new Set<DiscoveryKey>();
   private onboardingHintsSeen = new Set<OnboardingHintId>();
+  private activeQuestGuideStepId?: QuestGuideStepId;
+  private completedQuestGuideStepIds = new Set<QuestGuideStepId>();
+  private isFirstGuideComplete = false;
+  private isFirstGuideSkipped = false;
+  private questGuideOverlay?: Phaser.GameObjects.Container;
+  private questGuideStartedAt = 0;
   private compendiumPanel?: Phaser.GameObjects.Container;
   private settingsPanel?: Phaser.GameObjects.Container;
   private helpPanel?: Phaser.GameObjects.Container;
   private patchNotesPanel?: Phaser.GameObjects.Container;
   private zonePanel?: Phaser.GameObjects.Container;
-  private missionsPanel?: Phaser.GameObjects.Container;
-  private ordersPanel?: Phaser.GameObjects.Container;
+  private questsPanel?: Phaser.GameObjects.Container;
   private bossBattlePanel?: Phaser.GameObjects.Container;
   private elementForgePanel?: Phaser.GameObjects.Container;
   private upgradeShopPanel?: Phaser.GameObjects.Container;
@@ -414,10 +436,9 @@ export class FarmScene extends Phaser.Scene {
   private activeDragPointerId: number | null = null;
   private monsterRemoveDropZone?: MonsterRemoveDropZone;
   private upgradeLevels: Record<UpgradeId, number> = this.createInitialUpgradeLevels();
-  private missionProgress: Record<MissionId, number> = this.createInitialMissionProgress();
-  private completedMissionIds = new Set<MissionId>();
-  private claimedMissionIds = new Set<MissionId>();
-  private claimedOrderIds = new Set<OrderId>();
+  private questProgress: Record<QuestId, number> = this.createInitialQuestProgress();
+  private completedQuestIds = new Set<QuestId>();
+  private claimedQuestIds = new Set<QuestId>();
   private claimedBossBattleStageIds = new Set<string>();
   private elementFragments: ElementFragmentInventory = createInitialElementFragments();
   private bossDailyClearCounts: Record<string, number> = {};
@@ -433,8 +454,7 @@ export class FarmScene extends Phaser.Scene {
   private compendiumFamilyHomePageIndex = 0;
   private compendiumFamilyPageIndex = 0;
   private upgradeShopPageIndex = 0;
-  private missionsPageIndex = 0;
-  private ordersPageIndex = 0;
+  private questsPageIndex = 0;
   private bossBattleBossPageIndex = 0;
   private bossBattleStagePageIndex = 0;
   private selectedBossBattleBossId?: BossBattleBossId;
@@ -504,6 +524,7 @@ export class FarmScene extends Phaser.Scene {
 
   private readonly handleScaleResize = (): void => {
     this.rebuildResponsiveFarmView();
+    this.syncQuestGuide();
   };
 
   constructor() {
@@ -536,6 +557,7 @@ export class FarmScene extends Phaser.Scene {
       formatDuration: (seconds) => this.formatDuration(seconds),
       getEffectiveEggCost: () => this.getEffectiveEggCost(),
       getLayout: () => this.getLayout(),
+      getMonsterEssence: () => this.monsterEssence,
       getOfflineCapSeconds: () => this.getOfflineCapSeconds(),
       getTotalIncomePerSecond: () => this.getTotalIncomePerSecond(),
       t: (key, params) => this.t(key, params),
@@ -561,19 +583,19 @@ export class FarmScene extends Phaser.Scene {
       t: (key, params) => this.t(key, params),
       theme: THEME,
     });
-    this.orderWidgetView = new OrderWidgetView(this, {
+    this.nextQuestWidgetView = new NextQuestWidgetView(this, {
       fontFamily: UI_FONT_FAMILY,
       getLayout: () => this.getLayout(),
-      getOrderRequirementText: (order) => this.getOrderRequirementText(order),
-      getOrderRewardText: (reward) => this.getOrderRewardText(reward),
-      getOrderWidgetStatusText: (order) => this.getOrderWidgetStatusText(order),
-      getRecommendedOrder: () => this.getRecommendedOrder(),
+      getNextQuest: () => this.getNextQuest(),
+      getQuestProgressText: (quest) => this.getQuestProgressText(quest),
+      getQuestRewardText: (reward) => this.getQuestRewardText(reward),
       isModalOpen: () => this.isModalOpen(),
-      isOrderClaimed: (orderId) => this.claimedOrderIds.has(orderId),
-      isOrderComplete: (order) => this.isOrderComplete(order),
+      isQuestClaimed: (questId) => this.claimedQuestIds.has(questId),
+      isQuestComplete: (quest) => this.completedQuestIds.has(quest.id),
       onButtonClickSound: () => this.playButtonClickSound(),
-      onClaimOrder: (orderId) => this.claimOrderReward(orderId),
-      onOpenOrdersPanel: () => this.openOrdersPanel(),
+      onClaimQuest: (questId) => this.claimQuestReward(questId),
+      onFocusQuest: (quest) => this.focusQuestTarget(quest),
+      onOpenQuestsPanel: () => this.openQuestsPanel(),
       t: (key, params) => this.t(key, params),
       theme: THEME,
     });
@@ -608,13 +630,17 @@ export class FarmScene extends Phaser.Scene {
     this.skipSavingUntilProgress = false;
     this.discoveredMonsters = new Set<DiscoveryKey>();
     this.onboardingHintsSeen = new Set<OnboardingHintId>();
+    this.activeQuestGuideStepId = undefined;
+    this.completedQuestGuideStepIds = new Set<QuestGuideStepId>();
+    this.isFirstGuideComplete = false;
+    this.isFirstGuideSkipped = false;
+    this.questGuideStartedAt = 0;
     this.compendiumPanel = undefined;
     this.settingsPanel = undefined;
     this.helpPanel = undefined;
     this.patchNotesPanel = undefined;
     this.zonePanel = undefined;
-    this.missionsPanel = undefined;
-    this.ordersPanel = undefined;
+    this.questsPanel = undefined;
     this.bossBattlePanel = undefined;
     this.elementForgePanel = undefined;
     this.upgradeShopPanel = undefined;
@@ -629,10 +655,9 @@ export class FarmScene extends Phaser.Scene {
     this.activeDragPointerId = null;
     this.hideMonsterRemoveZone();
     this.upgradeLevels = this.createInitialUpgradeLevels();
-    this.missionProgress = this.createInitialMissionProgress();
-    this.completedMissionIds = new Set<MissionId>();
-    this.claimedMissionIds = new Set<MissionId>();
-    this.claimedOrderIds = new Set<OrderId>();
+    this.questProgress = this.createInitialQuestProgress();
+    this.completedQuestIds = new Set<QuestId>();
+    this.claimedQuestIds = new Set<QuestId>();
     this.unlockedZones = createInitialUnlockedZones(GRASS_FARM_ZONE_ID);
     this.currentZone = GRASS_FARM_ZONE_ID;
     this.hasPrestigedOnce = false;
@@ -645,8 +670,7 @@ export class FarmScene extends Phaser.Scene {
     this.compendiumFamilyHomePageIndex = 0;
     this.compendiumFamilyPageIndex = 0;
     this.upgradeShopPageIndex = 0;
-    this.missionsPageIndex = 0;
-    this.ordersPageIndex = 0;
+    this.questsPageIndex = 0;
     this.clearBattleAnimationEvents();
     this.bossBattleRewardX2Opportunity = undefined;
     this.nextBossBattleRewardX2OpportunityId = 1;
@@ -671,7 +695,7 @@ export class FarmScene extends Phaser.Scene {
     this.backgroundContainer = undefined;
     this.farmGridContainer = undefined;
     this.hudView.destroy();
-    this.orderWidgetView.destroy();
+    this.nextQuestWidgetView.destroy();
     this.expansionContainer = undefined;
     this.tapFarmView.destroy();
     this.gameplayActionBarView.destroy();
@@ -691,7 +715,7 @@ export class FarmScene extends Phaser.Scene {
     this.createFarmGrid();
     this.createExpansionPlaceholder();
     this.createHud();
-    this.createOrderWidget();
+    this.createNextQuestWidget();
     this.createHatchArea();
     this.createTapFarmArea();
     this.createGameplayActionBar();
@@ -704,13 +728,19 @@ export class FarmScene extends Phaser.Scene {
     this.loadProgress();
     this.registerPersistenceEvents();
     this.updateHud();
-    this.scheduleInitialOnboardingHints();
+    this.syncQuestGuide();
   }
 
   update(_time: number, delta: number): void {
     this.updateHatchCooldown(delta);
     this.addPassiveIncome(delta);
     this.updateCoinBugs(delta);
+    if (this.activeQuestGuideStepId === 'income' && this.time.now - this.questGuideStartedAt > 1800) {
+      this.completeQuestGuideStep('income');
+    }
+    if (this.activeQuestGuideStepId === 'remove-tip' && this.time.now - this.questGuideStartedAt > 2600) {
+      this.completeQuestGuideStep('remove-tip');
+    }
     this.updateTapFarmComboTimeout();
     this.updateOnboardingHints();
     this.saveProgressWhenReady(delta);
@@ -737,7 +767,7 @@ export class FarmScene extends Phaser.Scene {
     this.createFarmGrid();
     this.createExpansionPlaceholder();
     this.createHud();
-    this.createOrderWidget();
+    this.createNextQuestWidget();
     this.createHatchArea();
     this.createTapFarmArea();
     this.createGameplayActionBar();
@@ -940,12 +970,12 @@ export class FarmScene extends Phaser.Scene {
     const menuGap = isNarrow ? 25 : 40;
     const menuButtonCount = SHOW_DEBUG_PANEL ? 2 : 1;
     const menuBottom = menuY + (menuButtonCount - 1) * menuGap + 30;
-    const orderWidgetWidth = isNarrow
+    const questWidgetWidth = isNarrow
       ? Math.max(146, Math.min(168, width - hudWidth - margin * 3))
       : 236;
-    const orderWidgetHeight = isNarrow ? 80 : 88;
-    const orderWidgetX = width - margin - orderWidgetWidth;
-    const orderWidgetY = isNarrow ? menuY + 38 : menuY + 44;
+    const questWidgetHeight = isNarrow ? 80 : 88;
+    const questWidgetX = width - margin - questWidgetWidth;
+    const questWidgetY = isNarrow ? menuY + 38 : menuY + 44;
     const topContentBottom = isNarrow ? Math.max(statsY + statsHeight, menuBottom) : 126;
     const bottomSafePadding = isNarrow ? (height < 700 ? 14 : 18) : 18;
     const actionBarWidth = isNarrow ? Math.min(width - margin * 2, 366) : 420;
@@ -1014,10 +1044,10 @@ export class FarmScene extends Phaser.Scene {
       statsY,
       statsWidth,
       statsHeight,
-      orderWidgetX,
-      orderWidgetY,
-      orderWidgetWidth,
-      orderWidgetHeight,
+      questWidgetX,
+      questWidgetY,
+      questWidgetWidth,
+      questWidgetHeight,
       menuX,
       menuY,
       menuGap,
@@ -1216,8 +1246,8 @@ export class FarmScene extends Phaser.Scene {
     this.hudView.create(this.currency.coins);
   }
 
-  private createOrderWidget(): void {
-    this.orderWidgetView.create();
+  private createNextQuestWidget(): void {
+    this.nextQuestWidgetView.create();
   }
 
   private createHatchArea(): void {
@@ -1246,20 +1276,24 @@ export class FarmScene extends Phaser.Scene {
     }
 
     if (action === 'shop') {
+      this.completeQuestGuideStep('shop-open');
       this.openUpgradeShopPanel();
       return;
     }
 
     if (action === 'battle') {
+      this.completeQuestGuideStep('battle-open');
       this.openBossBattlePanel();
       return;
     }
 
     if (action === 'forge') {
+      this.completeQuestGuideStep('forge-open');
       this.openElementForgePanel(true);
       return;
     }
 
+    this.completeQuestGuideStep('ritual-open');
     this.prestigeConfirmationArmed = false;
     this.openPrestigePanel();
   }
@@ -1292,8 +1326,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closePatchNotesPanel();
     this.closeZonePanel();
-    this.closeMissionsPanel();
-    this.closeOrdersPanel();
+    this.closeQuestsPanel();
     this.closeBossBattlePanel();
     this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
@@ -1307,7 +1340,7 @@ export class FarmScene extends Phaser.Scene {
       { label: this.t('ui.menu.settings'), openPanel: () => this.openSettingsPanel() },
       { label: this.t('ui.menu.help'), openPanel: () => this.openHelpPanel() },
       { label: this.t('ui.menu.patchNotes'), openPanel: () => this.openPatchNotesPanel() },
-      { label: this.t('ui.menu.goals'), openPanel: () => this.openMissionsPanel() },
+      { label: this.t('ui.menu.quests'), openPanel: () => this.openQuestsPanel() },
       { label: this.t('ui.menu.hatchPool'), openPanel: () => this.openHatchPoolPanel() },
       { label: this.t('ui.menu.compendium'), openPanel: () => this.openCompendiumPanel() },
       { label: this.t('ui.menu.zone'), openPanel: () => this.openZonePanel() },
@@ -1357,8 +1390,8 @@ export class FarmScene extends Phaser.Scene {
     return this.t(`upgrade.${upgrade.id}.effect`);
   }
 
-  private getLocalizedMissionName(mission: MissionDefinition): string {
-    return this.t(`mission.${mission.id}.name`);
+  private getLocalizedQuestName(quest: QuestDefinition): string {
+    return this.t(`quest.${quest.id}.name`);
   }
 
   private getLocalizedZoneName(zone: ZoneDefinition): string {
@@ -1378,7 +1411,7 @@ export class FarmScene extends Phaser.Scene {
     writeSettings(this.settings);
     this.createExpansionPlaceholder();
     this.createHud();
-    this.createOrderWidget();
+    this.createNextQuestWidget();
     this.createHatchArea();
     this.createTapFarmArea();
     this.createGameplayActionBar();
@@ -1402,8 +1435,7 @@ export class FarmScene extends Phaser.Scene {
       const inset = 12;
       const isListModal = kind === 'compendium'
         || kind === 'upgrade-shop'
-        || kind === 'goals'
-        || kind === 'orders'
+        || kind === 'quests'
         || kind === 'battle'
         || kind === 'element-forge';
       const mobileMaxWidth = isListModal ? 390 : preferredWidth;
@@ -1535,8 +1567,7 @@ export class FarmScene extends Phaser.Scene {
       || this.helpPanel
       || this.patchNotesPanel
       || this.zonePanel
-      || this.missionsPanel
-      || this.ordersPanel
+      || this.questsPanel
       || this.bossBattlePanel
       || this.elementForgePanel
       || this.upgradeShopPanel
@@ -1586,13 +1617,8 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    if (this.missionsPanel) {
-      this.closeMissionsPanel();
-      return;
-    }
-
-    if (this.ordersPanel) {
-      this.closeOrdersPanel();
+    if (this.questsPanel) {
+      this.closeQuestsPanel();
       return;
     }
 
@@ -1640,7 +1666,7 @@ export class FarmScene extends Phaser.Scene {
     this.hatchPanelView.setModalOpenVisualState(isOpen);
     this.tapFarmView.setModalOpenVisualState(isOpen);
     this.gameplayActionBarView.setModalOpenVisualState(isOpen);
-    this.orderWidgetView.setModalOpenVisualState(isOpen);
+    this.nextQuestWidgetView.setModalOpenVisualState(isOpen);
     this.navigationControlView.setModalOpenVisualState(isOpen);
   }
 
@@ -1775,7 +1801,7 @@ export class FarmScene extends Phaser.Scene {
     const farmControlRects = [
       new Phaser.Geom.Rectangle(layout.hudX, layout.hudY, layout.hudWidth, layout.hudHeight),
       new Phaser.Geom.Rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight),
-      new Phaser.Geom.Rectangle(layout.orderWidgetX, layout.orderWidgetY, layout.orderWidgetWidth, layout.orderWidgetHeight),
+      new Phaser.Geom.Rectangle(layout.questWidgetX, layout.questWidgetY, layout.questWidgetWidth, layout.questWidgetHeight),
       new Phaser.Geom.Rectangle(layout.tapFarmX, layout.tapFarmY, layout.tapFarmWidth, layout.tapFarmHeight),
       new Phaser.Geom.Rectangle(layout.actionBarX, layout.actionBarY, layout.actionBarWidth, layout.actionBarHeight),
       new Phaser.Geom.Rectangle(layout.hatchX, layout.hatchY, layout.hatchWidth, layout.hatchHeight),
@@ -1819,8 +1845,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closePatchNotesPanel();
     this.closeZonePanel();
-    this.closeMissionsPanel();
-    this.closeOrdersPanel();
+    this.closeQuestsPanel();
     this.closeBossBattlePanel();
     this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
@@ -2028,8 +2053,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeSettingsPanel();
     this.closePatchNotesPanel();
     this.closeZonePanel();
-    this.closeMissionsPanel();
-    this.closeOrdersPanel();
+    this.closeQuestsPanel();
     this.closeBossBattlePanel();
     this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
@@ -2060,7 +2084,6 @@ export class FarmScene extends Phaser.Scene {
       [this.t('ui.help.tapFarm.label'), this.t('ui.help.tapFarm.description')],
       [this.t('ui.help.merge.label'), this.t('ui.help.merge.description')],
       [this.t('ui.help.upgrades.label'), this.t('ui.help.upgrades.description')],
-      [this.t('ui.help.orders.label'), this.t('ui.help.orders.description')],
       [this.t('ui.help.elementForge.label'), this.t('ui.help.elementForge.description')],
       [this.t('ui.help.info.label'), this.t('ui.help.info.description')],
       [this.t('ui.help.compendium.label'), this.t('ui.help.compendium.description')],
@@ -2138,8 +2161,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeSettingsPanel();
     this.closeHelpPanel();
     this.closeZonePanel();
-    this.closeMissionsPanel();
-    this.closeOrdersPanel();
+    this.closeQuestsPanel();
     this.closeBossBattlePanel();
     this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
@@ -2223,8 +2245,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closePatchNotesPanel();
     this.closeZonePanel();
-    this.closeMissionsPanel();
-    this.closeOrdersPanel();
+    this.closeQuestsPanel();
     this.closeBossBattlePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
@@ -2423,7 +2444,7 @@ export class FarmScene extends Phaser.Scene {
 
     this.monsterRenderer.addMonsterVisual(icon, monster, 0, 0, isCompactPanel ? 0.26 : 0.3);
     if (monster.element) {
-      this.addElementBadge(icon, monster.element, 14, -15, 0.72);
+      this.addElementBadge(icon, monster.element, 14, -15, 0.72, monster.elementLevel);
     }
 
     panel.add(rowBackground);
@@ -2481,7 +2502,7 @@ export class FarmScene extends Phaser.Scene {
     }).setOrigin(0.5));
 
     panel.add(this.add.text(0, startY - 10, this.t('ui.elementForge.incomeBonus', {
-      percent: Math.round((getElementIncomeMultiplier('Spark') - 1) * 100),
+      percent: Math.round((getElementIncomeMultiplier('Spark', 1) - 1) * 100),
     }), {
       align: 'center',
       color: THEME.mutedText,
@@ -2493,23 +2514,27 @@ export class FarmScene extends Phaser.Scene {
     ELEMENT_TYPES.forEach((element, index) => {
       const owned = this.elementFragments[element] ?? 0;
       const hasSelectedMonster = Boolean(selectedMonster);
-      const alreadyApplied = selectedMonster?.element === element;
-      const canAfford = canAffordElementForge(this.elementFragments, element);
-      const enabled = hasSelectedMonster && canAfford && !alreadyApplied;
-      let status = this.t('ui.elementForge.apply');
+      const currentLevel = selectedMonster?.element ? normalizeElementLevel(selectedMonster.elementLevel) : undefined;
+      const isSameElement = selectedMonster?.element === element;
+      const isMaxed = isSameElement && currentLevel === 3;
+      const nextLevel = isSameElement ? Math.min(3, (currentLevel ?? 1) + 1) as ElementLevel : 1;
+      const cost = selectedMonster ? getElementForgeCost(selectedMonster.element, currentLevel, element) : ELEMENT_FORGE_APPLY_COST;
+      const canAfford = canAffordElementForge(this.elementFragments, element, cost);
+      const enabled = hasSelectedMonster && canAfford && !isMaxed;
+      let status = this.t('ui.elementForge.applyLevel', { level: nextLevel });
 
       if (!hasSelectedMonster) {
         status = this.t('ui.elementForge.needMonster');
-      } else if (alreadyApplied) {
-        status = this.t('ui.elementForge.alreadyApplied');
+      } else if (isMaxed) {
+        status = this.t('ui.elementForge.maxLevel');
       } else if (!canAfford) {
         status = this.t('ui.elementForge.needFragments');
       }
 
-      const label = `${this.getLocalizedElementName(element)}\n${this.t('ui.elementForge.cost', {
-        amount: ELEMENT_FORGE_APPLY_COST,
+      const label = `${status}\n${this.t('ui.elementForge.cost', {
+        amount: cost,
         element: this.getLocalizedElementName(element),
-      })}\n${status}`;
+      })}`;
       const x = index % 2 === 0 ? firstX : secondX;
       const y = startY + Math.floor(index / 2) * (buttonHeight + gapY) + buttonHeight / 2 + 18;
       const buttonBackground = this.add.rectangle(
@@ -2583,7 +2608,23 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getElementForgeMonsterSlots(): FarmSlotState[] {
-    return this.getUnlockedFarmSlots().filter((slot) => Boolean(slot.monster));
+    return this.getUnlockedFarmSlots()
+      .filter((slot) => Boolean(slot.monster))
+      .sort((a, b) => {
+        const aMonster = a.monster;
+        const bMonster = b.monster;
+
+        if (!aMonster || !bMonster) {
+          return aMonster ? -1 : bMonster ? 1 : a.id - b.id;
+        }
+
+        return this.getEffectiveMonsterIncome(bMonster) - this.getEffectiveMonsterIncome(aMonster)
+          || bMonster.level - aMonster.level
+          || Number(Boolean(bMonster.element)) - Number(Boolean(aMonster.element))
+          || normalizeElementLevel(bMonster.elementLevel) - normalizeElementLevel(aMonster.elementLevel)
+          || this.getLocalizedMonsterName(aMonster).localeCompare(this.getLocalizedMonsterName(bMonster))
+          || a.id - b.id;
+      });
   }
 
   private getSelectedElementForgeMonster(): MonsterInstance | undefined {
@@ -2598,19 +2639,30 @@ export class FarmScene extends Phaser.Scene {
     const slotId = this.selectedElementForgeSlotId;
     const monster = slotId === undefined ? undefined : this.farmSlots[slotId]?.monster;
 
-    if (slotId === undefined || !monster || monster.element === element) {
+    if (slotId === undefined || !monster) {
+      return;
+    }
+    const currentLevel = monster.element ? normalizeElementLevel(monster.elementLevel) : undefined;
+    const isSameElement = monster.element === element;
+    const isMaxed = isSameElement && currentLevel === 3;
+    const nextLevel = isSameElement ? Math.min(3, (currentLevel ?? 1) + 1) as ElementLevel : 1;
+    const cost = getElementForgeCost(monster.element, currentLevel, element);
+
+    if (isMaxed) {
+      this.showToast(this.t('ui.elementForge.maxLevel'), 'warning');
       return;
     }
 
-    if (!canAffordElementForge(this.elementFragments, element)) {
+    if (!canAffordElementForge(this.elementFragments, element, cost)) {
       this.showToast(this.t('ui.elementForge.needFragments'), 'warning');
       return;
     }
 
-    this.elementFragments = spendElementFragments(this.elementFragments, element, ELEMENT_FORGE_APPLY_COST);
+    this.elementFragments = spendElementFragments(this.elementFragments, element, cost);
     this.farmSlots = setSlotMonster(this.farmSlots, slotId, {
       ...monster,
       element,
+      elementLevel: nextLevel,
     });
     this.renderMonsterInSlot(this.farmSlots[slotId]);
     this.updateHud();
@@ -2623,8 +2675,8 @@ export class FarmScene extends Phaser.Scene {
     }), 'success');
   }
 
-  private getMonsterElementLabel(monster: Pick<MonsterInstance, 'element'>): string {
-    return monster.element ? this.getLocalizedElementName(monster.element) : this.t('element.none');
+  private getMonsterElementLabel(monster: Pick<MonsterInstance, 'element' | 'elementLevel'>): string {
+    return monster.element ? `${this.getLocalizedElementName(monster.element)} Lv${normalizeElementLevel(monster.elementLevel)}` : this.t('element.none');
   }
 
   private toggleZonePanel(): void {
@@ -2643,8 +2695,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeSettingsPanel();
     this.closeHelpPanel();
     this.closePatchNotesPanel();
-    this.closeMissionsPanel();
-    this.closeOrdersPanel();
+    this.closeQuestsPanel();
     this.closeBossBattlePanel();
     this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
@@ -2772,7 +2823,6 @@ export class FarmScene extends Phaser.Scene {
     this.currentZone = zoneId;
     this.createFarmBackground();
     this.updateHud();
-    this.refreshOrdersPanel();
     this.skipSavingUntilProgress = false;
     this.saveProgress();
     this.openZonePanel();
@@ -2809,24 +2859,23 @@ export class FarmScene extends Phaser.Scene {
     return families;
   }
 
-  private toggleMissionsPanel(): void {
-    if (this.missionsPanel) {
-      this.closeMissionsPanel();
+  private toggleQuestsPanel(): void {
+    if (this.questsPanel) {
+      this.closeQuestsPanel();
       return;
     }
 
-    this.openMissionsPanel();
+    this.openQuestsPanel();
   }
 
-  private openMissionsPanel(): void {
-    this.closeMissionsPanel();
+  private openQuestsPanel(): void {
+    this.closeQuestsPanel();
     this.closeNavigationMenuPanel();
     this.closeCompendiumPanel();
     this.closeSettingsPanel();
     this.closeHelpPanel();
     this.closePatchNotesPanel();
     this.closeZonePanel();
-    this.closeOrdersPanel();
     this.closeBossBattlePanel();
     this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
@@ -2837,66 +2886,66 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = this.getModalSize('goals', 540, 520);
+    const { width: panelWidth, height: panelHeight } = this.getModalSize('quests', 540, 520);
     const rowGap = panelWidth < 420 ? 50 : 56;
     const rowHeight = Math.min(50, rowGap - 6);
     const firstRowY = -panelHeight / 2 + 90;
     const bodyHeight = panelHeight - 138;
-    const rowsPerPage = this.getRowsPerPage(rowGap, bodyHeight, MISSION_DEFINITIONS.length, 7, 8);
-    const pageCount = this.getPageCount(MISSION_DEFINITIONS.length, rowsPerPage);
-    const pageIndex = Phaser.Math.Clamp(this.missionsPageIndex, 0, pageCount - 1);
-    const pageMissions = MISSION_DEFINITIONS.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage);
+    const rowsPerPage = this.getRowsPerPage(rowGap, bodyHeight, QUEST_DEFINITIONS.length, 7, 8);
+    const pageCount = this.getPageCount(QUEST_DEFINITIONS.length, rowsPerPage);
+    const pageIndex = Phaser.Math.Clamp(this.questsPageIndex, 0, pageCount - 1);
+    const pageQuests = QUEST_DEFINITIONS.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage);
 
-    this.missionsPageIndex = pageIndex;
+    this.questsPageIndex = pageIndex;
 
     panel.setDepth(24);
     addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
 
-    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.goals.title'), {
+    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.quests.title'), {
       color: THEME.text,
       fontFamily: UI_FONT_FAMILY,
       fontSize: getPanelTitleFontSize(panelWidth),
       fontStyle: 'bold',
     }));
 
-    this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closeMissionsPanel());
+    this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closeQuestsPanel());
 
-    pageMissions.forEach((mission, index) => {
-      this.addMissionRow(panel, mission, firstRowY + index * rowGap, panelWidth, rowHeight);
+    pageQuests.forEach((quest, index) => {
+      this.addQuestRow(panel, quest, firstRowY + index * rowGap, panelWidth, rowHeight);
     });
 
     this.addPaginationControls(panel, panelWidth, panelHeight, pageIndex, pageCount, (nextPageIndex) => {
-      this.missionsPageIndex = nextPageIndex;
-      this.openMissionsPanel();
+      this.questsPageIndex = nextPageIndex;
+      this.openQuestsPanel();
     });
 
-    this.missionsPanel = panel;
+    this.questsPanel = panel;
   }
 
-  private addMissionRow(
+  private addQuestRow(
     panel: Phaser.GameObjects.Container,
-    mission: MissionDefinition,
+    quest: QuestDefinition,
     rowY: number,
     panelWidth: number,
     rowHeight: number,
   ): Phaser.GameObjects.Text | undefined {
     const isCompactPanel = panelWidth < 420 || rowHeight < 48;
-    const isCompleted = this.completedMissionIds.has(mission.id);
-    const isClaimed = this.claimedMissionIds.has(mission.id);
+    const isCompleted = this.completedQuestIds.has(quest.id);
+    const isClaimed = this.claimedQuestIds.has(quest.id);
     const canClaim = isCompleted && !isClaimed;
-    const progress = this.getMissionProgress(mission);
+    const progress = this.getQuestProgress(quest);
     const rowTop = rowY - rowHeight / 2;
     const rowWidth = panelWidth - 48;
-    const statusText = isClaimed ? this.t('ui.goals.claimed') : isCompleted ? this.t('ui.goals.complete') : `${progress}/${mission.goal}`;
-    const detailText = this.t('ui.goals.rewardDetail', {
+    const statusText = isClaimed ? this.t('ui.quests.claimed') : isCompleted ? this.t('ui.quests.complete') : `${progress}/${quest.goal}`;
+    const detailText = this.t('ui.quests.rewardDetail', {
       status: statusText,
-      reward: this.getMissionRewardText(mission.reward),
+      reward: this.getQuestRewardText(quest.reward),
     });
 
     panel.add(this.add.rectangle(0, rowY, rowWidth, rowHeight, isClaimed ? 0x29362f : THEME.panelAlt, 0.92)
       .setStrokeStyle(2, canClaim ? THEME.slot : THEME.lockedBorder, 0.72));
 
-    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 7, this.getLocalizedMissionName(mission), {
+    panel.add(this.add.text(-panelWidth / 2 + 42, rowTop + 7, this.getLocalizedQuestName(quest), {
       color: isClaimed ? '#cdebb3' : THEME.text,
       fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '14px' : '16px',
@@ -2915,7 +2964,7 @@ export class FarmScene extends Phaser.Scene {
       },
     }));
 
-    const actionText = this.add.text(panelWidth / 2 - 42, rowY, isClaimed ? this.t('ui.goals.done') : canClaim ? this.t('ui.goals.claim') : `${progress}/${mission.goal}`, {
+    const actionText = this.add.text(panelWidth / 2 - 42, rowY, isClaimed ? this.t('ui.quests.done') : canClaim ? this.t('ui.quests.claim') : `${progress}/${quest.goal}`, {
       color: isClaimed ? '#cdebb3' : '#ffffff',
       fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '13px' : '14px',
@@ -2933,7 +2982,7 @@ export class FarmScene extends Phaser.Scene {
         .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
           pointer.event?.stopPropagation();
           this.playButtonClickSound();
-          this.claimMissionReward(mission.id);
+          this.claimQuestReward(quest.id);
         });
     }
 
@@ -2941,293 +2990,239 @@ export class FarmScene extends Phaser.Scene {
     return actionText;
   }
 
-  private closeMissionsPanel(): void {
-    if (this.missionsPanel) {
-      this.missionsPanel.destroy();
-      this.missionsPanel = undefined;
+  private closeQuestsPanel(): void {
+    if (this.questsPanel) {
+      this.questsPanel.destroy();
+      this.questsPanel = undefined;
       this.hideModalOverlay();
     }
   }
 
-  private refreshMissionsPanel(): void {
-    if (this.missionsPanel) {
-      this.openMissionsPanel();
+  private refreshQuestsPanel(): void {
+    if (this.questsPanel) {
+      this.openQuestsPanel();
     }
   }
 
-  private toggleOrdersPanel(): void {
-    if (this.ordersPanel) {
-      this.closeOrdersPanel();
+  private refreshNextQuestWidget(): void {
+    this.createNextQuestWidget();
+  }
+
+  private getNextQuest(): QuestDefinition | undefined {
+    return QUEST_DEFINITIONS.find((quest) => !this.claimedQuestIds.has(quest.id));
+  }
+
+  private getQuestProgressText(quest: QuestDefinition): string {
+    const progress = this.getQuestProgress(quest);
+
+    return `${progress}/${quest.goal}`;
+  }
+
+  private focusQuestTarget(quest: QuestDefinition | undefined): void {
+    if (!quest) {
+      this.openQuestsPanel();
       return;
     }
 
-    this.openOrdersPanel();
+    this.showGuideFocusForQuest(quest);
+
+    if (quest.focusTarget === 'shop') {
+      this.openUpgradeShopPanel();
+    } else if (quest.focusTarget === 'battle') {
+      this.openBossBattlePanel();
+    } else if (quest.focusTarget === 'forge') {
+      this.openElementForgePanel(true);
+    } else if (quest.focusTarget === 'ritual') {
+      this.openPrestigePanel();
+    } else if (quest.focusTarget === 'expansion') {
+      this.showToast(this.t('ui.quests.focusExpansion'), 'info');
+    } else if (quest.focusTarget === 'hatch') {
+      this.showToast(this.t('ui.quests.focusHatch'), 'info');
+    } else {
+      this.showToast(this.t('ui.quests.focusMonster'), 'info');
+    }
   }
 
-  private openOrdersPanel(): void {
-    this.closeOrdersPanel();
-    this.closeNavigationMenuPanel();
-    this.closeCompendiumPanel();
-    this.closeSettingsPanel();
-    this.closeHelpPanel();
-    this.closePatchNotesPanel();
-    this.closeZonePanel();
-    this.closeMissionsPanel();
-    this.closeBossBattlePanel();
-    this.closeUpgradeShopPanel();
-    this.closePrestigePanel();
-    this.closeEconomyDebugPanel();
-    this.cancelActiveDrag();
-    this.clearSelectedSlot();
-    this.showModalOverlay();
+  private showGuideFocusForQuest(_quest: QuestDefinition): void {
+    this.renderQuestGuideOverlay(_quest.focusTarget);
+  }
 
-    const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = this.getModalSize('orders', 560, 540);
-    const rowGap = panelWidth < 420 ? 62 : 64;
-    const rowHeight = Math.min(58, rowGap - 6);
-    const firstRowY = -panelHeight / 2 + 126;
-    const bodyHeight = panelHeight - 178;
-    const rowsPerPage = this.getRowsPerPage(rowGap, bodyHeight, ORDER_DEFINITIONS.length, 6, 7);
-    const pageCount = this.getPageCount(ORDER_DEFINITIONS.length, rowsPerPage);
-    const pageIndex = Phaser.Math.Clamp(this.ordersPageIndex, 0, pageCount - 1);
-    const pageOrders = ORDER_DEFINITIONS.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage);
+  private syncQuestGuide(): void {
+    if (this.isFirstGuideComplete || this.isFirstGuideSkipped) {
+      this.destroyQuestGuideOverlay();
+      return;
+    }
 
-    this.ordersPageIndex = pageIndex;
+    this.skipCompletedQuestGuideSteps();
+    this.activeQuestGuideStepId ??= QUEST_GUIDE_SEQUENCE.find((stepId) => !this.completedQuestGuideStepIds.has(stepId));
 
-    panel.setDepth(24);
-    addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
+    if (!this.activeQuestGuideStepId) {
+      this.isFirstGuideComplete = true;
+      this.destroyQuestGuideOverlay();
+      return;
+    }
 
-    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 20, this.t('ui.orders.title'), {
+    if (!this.questGuideStartedAt) {
+      this.questGuideStartedAt = this.time.now;
+    }
+
+    this.renderQuestGuideOverlay(this.getGuideFocusTarget(this.activeQuestGuideStepId));
+  }
+
+  private completeQuestGuideStep(stepId: QuestGuideStepId): void {
+    if (this.isFirstGuideComplete || this.isFirstGuideSkipped || this.completedQuestGuideStepIds.has(stepId)) {
+      return;
+    }
+
+    this.completedQuestGuideStepIds.add(stepId);
+
+    if (this.activeQuestGuideStepId === stepId) {
+      this.activeQuestGuideStepId = undefined;
+      this.questGuideStartedAt = 0;
+    }
+
+    this.hasUnsavedProgress = true;
+    this.syncQuestGuide();
+  }
+
+  private skipQuestGuide(): void {
+    this.isFirstGuideSkipped = true;
+    this.isFirstGuideComplete = true;
+    this.activeQuestGuideStepId = undefined;
+    this.destroyQuestGuideOverlay();
+    this.skipSavingUntilProgress = false;
+    this.saveProgress();
+  }
+
+  private skipCompletedQuestGuideSteps(): void {
+    if (this.farmSlots.some((slot) => slot.monster)) {
+      this.completedQuestGuideStepIds.add('hatch-1');
+    }
+
+    if (this.farmSlots.filter((slot) => slot.monster).length >= 2) {
+      this.completedQuestGuideStepIds.add('hatch-2');
+    }
+
+    if (this.completedQuestIds.has('merge-1')) {
+      this.completedQuestGuideStepIds.add('merge-1');
+    }
+
+    if (this.getTotalIncomePerSecond() > 0) {
+      this.completedQuestGuideStepIds.add('income');
+    }
+
+    if (this.elementForgePanel) {
+      this.completedQuestGuideStepIds.add('forge-open');
+    }
+  }
+
+  private getGuideFocusTarget(stepId: QuestGuideStepId): QuestDefinition['focusTarget'] {
+    if (stepId.startsWith('hatch')) {
+      return 'hatch';
+    }
+
+    if (stepId === 'merge-1' || stepId === 'remove-tip') {
+      return 'monster';
+    }
+
+    if (stepId.startsWith('shop')) {
+      return 'shop';
+    }
+
+    if (stepId === 'ritual-open') {
+      return 'ritual';
+    }
+
+    if (stepId === 'battle-open') {
+      return 'battle';
+    }
+
+    if (stepId === 'forge-open') {
+      return 'forge';
+    }
+
+    return 'hatch';
+  }
+
+  private renderQuestGuideOverlay(target: QuestDefinition['focusTarget']): void {
+    const stepId = this.activeQuestGuideStepId;
+
+    this.destroyQuestGuideOverlay();
+
+    if (!stepId || this.isModalOpen() && target !== 'shop' && target !== 'battle' && target !== 'forge' && target !== 'ritual') {
+      return;
+    }
+
+    const layout = this.getLayout();
+    const rect = this.getGuideTargetRect(target, layout);
+    const overlay = this.add.container(0, 0).setDepth(80);
+    const dim = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x000000, 0.42).setOrigin(0);
+    const pulse = this.add.rectangle(rect.centerX, rect.centerY, rect.width + 10, rect.height + 10, 0xffffff, 0)
+      .setStrokeStyle(3, THEME.goldText === '#fff0a8' ? 0xfff0a8 : THEME.panelBorder, 0.95);
+    const bubbleWidth = Math.min(310, this.scale.width - 28);
+    const bubbleX = Phaser.Math.Clamp(rect.centerX, bubbleWidth / 2 + 14, this.scale.width - bubbleWidth / 2 - 14);
+    const bubbleY = rect.centerY < this.scale.height * 0.5
+      ? Math.min(this.scale.height - 84, rect.bottom + 56)
+      : Math.max(58, rect.top - 56);
+    const bubble = this.add.rectangle(bubbleX, bubbleY, bubbleWidth, 54, THEME.panel, 0.96)
+      .setStrokeStyle(2, THEME.panelBorder, 0.9);
+    const text = this.add.text(bubbleX - bubbleWidth / 2 + 12, bubbleY - 15, QUEST_GUIDE_TEXT[stepId], {
       color: THEME.text,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: getPanelTitleFontSize(panelWidth),
+      fontSize: layout.isNarrow ? '12px' : '13px',
       fontStyle: 'bold',
-    }));
-
-    panel.add(this.add.text(-panelWidth / 2 + 24, -panelHeight / 2 + 54, this.t('ui.orders.purpose'), {
-      color: THEME.mutedText,
+      wordWrap: { width: bubbleWidth - 76 },
+    });
+    const skip = this.add.text(bubbleX + bubbleWidth / 2 - 12, bubbleY, this.t('common.skip'), {
+      color: THEME.goldText,
       fontFamily: UI_FONT_FAMILY,
-      fontSize: panelWidth < 390 ? '12px' : '13px',
-      fixedWidth: panelWidth - 48,
-      wordWrap: {
-        width: panelWidth - 48,
-        useAdvancedWrap: true,
-      },
-    }));
-
-    this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closeOrdersPanel(), {
-      stopPropagation: true,
-    });
-
-    pageOrders.forEach((order, index) => {
-      this.addOrderRow(panel, order, firstRowY + index * rowGap, panelWidth, rowHeight);
-    });
-
-    this.addPaginationControls(panel, panelWidth, panelHeight, pageIndex, pageCount, (nextPageIndex) => {
-      this.ordersPageIndex = nextPageIndex;
-      this.openOrdersPanel();
-    });
-
-    this.ordersPanel = panel;
-  }
-
-  private addOrderRow(
-    panel: Phaser.GameObjects.Container,
-    order: OrderDefinition,
-    rowY: number,
-    panelWidth: number,
-    rowHeight: number,
-  ): Phaser.GameObjects.Text {
-    const isCompactPanel = panelWidth < 420 || rowHeight < 56;
-    const isClaimed = this.claimedOrderIds.has(order.id);
-    const isUnlocked = this.isOrderUnlocked(order);
-    const isComplete = this.isOrderComplete(order);
-    const canClaim = isUnlocked && isComplete && !isClaimed;
-    const rowTop = rowY - rowHeight / 2;
-    const rowWidth = panelWidth - 48;
-    const leftX = -panelWidth / 2 + 42;
-    const actionLabel = this.getOrderStatusText(order);
-
-    panel.add(this.add.rectangle(0, rowY, rowWidth, rowHeight, isClaimed ? 0x29362f : THEME.panelAlt, 0.92)
-      .setStrokeStyle(2, canClaim ? THEME.slot : THEME.lockedBorder, 0.72));
-
-    panel.add(this.add.text(leftX, rowTop + 6, this.getLocalizedOrderTitle(order), {
-      color: isClaimed ? '#cdebb3' : THEME.text,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '13px' : '15px',
+      fontSize: '12px',
       fontStyle: 'bold',
-      wordWrap: {
-        width: panelWidth - (isCompactPanel ? 160 : 186),
-      },
-    }));
+    }).setOrigin(1, 0.5).setInteractive({ useHandCursor: true });
 
-    panel.add(this.add.text(leftX, rowTop + (isCompactPanel ? 25 : 27), this.getOrderRequirementText(order), {
-      color: isUnlocked ? THEME.mutedText : '#b8b9af',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '11px' : '12px',
-      wordWrap: {
-        width: panelWidth - (isCompactPanel ? 160 : 186),
-      },
-    }));
+    skip.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.stopPropagation();
+      this.skipQuestGuide();
+    });
 
-    panel.add(this.add.text(leftX, rowTop + (isCompactPanel ? 40 : 43), this.t('common.reward', {
-      reward: this.getOrderRewardText(order.reward),
-    }), {
-      color: canClaim ? '#fff4a8' : THEME.mutedText,
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '11px' : '12px',
-      wordWrap: {
-        width: panelWidth - (isCompactPanel ? 160 : 186),
-      },
-    }));
+    overlay.add([dim, pulse, bubble, text, skip]);
+    this.questGuideOverlay = overlay;
 
-    const actionText = this.add.text(panelWidth / 2 - 42, rowY, actionLabel, {
-      color: isClaimed ? '#cdebb3' : '#ffffff',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: isCompactPanel ? '11px' : '13px',
-      fontStyle: 'bold',
-      backgroundColor: `#${(canClaim ? THEME.buttonHover : THEME.lockedInner).toString(16).padStart(6, '0')}`,
-      padding: {
-        x: isCompactPanel ? 7 : 10,
-        y: 5,
-      },
-    }).setOrigin(1, 0.5);
-
-    if (canClaim) {
-      actionText
-        .setInteractive({ useHandCursor: true })
-        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-          pointer.event?.stopPropagation();
-          this.playButtonClickSound();
-          this.claimOrderReward(order.id);
-        });
-    }
-
-    panel.add(actionText);
-    return actionText;
-  }
-
-  private closeOrdersPanel(): void {
-    if (this.ordersPanel) {
-      this.ordersPanel.destroy();
-      this.ordersPanel = undefined;
-      this.hideModalOverlay();
-    }
-  }
-
-  private refreshOrdersPanel(): void {
-    if (this.ordersPanel) {
-      this.openOrdersPanel();
-    }
-  }
-
-  private refreshOrderWidget(): void {
-    this.createOrderWidget();
-  }
-
-  private getOrderDefinition(orderId: OrderId): OrderDefinition | undefined {
-    return getOrderDefinitionFromState(ORDER_DEFINITIONS, orderId);
-  }
-
-  private getLocalizedOrderTitle(order: OrderDefinition): string {
-    return this.t(`order.${order.id}.title`);
-  }
-
-  private getOrderRequirementText(order: OrderDefinition): string {
-    return this.t('ui.orders.requirement', {
-      level: order.requiredLevel,
-      family: this.getLocalizedFamilyName(order.requiredFamily),
+    this.tweens.add({
+      targets: pulse,
+      scaleX: 1.06,
+      scaleY: 1.12,
+      alpha: 0.45,
+      duration: 650,
+      yoyo: true,
+      repeat: -1,
     });
   }
 
-  private getOrderStatusText(order: OrderDefinition): string {
-    const status = getOrderStatus(order, this.farmSlots, this.discoveredMonsters, this.claimedOrderIds);
-
-    if (status === 'done') {
-      return this.t('ui.orders.done');
+  private getGuideTargetRect(target: QuestDefinition['focusTarget'], layout: FarmSceneLayout): Phaser.Geom.Rectangle {
+    if (target === 'hatch') {
+      return new Phaser.Geom.Rectangle(layout.hatchX, layout.hatchY, layout.hatchWidth, layout.hatchHeight);
     }
 
-    if (status === 'locked') {
-      return this.t('ui.orders.locked');
+    if (target === 'shop' || target === 'battle' || target === 'forge' || target === 'ritual') {
+      const actions: GameplayActionBarAction[] = ['shop', 'battle', 'forge', 'ritual'];
+      const index = actions.indexOf(target);
+      const buttonWidth = (layout.actionBarWidth - 12 - layout.actionBarButtonGap * 3) / 4;
+      const x = layout.actionBarX + 6 + index * (buttonWidth + layout.actionBarButtonGap);
+
+      return new Phaser.Geom.Rectangle(x, layout.actionBarY + 6, buttonWidth, layout.actionBarHeight - 12);
     }
 
-    if (status === 'claim') {
-      return this.t('ui.orders.claim');
+    if (target === 'monster') {
+      return new Phaser.Geom.Rectangle(layout.gridStartX, layout.gridStartY, layout.cellSize * 3 + layout.gridGap * 2, layout.cellSize * 3 + layout.gridGap * 2);
     }
 
-    return this.t('ui.orders.inProgress');
+    return new Phaser.Geom.Rectangle(layout.questWidgetX, layout.questWidgetY, layout.questWidgetWidth, layout.questWidgetHeight);
   }
 
-  private getOrderWidgetStatusText(order: OrderDefinition): string {
-    const status = getOrderStatus(order, this.farmSlots, this.discoveredMonsters, this.claimedOrderIds);
-
-    if (status === 'done') {
-      return this.t('ui.orders.done');
-    }
-
-    if (status === 'claim') {
-      return this.t('ui.orderWidget.ready');
-    }
-
-    if (status === 'locked') {
-      return this.t('ui.orders.locked');
-    }
-
-    return this.t('ui.orders.inProgress');
-  }
-
-  private getRecommendedOrder(): OrderDefinition | undefined {
-    return getRecommendedOrderFromState(
-      ORDER_DEFINITIONS,
-      this.farmSlots,
-      this.discoveredMonsters,
-      this.claimedOrderIds,
-    );
-  }
-
-  private isOrderUnlocked(order: OrderDefinition): boolean {
-    return isOrderUnlockedState(order, this.discoveredMonsters);
-  }
-
-  private isOrderComplete(order: OrderDefinition): boolean {
-    return isOrderCompleteState(order, this.farmSlots, this.discoveredMonsters);
-  }
-
-  private claimOrderReward(orderId: OrderId): void {
-    const order = this.getOrderDefinition(orderId);
-
-    if (!order || !canClaimOrder(order, this.farmSlots, this.discoveredMonsters, this.claimedOrderIds)) {
-      return;
-    }
-
-    if (order.reward.type === 'coins') {
-      this.currency.coins = this.sanitizeCoins(this.currency.coins + this.getEffectiveOrderCoinReward(order.reward.amount));
-    } else {
-      this.monsterEssence = sanitizePrestigeIntegerState(this.monsterEssence + order.reward.amount);
-      this.syncZoneUnlockFromPrestigeProgress();
-    }
-
-    this.claimedOrderIds.add(orderId);
-    this.skipSavingUntilProgress = false;
-    this.updateHud();
-    this.saveProgress();
-    this.refreshOrdersPanel();
-    this.refreshOrderWidget();
-    this.showToast(this.t('toast.claimed', {
-      reward: this.getOrderRewardText(order.reward),
-    }), 'success');
-  }
-
-  private getOrderRewardText(reward: OrderReward): string {
-    if (reward.type === 'coins') {
-      return this.t('common.coins', {
-        amount: this.formatCoinAmount(this.getEffectiveOrderCoinReward(reward.amount)),
-      });
-    }
-
-    return this.t('common.essence', {
-      amount: reward.amount,
-    });
+  private destroyQuestGuideOverlay(): void {
+    this.questGuideOverlay?.destroy();
+    this.questGuideOverlay = undefined;
   }
 
   private toggleBossBattlePanel(): void {
@@ -3247,8 +3242,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closePatchNotesPanel();
     this.closeZonePanel();
-    this.closeMissionsPanel();
-    this.closeOrdersPanel();
+    this.closeQuestsPanel();
     this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
@@ -3426,7 +3420,7 @@ export class FarmScene extends Phaser.Scene {
     const statusText = isAllCleared ? this.t('ui.bossBattle.cleared') : this.t('ui.bossBattle.readySkill');
     const rewardText = nextStage
       ? isAllCleared
-        ? this.t('ui.bossBattle.replayRewardShort', { reward: this.getBossBattleFullRewardText(nextStage.replayReward, nextStage.replayFragmentReward) })
+        ? this.t('ui.bossBattle.autoClearRewardShort', { reward: this.getBossBattleFullRewardText(undefined, nextStage.replayFragmentReward) })
         : this.t('ui.bossBattle.rewardShort', { reward: this.getBossBattleFullRewardText(nextStage.firstClearReward, nextStage.firstClearFragmentReward) })
       : '';
     const branchText = this.t('ui.bossBattle.branch', {
@@ -3559,7 +3553,7 @@ export class FarmScene extends Phaser.Scene {
     this.addBossBattleStageSelector(panel, boss, stageY + 50, contentWidth, isCompactPanel);
 
     const rewardText = isCleared
-      ? this.t('ui.bossBattle.replayReward', { reward: this.getBossBattleFullRewardText(stage.replayReward, stage.replayFragmentReward) })
+      ? this.t('ui.bossBattle.autoClearReward', { reward: this.getBossBattleFullRewardText(undefined, stage.replayFragmentReward) })
       : this.t('ui.bossBattle.firstClearReward', { reward: this.getBossBattleFullRewardText(stage.firstClearReward, stage.firstClearFragmentReward) });
     panel.add(this.add.text(contentLeft + contentWidth, stageY + (isCompactPanel ? 14 : 18), isCleared ? this.t('ui.bossBattle.cleared') : this.t('ui.bossBattle.readySkill'), {
       align: 'center',
@@ -3785,7 +3779,7 @@ export class FarmScene extends Phaser.Scene {
     const canClearToday = dailyClearsRemaining > 0;
     const firstClearX2Opportunity = this.getBossBattleRewardX2Opportunity(stage.id, 'first-clear');
     const autoClearX2RewardText = this.getBossBattleCompactFullRewardText(
-      this.getDoubledBossBattleCoinReward(stage.replayReward),
+      undefined,
       this.getMultipliedElementFragmentReward(stage.replayFragmentReward, 2),
     );
 
@@ -3996,7 +3990,7 @@ export class FarmScene extends Phaser.Scene {
       const monsterIcon = this.add.container(leftX + 29, y + 27).setAlpha(isDown ? 0.46 : 1);
       this.monsterRenderer.addMonsterVisual(monsterIcon, monster, 0, 0, isCompactPanel ? 0.34 : 0.39);
       if (monster.element) {
-        this.addElementBadge(monsterIcon, monster.element, 15, -17, 0.72);
+        this.addElementBadge(monsterIcon, monster.element, 15, -17, 0.72, monster.elementLevel);
       }
       panel.add(monsterIcon);
       panel.add(this.add.text(leftX + 58, y + 5, this.t('ui.bossBattle.monsterTurnName', {
@@ -4800,9 +4794,9 @@ export class FarmScene extends Phaser.Scene {
   private setBossBattleRewardX2Opportunity(
     stage: BossBattleStage,
     source: BossBattleRewardX2Source,
-    reward: BossBattleReward,
+    reward: ElementFragmentReward | undefined,
   ): void {
-    if (reward.type !== 'coins') {
+    if (!reward) {
       this.clearBossBattleRewardX2Opportunity();
       return;
     }
@@ -5084,13 +5078,6 @@ export class FarmScene extends Phaser.Scene {
     this.refreshBossBattlePanel();
   }
 
-  private getDoubledBossBattleCoinReward(reward: BossBattleCoinReward): BossBattleCoinReward {
-    return {
-      type: 'coins',
-      amount: reward.amount * 2,
-    };
-  }
-
   private getMultipliedElementFragmentReward(
     reward: ElementFragmentReward | undefined,
     multiplier: number,
@@ -5116,13 +5103,11 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    const reward = getBossReplayReward(stage);
     const fragmentReward = stage.replayFragmentReward;
-    const fullRewardText = this.getBossBattleFullRewardText(reward, fragmentReward);
+    const fullRewardText = this.getBossBattleFullRewardText(undefined, fragmentReward);
 
     this.clearBattleAnimationEvents();
     this.clearBossBattleRewardX2Opportunity();
-    this.grantBossBattleReward(reward);
     this.grantElementFragmentReward(fragmentReward);
     this.bossBattleSession = undefined;
     this.bossBattleTargetMonsterId = undefined;
@@ -5159,9 +5144,7 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    const reward = getBossReplayReward(stage);
-
-    this.setBossBattleRewardX2Opportunity(stage, 'auto-clear', reward);
+    this.setBossBattleRewardX2Opportunity(stage, 'auto-clear', stage.replayFragmentReward);
     const opportunity = this.getBossBattleRewardX2Opportunity(stage.id, 'auto-clear');
 
     if (!opportunity) {
@@ -5199,12 +5182,10 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    const doubledReward = this.getDoubledBossBattleCoinReward(currentOpportunity.reward);
     const fragmentReward = this.getMultipliedElementFragmentReward(stage.replayFragmentReward, 2);
-    const fullRewardText = this.getBossBattleFullRewardText(doubledReward, fragmentReward);
+    const fullRewardText = this.getBossBattleFullRewardText(undefined, fragmentReward);
 
     currentOpportunity.consumed = true;
-    this.grantBossBattleReward(doubledReward);
     this.grantElementFragmentReward(fragmentReward);
     this.clearBossBattleRewardX2Opportunity();
     this.bossBattleStatusText = this.t('ui.bossBattle.autoClearX2Granted', {
@@ -5247,9 +5228,10 @@ export class FarmScene extends Phaser.Scene {
     }
 
     currentOpportunity.consumed = true;
-    this.grantBossBattleReward(currentOpportunity.reward);
+    this.grantElementFragmentReward(currentOpportunity.reward);
+    const rewardText = this.getElementFragmentRewardText(currentOpportunity.reward);
     this.bossBattleStatusText = this.t('ui.bossBattle.rewardX2Granted', {
-      reward: this.getBossBattleRewardText(currentOpportunity.reward),
+      reward: rewardText,
     });
     this.bossBattleLogText = this.bossBattleStatusText;
     this.skipSavingUntilProgress = false;
@@ -5257,7 +5239,7 @@ export class FarmScene extends Phaser.Scene {
     this.saveProgress();
     this.refreshBossBattlePanel();
     this.showToast(this.t('toast.bossBattleRewardX2', {
-      reward: this.getBossBattleRewardText(currentOpportunity.reward),
+      reward: rewardText,
     }), 'success');
   }
 
@@ -5440,7 +5422,7 @@ export class FarmScene extends Phaser.Scene {
 
         this.grantBossBattleReward(stage.firstClearReward);
         this.grantElementFragmentReward(fragmentReward);
-        this.setBossBattleRewardX2Opportunity(stage, 'first-clear', stage.firstClearReward);
+        this.setBossBattleRewardX2Opportunity(stage, 'first-clear', fragmentReward);
         this.claimedBossBattleStageIds.add(stage.id);
         this.bossBattleStatusText = this.t('ui.bossBattle.firstClearGranted', {
           reward: fullRewardText,
@@ -5489,9 +5471,8 @@ export class FarmScene extends Phaser.Scene {
     this.refreshBossBattlePanel();
   }
 
-  private grantBossBattleReward(reward: BossBattleReward): void {
-    if (reward.type === 'coins') {
-      this.currency.coins = this.sanitizeCoins(this.currency.coins + reward.amount);
+  private grantBossBattleReward(reward: BossBattleReward | undefined): void {
+    if (!reward) {
       return;
     }
 
@@ -5590,11 +5571,9 @@ export class FarmScene extends Phaser.Scene {
     return session.skillCooldowns[`${monsterId}:${skillId}`] ?? 0;
   }
 
-  private getBossBattleRewardText(reward: BossBattleReward): string {
-    if (reward.type === 'coins') {
-      return this.t('common.coins', {
-        amount: this.formatCoinAmount(reward.amount),
-      });
+  private getBossBattleRewardText(reward: BossBattleReward | undefined): string {
+    if (!reward) {
+      return '';
     }
 
     return this.t('common.essence', {
@@ -5613,9 +5592,9 @@ export class FarmScene extends Phaser.Scene {
     return `${reward.amount} ${this.t(`element.${reward.element}`)}`;
   }
 
-  private getBossBattleCompactRewardText(reward: BossBattleReward): string {
-    if (reward.type === 'coins') {
-      return `${this.formatCoinAmount(reward.amount)}c`;
+  private getBossBattleCompactRewardText(reward: BossBattleReward | undefined): string {
+    if (!reward) {
+      return '';
     }
 
     return this.t('common.essence', {
@@ -5633,13 +5612,17 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getBossBattleFullRewardText(
-    baseReward: BossBattleReward,
+    baseReward: BossBattleReward | undefined,
     fragmentReward: ElementFragmentReward | undefined,
   ): string {
     const baseRewardText = this.getBossBattleRewardText(baseReward);
 
     if (!fragmentReward) {
       return baseRewardText;
+    }
+
+    if (!baseRewardText) {
+      return this.getElementFragmentRewardText(fragmentReward);
     }
 
     return this.t('ui.bossBattle.rewardWithFragments', {
@@ -5649,13 +5632,17 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getBossBattleCompactFullRewardText(
-    baseReward: BossBattleReward,
+    baseReward: BossBattleReward | undefined,
     fragmentReward: ElementFragmentReward | undefined,
   ): string {
     const baseRewardText = this.getBossBattleCompactRewardText(baseReward);
 
     if (!fragmentReward) {
       return baseRewardText;
+    }
+
+    if (!baseRewardText) {
+      return this.getElementFragmentRewardShortText(fragmentReward);
     }
 
     return `${baseRewardText} + ${this.getElementFragmentRewardShortText(fragmentReward)}`;
@@ -5708,8 +5695,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closePatchNotesPanel();
     this.closeZonePanel();
-    this.closeMissionsPanel();
-    this.closeOrdersPanel();
+    this.closeQuestsPanel();
     this.closeBossBattlePanel();
     this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
@@ -5820,8 +5806,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closePatchNotesPanel();
     this.closeZonePanel();
-    this.closeMissionsPanel();
-    this.closeOrdersPanel();
+    this.closeQuestsPanel();
     this.closeBossBattlePanel();
     this.closeElementForgePanel();
     this.closePrestigePanel();
@@ -5994,8 +5979,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closePatchNotesPanel();
     this.closeZonePanel();
-    this.closeMissionsPanel();
-    this.closeOrdersPanel();
+    this.closeQuestsPanel();
     this.closeBossBattlePanel();
     this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
@@ -6640,7 +6624,6 @@ export class FarmScene extends Phaser.Scene {
     audioSystem.resume();
     audioSystem.playCoinTick();
     this.updateHud();
-    this.incrementMissionProgress('catch-coin-bugs');
     this.showFloatingCoinReward(bug.container.x, bug.container.y - 12, reward);
     this.showCoinBugPickupPulse(bug.container.x, bug.container.y);
 
@@ -7296,144 +7279,147 @@ export class FarmScene extends Phaser.Scene {
     return createInitialFarmSlotState(TOTAL_SLOT_COUNT);
   }
 
-  private createInitialMissionProgress(): Record<MissionId, number> {
-    return createInitialMissionProgressState(MISSION_DEFINITIONS);
+  private createInitialQuestProgress(): Record<QuestId, number> {
+    return createInitialQuestProgressState(QUEST_DEFINITIONS);
   }
 
-  private getMissionDefinition(missionId: MissionId): MissionDefinition | undefined {
-    return getMissionDefinitionFromState(MISSION_DEFINITIONS, missionId);
+  private getQuestDefinition(questId: QuestId): QuestDefinition | undefined {
+    return getQuestDefinitionFromState(QUEST_DEFINITIONS, questId);
   }
 
-  private getMissionProgress(mission: MissionDefinition): number {
-    return getMissionProgressFromState(mission, this.missionProgress, this.completedMissionIds);
+  private getQuestProgress(quest: QuestDefinition): number {
+    return getQuestProgressFromState(quest, this.questProgress, this.completedQuestIds);
   }
 
-  private getSanitizedMissionProgress(): Record<MissionId, number> {
-    return getSanitizedMissionProgressFromState(
-      MISSION_DEFINITIONS,
-      this.missionProgress,
-      this.completedMissionIds,
+  private getSanitizedQuestProgress(): Record<QuestId, number> {
+    return getSanitizedQuestProgressFromState(
+      QUEST_DEFINITIONS,
+      this.questProgress,
+      this.completedQuestIds,
     );
   }
 
-  private incrementMissionProgress(missionId: MissionId, amount = 1): void {
-    const mission = this.getMissionDefinition(missionId);
+  private incrementQuestProgress(questId: QuestId, amount = 1): void {
+    const quest = this.getQuestDefinition(questId);
 
-    if (!mission || !canIncrementMission(missionId, this.completedMissionIds, this.claimedMissionIds)) {
+    if (!quest || !canIncrementQuest(questId, this.completedQuestIds, this.claimedQuestIds)) {
       return;
     }
 
-    const nextProgress = getIncrementedMissionProgress(mission, this.getMissionProgress(mission), amount);
-    this.missionProgress[missionId] = nextProgress;
+    const nextProgress = getIncrementedQuestProgress(quest, this.getQuestProgress(quest), amount);
+    this.questProgress[questId] = nextProgress;
 
-    if (nextProgress >= mission.goal) {
-      this.completeMission(missionId);
+    if (nextProgress >= quest.goal) {
+      this.completeQuest(questId);
       return;
     }
 
     this.hasUnsavedProgress = true;
-    this.refreshMissionsPanel();
+    this.refreshQuestsPanel();
   }
 
-  private completeMission(missionId: MissionId, showCompletionToast = true): void {
-    const mission = this.getMissionDefinition(missionId);
+  private completeQuest(questId: QuestId, showCompletionToast = true): void {
+    const quest = this.getQuestDefinition(questId);
 
-    if (!mission || this.completedMissionIds.has(missionId)) {
+    if (!quest || this.completedQuestIds.has(questId)) {
       return;
     }
 
-    this.missionProgress[missionId] = mission.goal;
-    this.completedMissionIds.add(missionId);
+    this.questProgress[questId] = quest.goal;
+    this.completedQuestIds.add(questId);
     this.hasUnsavedProgress = true;
-    this.refreshMissionsPanel();
+    this.refreshQuestsPanel();
 
     if (showCompletionToast) {
-      this.showToast(this.t('toast.missionComplete'), 'success');
+      this.showToast(this.t('toast.questComplete'), 'success');
     }
   }
 
-  private evaluateMonsterMissions(monster: MonsterDefinition, showCompletionToast = true): void {
+  private evaluateMonsterQuests(monster: MonsterDefinition, showCompletionToast = true): void {
     if (monster.family === 'Mushroom') {
-      this.completeMission('discover-mushroom', showCompletionToast);
+      this.completeQuest('discover-mushroom', showCompletionToast);
     }
 
-    this.evaluateOwnedMonsterMissions(showCompletionToast);
+    this.evaluateOwnedMonsterQuests(showCompletionToast);
   }
 
-  private evaluateOwnedMonsterMissions(showCompletionToast = true): void {
+  private evaluateOwnedMonsterQuests(showCompletionToast = true): void {
     if (this.farmSlots.some((slot) => slot.monster?.family === 'Slime' && slot.monster.level >= 3)) {
-      this.completeMission('own-level-3-slime', showCompletionToast);
+      this.completeQuest('own-level-3-slime', showCompletionToast);
     }
   }
 
-  private syncMissionStateFromCurrentProgress(showCompletionToast = false): void {
+  private syncQuestStateFromCurrentProgress(showCompletionToast = false): void {
     if (hasDiscoveredFamily(this.discoveredMonsters, 'Mushroom')
       || this.farmSlots.some((slot) => slot.monster?.family === 'Mushroom')) {
-      this.completeMission('discover-mushroom', showCompletionToast);
+      this.completeQuest('discover-mushroom', showCompletionToast);
     }
 
-    this.evaluateOwnedMonsterMissions(showCompletionToast);
-
-    if (Object.values(this.upgradeLevels).some((level) => level > 0)) {
-      this.completeMission('buy-upgrade-1', showCompletionToast);
-    }
+    this.evaluateOwnedMonsterQuests(showCompletionToast);
 
     if (this.expansionUnlocked) {
-      this.completeMission('unlock-expansion', showCompletionToast);
+      this.completeQuest('unlock-expansion', showCompletionToast);
     }
 
     if (this.monsterEssence > 0 || this.essencePowerLevel > 0 || this.rareHatchLevel > 0 || this.totalRitualsPerformed > 0) {
-      this.completeMission('prestige-once', showCompletionToast);
+      this.completeQuest('prestige-once', showCompletionToast);
     }
 
-    MISSION_DEFINITIONS.forEach((mission) => {
-      if (this.completedMissionIds.has(mission.id)) {
-        this.missionProgress[mission.id] = mission.goal;
+    QUEST_DEFINITIONS.forEach((quest) => {
+      if (this.completedQuestIds.has(quest.id)) {
+        this.questProgress[quest.id] = quest.goal;
       }
     });
   }
 
-  private claimMissionReward(missionId: MissionId): void {
-    const mission = this.getMissionDefinition(missionId);
+  private claimQuestReward(questId: QuestId): void {
+    const quest = this.getQuestDefinition(questId);
 
-    if (!mission || getMissionClaimStatus(mission, this.completedMissionIds, this.claimedMissionIds) !== 'complete') {
+    if (!quest || getQuestClaimStatus(quest, this.completedQuestIds, this.claimedQuestIds) !== 'complete') {
       return;
     }
 
-    if (mission.reward.type === 'coins') {
-      this.currency.coins = this.sanitizeCoins(this.currency.coins + this.getEffectiveMissionCoinReward(mission.reward.amount));
+    if (quest.reward.type === 'coins') {
+      this.currency.coins = this.sanitizeCoins(this.currency.coins + this.getEffectiveQuestCoinReward(quest.reward.amount));
+    } else if (quest.reward.type === 'essence') {
+      this.monsterEssence = sanitizePrestigeIntegerState(this.monsterEssence + quest.reward.amount);
+      this.syncZoneUnlockFromPrestigeProgress();
     } else {
-      this.monsterEssence = sanitizePrestigeIntegerState(this.monsterEssence + mission.reward.amount);
+      this.elementFragments = addElementFragments(this.elementFragments, quest.reward.element, quest.reward.amount);
     }
 
-    this.claimedMissionIds.add(missionId);
+    this.claimedQuestIds.add(questId);
     this.skipSavingUntilProgress = false;
     this.updateHud();
     this.saveProgress();
-    this.refreshMissionsPanel();
+    this.refreshQuestsPanel();
+    this.refreshNextQuestWidget();
     this.showToast(this.t('toast.claimed', {
-      reward: this.getMissionRewardText(mission.reward),
+      reward: this.getQuestRewardText(quest.reward),
     }), 'success');
   }
 
-  private getMissionRewardText(reward: MissionReward): string {
+  private getQuestRewardText(reward: QuestReward): string {
     if (reward.type === 'coins') {
       return this.t('common.coins', {
-        amount: this.formatCoinAmount(this.getEffectiveMissionCoinReward(reward.amount)),
+        amount: this.formatCoinAmount(this.getEffectiveQuestCoinReward(reward.amount)),
       });
     }
 
-    return this.t('common.essence', {
+    if (reward.type === 'essence') {
+      return this.t('common.essence', {
+        amount: reward.amount,
+      });
+    }
+
+    return this.t('ui.fragments.amount', {
       amount: reward.amount,
+      element: this.t(`element.${reward.element}`),
     });
   }
 
-  private getEffectiveOrderCoinReward(amount: number): number {
-    return getOrderCoinReward(amount, this.getUpgradeLevel('order-bonus'));
-  }
-
-  private getEffectiveMissionCoinReward(amount: number): number {
-    return getOrderCoinReward(amount, this.getUpgradeLevel('order-bonus'));
+  private getEffectiveQuestCoinReward(amount: number): number {
+    return getQuestCoinReward(amount, this.getUpgradeLevel('quest-bonus'));
   }
 
   private isSlotUnlocked(slotId: number): boolean {
@@ -7457,7 +7443,7 @@ export class FarmScene extends Phaser.Scene {
     this.currency.coins = this.sanitizeCoins(this.currency.coins - EXPANSION_UNLOCK_COST);
     this.expansionUnlocked = true;
     this.skipSavingUntilProgress = false;
-    this.completeMission('unlock-expansion');
+    this.completeQuest('unlock-expansion');
     this.createExpansionPlaceholder();
     this.hideFarmMessage();
     this.updateHud();
@@ -7520,9 +7506,9 @@ export class FarmScene extends Phaser.Scene {
       [upgradeId]: currentLevel,
     }, upgradeId, purchasePreview.levels);
     this.hatchCooldownMs = getCappedHatchCooldown(this.hatchCooldownMs, this.getHatchCooldownMs());
-    this.completeMission('buy-upgrade-1');
     this.hideFarmMessage();
     this.updateHud();
+    this.completeQuestGuideStep('shop-buy');
     this.saveProgress();
     this.openUpgradeShopPanel();
     this.showToast(purchasePreview.levels === 1
@@ -7644,9 +7630,8 @@ export class FarmScene extends Phaser.Scene {
     this.prestigeConfirmationArmed = false;
     this.updateHud();
     this.updateHatchCooldownUi();
-    this.completeMission('prestige-once');
-    this.refreshOrdersPanel();
-    this.refreshOrderWidget();
+    this.completeQuest('prestige-once');
+    this.refreshNextQuestWidget();
     this.saveProgress();
   }
 
@@ -7690,8 +7675,7 @@ export class FarmScene extends Phaser.Scene {
     this.clearSelectedSlot();
     this.updateHatchCooldownUi();
     this.updateHud();
-    this.completeMission('prestige-once');
-    this.refreshOrdersPanel();
+    this.completeQuest('prestige-once');
     this.saveProgress();
   }
 
@@ -7751,6 +7735,10 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private showOnboardingHint(hintId: OnboardingHintId, message: string): void {
+    if (!this.isFirstGuideComplete && !this.isFirstGuideSkipped) {
+      return;
+    }
+
     if (this.onboardingHintsSeen.has(hintId)) {
       return;
     }
@@ -7828,9 +7816,9 @@ export class FarmScene extends Phaser.Scene {
       });
     }
 
-    if (upgradeId === 'order-bonus') {
-      return this.t('upgrade.current.order-bonus', {
-        value: this.getOrderBonusMultiplier().toFixed(2),
+    if (upgradeId === 'quest-bonus') {
+      return this.t('upgrade.current.quest-bonus', {
+        value: this.getQuestBonusMultiplier().toFixed(2),
       });
     }
 
@@ -7890,8 +7878,8 @@ export class FarmScene extends Phaser.Scene {
     return getTapFarmRewardAmount(100, 1, this.getUpgradeLevel('tap-power')) / 100;
   }
 
-  private getOrderBonusMultiplier(): number {
-    return getOrderCoinReward(100, this.getUpgradeLevel('order-bonus')) / 100;
+  private getQuestBonusMultiplier(): number {
+    return getQuestCoinReward(100, this.getUpgradeLevel('quest-bonus')) / 100;
   }
 
   private getCoinBugValueMultiplier(): number {
@@ -7949,9 +7937,10 @@ export class FarmScene extends Phaser.Scene {
     this.currentEggCost = getNextHatchCostAfterSuccess(this.currentEggCost);
     audioSystem.playHatch();
     this.discoverMonster(hatchDefinition);
-    this.incrementMissionProgress('hatch-3');
+    this.incrementQuestProgress('hatch-3');
+    this.completeQuestGuideStep(this.farmSlots.filter((slot) => slot.monster).length >= 2 ? 'hatch-2' : 'hatch-1');
     this.maybeShowHatchPoolHint();
-    this.evaluateMonsterMissions(hatchDefinition);
+    this.evaluateMonsterQuests(hatchDefinition);
     this.hideFarmMessage();
     this.renderMonsterInSlot(this.farmSlots[emptySlot.id]);
     this.updateHud();
@@ -7990,14 +7979,15 @@ export class FarmScene extends Phaser.Scene {
     );
   }
 
-  private createMonsterInstance(definition = BABY_SLIME, element?: ElementType): MonsterInstance {
+  private createMonsterInstance(definition = BABY_SLIME, element?: ElementType, elementLevel?: ElementLevel): MonsterInstance {
     const monsterId = this.nextMonsterId;
     this.nextMonsterId += 1;
+    const normalizedElementLevel = element ? normalizeElementLevel(elementLevel) : undefined;
 
     return {
       ...definition,
       id: `monster-${monsterId}`,
-      ...(element ? { element } : {}),
+      ...(element ? { element, elementLevel: normalizedElementLevel } : {}),
     };
   }
 
@@ -8092,8 +8082,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closePatchNotesPanel();
     this.closeZonePanel();
-    this.closeMissionsPanel();
-    this.closeOrdersPanel();
+    this.closeQuestsPanel();
     this.closeBossBattlePanel();
     this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
@@ -8238,9 +8227,8 @@ export class FarmScene extends Phaser.Scene {
     this.discoveredMonsters = discoverMonsterInState(this.discoveredMonsters, monster);
     this.syncZoneUnlockFromPrestigeProgress();
     this.refreshCompendiumPanel();
-    this.refreshOrdersPanel();
-    this.refreshOrderWidget();
-  }
+    this.refreshNextQuestWidget();
+    }
 
   private addUpgradeBuyModeControls(
     panel: Phaser.GameObjects.Container,
@@ -8310,8 +8298,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeHelpPanel();
     this.closePatchNotesPanel();
     this.closeZonePanel();
-    this.closeMissionsPanel();
-    this.closeOrdersPanel();
+    this.closeQuestsPanel();
     this.closeBossBattlePanel();
     this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
@@ -8871,7 +8858,7 @@ export class FarmScene extends Phaser.Scene {
     this.monsterRenderer.addMonsterVisual(visual, monster, 0, 0, visualScale);
 
     if (monster.element) {
-      this.addElementBadge(visual, monster.element, 24 * visualScale, -25 * visualScale, visualScale);
+      this.addElementBadge(visual, monster.element, 24 * visualScale, -25 * visualScale, visualScale, monster.elementLevel);
     }
 
     visual.add(this.add.text(0, 27 * visualScale, this.t('common.levelShort', { level: monster.level }), {
@@ -8891,19 +8878,50 @@ export class FarmScene extends Phaser.Scene {
     x: number,
     y: number,
     scale = 1,
+    elementLevel?: ElementLevel,
   ): void {
     const definition = getElementDefinition(element);
     const radius = Math.max(6, 10 * scale);
     const badge = this.add.circle(x, y, radius, definition.color, 0.96)
       .setStrokeStyle(Math.max(1, Math.floor(2 * scale)), 0x10291a, 0.9);
-    const letter = this.add.text(x, y, this.getLocalizedElementName(element).charAt(0).toUpperCase(), {
-      color: '#10291a',
-      fontFamily: UI_FONT_FAMILY,
-      fontSize: `${Math.max(8, Math.floor(12 * scale))}px`,
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
+    const icon = this.add.graphics();
+    const iconScale = Math.max(0.55, scale);
 
-    container.add([badge, letter]);
+    icon.lineStyle(Math.max(1, 2 * iconScale), 0x10291a, 0.95);
+    icon.fillStyle(0x10291a, 0.22);
+
+    if (element === 'Spark') {
+      icon.lineBetween(x - 4 * iconScale, y - 8 * iconScale, x + 1 * iconScale, y - 1 * iconScale);
+      icon.lineBetween(x + 1 * iconScale, y - 1 * iconScale, x - 2 * iconScale, y);
+      icon.lineBetween(x - 2 * iconScale, y, x + 5 * iconScale, y + 8 * iconScale);
+    } else if (element === 'Fire') {
+      icon.fillTriangle(x, y - 8 * iconScale, x + 7 * iconScale, y + 7 * iconScale, x - 7 * iconScale, y + 7 * iconScale);
+      icon.strokeTriangle(x, y - 8 * iconScale, x + 7 * iconScale, y + 7 * iconScale, x - 7 * iconScale, y + 7 * iconScale);
+    } else if (element === 'Metal') {
+      icon.strokePoints([
+        new Phaser.Math.Vector2(x, y - 8 * iconScale),
+        new Phaser.Math.Vector2(x + 7 * iconScale, y - 3 * iconScale),
+        new Phaser.Math.Vector2(x + 5 * iconScale, y + 7 * iconScale),
+        new Phaser.Math.Vector2(x - 5 * iconScale, y + 7 * iconScale),
+        new Phaser.Math.Vector2(x - 7 * iconScale, y - 3 * iconScale),
+      ], true);
+    } else {
+      icon.beginPath();
+      icon.arc(x + 2 * iconScale, y, 7 * iconScale, Phaser.Math.DegToRad(70), Phaser.Math.DegToRad(290), false);
+      icon.strokePath();
+      icon.fillCircle(x + 4 * iconScale, y - 5 * iconScale, Math.max(1.5, 2 * iconScale));
+    }
+
+    const level = elementLevel ? normalizeElementLevel(elementLevel) : 1;
+    const pips = Array.from({ length: level }, (_, index) => this.add.circle(
+      x - 6 * scale + index * 6 * scale,
+      y + radius + 3 * scale,
+      Math.max(1.4, 2 * scale),
+      definition.color,
+      0.95,
+    ).setStrokeStyle(1, 0x10291a, 0.8));
+
+    container.add([badge, icon, ...pips]);
   }
 
   private createMonsterDragZone(slotId: number): void {
@@ -9101,7 +9119,11 @@ export class FarmScene extends Phaser.Scene {
     this.farmSlots = setSlotMonster(
       clearSlotMonster(this.farmSlots, sourceSlotId),
       targetSlotId,
-      this.createMonsterInstance(nextMonsterDefinition, this.getMergedMonsterElement(sourceMonster, targetMonster)),
+      this.createMonsterInstance(
+        nextMonsterDefinition,
+        this.getMergedMonsterElement(sourceMonster, targetMonster),
+        this.getMergedMonsterElementLevel(sourceMonster, targetMonster),
+      ),
     );
     this.discoverMonster(nextMonsterDefinition);
 
@@ -9109,8 +9131,9 @@ export class FarmScene extends Phaser.Scene {
     this.renderMonsterInSlot(this.farmSlots[targetSlotId]);
     audioSystem.playMerge();
     this.showMergeFeedback(targetSlotId, sourceMonster?.family !== targetMonster?.family ? this.t('toast.fusion') : this.t('toast.merge'));
-    this.incrementMissionProgress('merge-1');
-    this.evaluateMonsterMissions(nextMonsterDefinition);
+    this.incrementQuestProgress('merge-1');
+    this.completeQuestGuideStep('merge-1');
+    this.evaluateMonsterQuests(nextMonsterDefinition);
     this.updateHud();
     this.showOnboardingHint('upgrades', this.t('hint.upgrades'));
     this.skipSavingUntilProgress = false;
@@ -9132,6 +9155,30 @@ export class FarmScene extends Phaser.Scene {
     }
 
     return targetMonster?.element ?? sourceMonster?.element;
+  }
+
+  private getMergedMonsterElementLevel(
+    sourceMonster: MonsterInstance | null | undefined,
+    targetMonster: MonsterInstance | null | undefined,
+  ): ElementLevel | undefined {
+    const mergedElement = this.getMergedMonsterElement(sourceMonster, targetMonster);
+
+    if (!mergedElement) {
+      return undefined;
+    }
+
+    if (sourceMonster?.element === mergedElement && targetMonster?.element === mergedElement) {
+      return Math.max(
+        normalizeElementLevel(sourceMonster.elementLevel),
+        normalizeElementLevel(targetMonster.elementLevel),
+      ) as ElementLevel;
+    }
+
+    if (targetMonster?.element === mergedElement) {
+      return normalizeElementLevel(targetMonster.elementLevel);
+    }
+
+    return normalizeElementLevel(sourceMonster?.elementLevel);
   }
 
   private returnMonsterVisualToSlot(slotId: number, visual: MonsterVisual): void {
@@ -9206,7 +9253,7 @@ export class FarmScene extends Phaser.Scene {
         return;
       }
 
-      this.farmSlots = setSlotMonster(this.farmSlots, slotId, this.createMonsterInstance(monsterDefinition, savedSlot.element));
+      this.farmSlots = setSlotMonster(this.farmSlots, slotId, this.createMonsterInstance(monsterDefinition, savedSlot.element, savedSlot.elementLevel));
       this.discoverMonster(monsterDefinition);
       this.renderMonsterInSlot(this.farmSlots[slotId]);
     });
@@ -9223,27 +9270,28 @@ export class FarmScene extends Phaser.Scene {
     const loadedSets = createLoadedSetsFromSave(saveData);
 
     this.onboardingHintsSeen = loadedSets.onboardingHintsSeen;
-    this.missionProgress = {
-      ...this.createInitialMissionProgress(),
-      ...saveData.missionProgress,
+    this.completedQuestGuideStepIds = loadedSets.completedQuestGuideStepIds;
+    this.activeQuestGuideStepId = saveData.activeQuestGuideStepId;
+    this.isFirstGuideComplete = saveData.isFirstGuideComplete;
+    this.isFirstGuideSkipped = saveData.isFirstGuideSkipped;
+    this.questProgress = {
+      ...this.createInitialQuestProgress(),
+      ...saveData.questProgress,
     };
-    this.completedMissionIds = loadedSets.completedMissionIds;
-    this.claimedMissionIds = loadedSets.claimedMissionIds;
-    this.claimedOrderIds = loadedSets.claimedOrderIds;
+    this.completedQuestIds = loadedSets.completedQuestIds;
+    this.claimedQuestIds = loadedSets.claimedQuestIds;
     this.claimedBossBattleStageIds = loadedSets.claimedBossBattleStageIds;
     this.elementFragments = { ...saveData.elementFragments };
     this.bossDailyClearCounts = { ...saveData.bossDailyClearCounts };
     this.bossDailyClearLastResetDay = saveData.bossDailyClearLastResetDay;
     this.syncBossDailyClearReset();
-    this.syncMissionStateFromCurrentProgress(false);
+    this.syncQuestStateFromCurrentProgress(false);
     this.unlockedZones = getSanitizedUnlockedZones(saveData.unlockedZones, ZONE_IDS, GRASS_FARM_ZONE_ID);
     this.currentZone = saveData.currentZone;
     this.hasPrestigedOnce = saveData.hasPrestigedOnce;
     this.syncZoneUnlockFromPrestigeProgress();
     this.createFarmBackground();
-    this.refreshOrdersPanel();
-    this.refreshOrderWidget();
-
+    this.refreshNextQuestWidget();
     this.applyAwayProgress(saveData.lastActiveAt, Date.now(), true);
 
     this.ensureStarterCoinsForEmptyFarm();
@@ -9314,11 +9362,14 @@ export class FarmScene extends Phaser.Scene {
       totalRitualsPerformed: sanitizePrestigeIntegerState(this.totalRitualsPerformed),
       currentEggCost: this.sanitizeEggCost(this.currentEggCost),
       onboardingHintsSeen: this.onboardingHintsSeen,
+      activeQuestGuideStepId: this.activeQuestGuideStepId,
+      completedQuestGuideStepIds: this.completedQuestGuideStepIds,
+      isFirstGuideComplete: this.isFirstGuideComplete,
+      isFirstGuideSkipped: this.isFirstGuideSkipped,
       expansionUnlocked: this.expansionUnlocked,
-      missionProgress: this.getSanitizedMissionProgress(),
-      completedMissionIds: this.completedMissionIds,
-      claimedMissionIds: this.claimedMissionIds,
-      claimedOrderIds: this.claimedOrderIds,
+      questProgress: this.getSanitizedQuestProgress(),
+      completedQuestIds: this.completedQuestIds,
+      claimedQuestIds: this.claimedQuestIds,
       claimedBossBattleStageIds: this.claimedBossBattleStageIds,
       elementFragments: this.elementFragments,
       bossDailyClearCounts: { ...this.bossDailyClearCounts },
@@ -9358,11 +9409,15 @@ export class FarmScene extends Phaser.Scene {
     this.safeRitualInProgress = false;
     this.discoveredMonsters = new Set<DiscoveryKey>();
     this.onboardingHintsSeen = new Set<OnboardingHintId>();
+    this.activeQuestGuideStepId = undefined;
+    this.completedQuestGuideStepIds = new Set<QuestGuideStepId>();
+    this.isFirstGuideComplete = false;
+    this.isFirstGuideSkipped = false;
+    this.questGuideStartedAt = 0;
     this.upgradeLevels = this.createInitialUpgradeLevels();
-    this.missionProgress = this.createInitialMissionProgress();
-    this.completedMissionIds = new Set<MissionId>();
-    this.claimedMissionIds = new Set<MissionId>();
-    this.claimedOrderIds = new Set<OrderId>();
+    this.questProgress = this.createInitialQuestProgress();
+    this.completedQuestIds = new Set<QuestId>();
+    this.claimedQuestIds = new Set<QuestId>();
     this.claimedBossBattleStageIds = new Set<string>();
     this.elementFragments = createInitialElementFragments();
     this.bossDailyClearCounts = {};
@@ -9411,16 +9466,14 @@ export class FarmScene extends Phaser.Scene {
     this.clearTapFarmReactionStack();
     this.createExpansionPlaceholder();
     this.createFarmBackground();
-    this.refreshOrderWidget();
-
+    this.refreshNextQuestWidget();
     this.hideFarmMessage();
     this.clearSelectedSlot();
     this.closeCompendiumPanel();
     this.closeHelpPanel();
     this.closePatchNotesPanel();
     this.closeZonePanel();
-    this.closeMissionsPanel();
-    this.closeOrdersPanel();
+    this.closeQuestsPanel();
     this.closeBossBattlePanel();
     this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
@@ -9469,13 +9522,12 @@ export class FarmScene extends Phaser.Scene {
       || this.hasPrestigedOnce
       || this.currentZone !== GRASS_FARM_ZONE_ID
       || this.unlockedZones.size > 1
-      || this.completedMissionIds.size > 0
-      || this.claimedMissionIds.size > 0
-      || this.claimedOrderIds.size > 0
-      || this.claimedBossBattleStageIds.size > 0
+      || this.completedQuestIds.size > 0
+      || this.claimedQuestIds.size > 0
+            || this.claimedBossBattleStageIds.size > 0
       || Object.values(this.elementFragments).some((amount) => amount > 0)
       || Object.values(this.bossDailyClearCounts).some((count) => count > 0)
-      || Object.values(this.missionProgress).some((progress) => progress > 0)
+      || Object.values(this.questProgress).some((progress) => progress > 0)
       || this.farmSlots.some((slot) => slot.monster !== null)
     );
   }

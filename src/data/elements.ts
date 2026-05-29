@@ -1,4 +1,5 @@
 export type ElementType = 'Spark' | 'Fire' | 'Metal' | 'Dream';
+export type ElementLevel = 1 | 2 | 3;
 
 export type ElementDefinition = {
   id: ElementType;
@@ -9,9 +10,23 @@ export type ElementDefinition = {
 
 export type ElementFragmentInventory = Record<ElementType, number>;
 
+export const ELEMENT_LEVELS: ElementLevel[] = [1, 2, 3];
 export const ELEMENT_FORGE_APPLY_COST = 10;
-export const ELEMENT_INCOME_MULTIPLIER = 1.1;
-export const ELEMENT_BOSS_DAMAGE_MATCH_MULTIPLIER = 1.25;
+export const ELEMENT_FORGE_UPGRADE_COST_BY_LEVEL: Record<ElementLevel, number> = {
+  1: 10,
+  2: 25,
+  3: 50,
+};
+export const ELEMENT_INCOME_MULTIPLIER_BY_LEVEL: Record<ElementLevel, number> = {
+  1: 1.1,
+  2: 1.18,
+  3: 1.3,
+};
+export const ELEMENT_BOSS_DAMAGE_MATCH_MULTIPLIER_BY_LEVEL: Record<ElementLevel, number> = {
+  1: 1.25,
+  2: 1.4,
+  3: 1.6,
+};
 
 export const ELEMENT_DEFINITIONS: ElementDefinition[] = [
   {
@@ -44,6 +59,30 @@ export const ELEMENT_TYPES = ELEMENT_DEFINITIONS.map((element) => element.id);
 
 export function isElementType(value: unknown): value is ElementType {
   return typeof value === 'string' && ELEMENT_TYPES.includes(value as ElementType);
+}
+
+export function isElementLevel(value: unknown): value is ElementLevel {
+  return typeof value === 'number' && ELEMENT_LEVELS.includes(value as ElementLevel);
+}
+
+export function normalizeElementLevel(value: unknown): ElementLevel {
+  const level = Number(value);
+
+  return isElementLevel(level) ? level : 1;
+}
+
+export function getElementForgeCost(currentElement: ElementType | undefined, currentLevel: ElementLevel | undefined, nextElement: ElementType): number {
+  if (currentElement !== nextElement) {
+    return ELEMENT_FORGE_UPGRADE_COST_BY_LEVEL[1];
+  }
+
+  const level = normalizeElementLevel(currentLevel);
+
+  if (level >= 3) {
+    return 0;
+  }
+
+  return ELEMENT_FORGE_UPGRADE_COST_BY_LEVEL[(level + 1) as ElementLevel];
 }
 
 export function createInitialElementFragments(): ElementFragmentInventory {
@@ -110,8 +149,8 @@ export function getElementDefinition(element: ElementType): ElementDefinition {
   return ELEMENT_DEFINITIONS.find((definition) => definition.id === element) ?? ELEMENT_DEFINITIONS[0];
 }
 
-export function getElementIncomeMultiplier(element?: ElementType): number {
-  return element ? ELEMENT_INCOME_MULTIPLIER : 1;
+export function getElementIncomeMultiplier(element?: ElementType, level?: ElementLevel): number {
+  return element ? ELEMENT_INCOME_MULTIPLIER_BY_LEVEL[normalizeElementLevel(level)] : 1;
 }
 
 export function isElementStrongAgainstBoss(
@@ -123,10 +162,11 @@ export function isElementStrongAgainstBoss(
 
 export function getElementBossDamageMultiplier(
   monsterElement: ElementType | undefined,
+  monsterElementLevel: ElementLevel | undefined,
   bossElementTheme: ElementType | undefined,
 ): number {
   return isElementStrongAgainstBoss(monsterElement, bossElementTheme)
-    ? ELEMENT_BOSS_DAMAGE_MATCH_MULTIPLIER
+    ? ELEMENT_BOSS_DAMAGE_MATCH_MULTIPLIER_BY_LEVEL[normalizeElementLevel(monsterElementLevel)]
     : 1;
 }
 

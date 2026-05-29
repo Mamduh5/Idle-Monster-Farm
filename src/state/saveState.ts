@@ -1,8 +1,7 @@
-import type { MissionId } from '../data/missions';
-import type { OrderId } from '../data/orders';
+import type { QuestId } from '../data/quests';
 import type { UpgradeId } from '../data/upgrades';
 import type { ZoneId } from '../data/zones';
-import { isElementType, type ElementFragmentInventory } from '../data/elements';
+import { isElementType, normalizeElementLevel, type ElementFragmentInventory } from '../data/elements';
 import type {
   LocalSaveData,
   SavedMonsterDiscovery,
@@ -16,6 +15,7 @@ import {
 import type {
   FarmSlotState,
   OnboardingHintId,
+  QuestGuideStepId,
 } from '../types/game-state';
 
 export type SaveSourceState = {
@@ -31,11 +31,14 @@ export type SaveSourceState = {
   totalRitualsPerformed: number;
   currentEggCost: number;
   onboardingHintsSeen: ReadonlySet<OnboardingHintId>;
+  activeQuestGuideStepId?: QuestGuideStepId;
+  completedQuestGuideStepIds: ReadonlySet<QuestGuideStepId>;
+  isFirstGuideComplete: boolean;
+  isFirstGuideSkipped: boolean;
   expansionUnlocked: boolean;
-  missionProgress: Record<MissionId, number>;
-  completedMissionIds: ReadonlySet<MissionId>;
-  claimedMissionIds: ReadonlySet<MissionId>;
-  claimedOrderIds: ReadonlySet<OrderId>;
+  questProgress: Record<QuestId, number>;
+  completedQuestIds: ReadonlySet<QuestId>;
+  claimedQuestIds: ReadonlySet<QuestId>;
   claimedBossBattleStageIds: ReadonlySet<string>;
   elementFragments: ElementFragmentInventory;
   bossDailyClearCounts: Record<string, number>;
@@ -47,9 +50,9 @@ export type SaveSourceState = {
 
 export type LoadedSceneStateFragments = {
   onboardingHintsSeen: Set<OnboardingHintId>;
-  completedMissionIds: Set<MissionId>;
-  claimedMissionIds: Set<MissionId>;
-  claimedOrderIds: Set<OrderId>;
+  completedQuestGuideStepIds: Set<QuestGuideStepId>;
+  completedQuestIds: Set<QuestId>;
+  claimedQuestIds: Set<QuestId>;
   claimedBossBattleStageIds: Set<string>;
 };
 
@@ -67,11 +70,14 @@ export function createLocalSaveData(sourceState: SaveSourceState): LocalSaveData
     totalRitualsPerformed: sourceState.totalRitualsPerformed,
     currentEggCost: sourceState.currentEggCost,
     onboardingHintsSeen: Array.from(sourceState.onboardingHintsSeen),
+    activeQuestGuideStepId: sourceState.activeQuestGuideStepId,
+    completedQuestGuideStepIds: Array.from(sourceState.completedQuestGuideStepIds),
+    isFirstGuideComplete: sourceState.isFirstGuideComplete,
+    isFirstGuideSkipped: sourceState.isFirstGuideSkipped,
     expansionUnlocked: sourceState.expansionUnlocked,
-    missionProgress: sourceState.missionProgress,
-    completedMissionIds: Array.from(sourceState.completedMissionIds),
-    claimedMissionIds: Array.from(sourceState.claimedMissionIds),
-    claimedOrderIds: Array.from(sourceState.claimedOrderIds),
+    questProgress: sourceState.questProgress,
+    completedQuestIds: Array.from(sourceState.completedQuestIds),
+    claimedQuestIds: Array.from(sourceState.claimedQuestIds),
     claimedBossBattleStageIds: Array.from(sourceState.claimedBossBattleStageIds),
     elementFragments: { ...sourceState.elementFragments },
     bossDailyClearCounts: { ...sourceState.bossDailyClearCounts },
@@ -95,6 +101,7 @@ export function createSavedGrid(farmSlots: readonly FarmSlotState[]): SavedMonst
 
     if (isElementType(slot.monster.element)) {
       savedSlot.element = slot.monster.element;
+      savedSlot.elementLevel = normalizeElementLevel(slot.monster.elementLevel);
     }
 
     return savedSlot;
@@ -121,18 +128,18 @@ export function createDiscoveryKeys(
 }
 
 export function createLoadedSetsFromSave(saveData: LocalSaveData): LoadedSceneStateFragments {
-  const completedMissionIds = new Set(saveData.completedMissionIds);
-  const claimedMissionIds = new Set(saveData.claimedMissionIds);
+  const completedQuestIds = new Set(saveData.completedQuestIds);
+  const claimedQuestIds = new Set(saveData.claimedQuestIds);
 
-  claimedMissionIds.forEach((missionId) => {
-    completedMissionIds.add(missionId);
+  claimedQuestIds.forEach((questId) => {
+    completedQuestIds.add(questId);
   });
 
   return {
     onboardingHintsSeen: new Set(saveData.onboardingHintsSeen),
-    completedMissionIds,
-    claimedMissionIds,
-    claimedOrderIds: new Set(saveData.claimedOrderIds),
+    completedQuestGuideStepIds: new Set(saveData.completedQuestGuideStepIds),
+    completedQuestIds,
+    claimedQuestIds,
     claimedBossBattleStageIds: new Set(saveData.claimedBossBattleStageIds),
   };
 }

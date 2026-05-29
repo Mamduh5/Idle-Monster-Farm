@@ -61,10 +61,10 @@ export type CoinBugSpawnLayout = {
   hudHeight: number;
   statsX: number;
   statsWidth: number;
-  orderWidgetX: number;
-  orderWidgetY: number;
-  orderWidgetWidth: number;
-  orderWidgetHeight: number;
+  questWidgetX: number;
+  questWidgetY: number;
+  questWidgetWidth: number;
+  questWidgetHeight: number;
   tapFarmX: number;
   tapFarmY: number;
   tapFarmWidth: number;
@@ -230,7 +230,7 @@ function getCoinBugCriticalRects(layout: CoinBugSpawnLayout, worldWidth: number)
   return [
     { x: layout.hudX, y: layout.hudY, width: layout.hudWidth, height: layout.hudHeight },
     { x: layout.statsX, y: layout.statsY, width: layout.statsWidth, height: layout.statsHeight },
-    { x: layout.orderWidgetX, y: layout.orderWidgetY, width: layout.orderWidgetWidth, height: layout.orderWidgetHeight },
+    { x: layout.questWidgetX, y: layout.questWidgetY, width: layout.questWidgetWidth, height: layout.questWidgetHeight },
     { x: layout.tapFarmX, y: layout.tapFarmY, width: layout.tapFarmWidth, height: layout.tapFarmHeight },
     { x: layout.hatchX, y: layout.hatchY, width: layout.hatchWidth, height: layout.hatchHeight },
     { x: layout.menuX - 82, y: layout.menuY - 6, width: 92, height: 42 },

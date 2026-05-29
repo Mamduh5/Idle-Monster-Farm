@@ -1,5 +1,5 @@
 import { EGG_COST_MULTIPLIER, STARTING_EGG_COST } from '../data/economy';
-import { getElementIncomeMultiplier, type ElementType } from '../data/elements';
+import { getElementIncomeMultiplier, type ElementLevel, type ElementType } from '../data/elements';
 import { MUSHROOM_FOREST_ZONE_ID, type ZoneId } from '../data/zones';
 import type { FarmSlotState, MonsterDefinition, MonsterFamily } from '../types/game-state';
 
@@ -19,7 +19,7 @@ export const HATCH_SPEED_REDUCTION_PER_LEVEL = 0.07;
 export const OFFLINE_STORAGE_SECONDS_PER_LEVEL = 1800;
 export const EGG_DISCOUNT_PER_LEVEL = 0.03;
 export const TAP_POWER_REWARD_BOOST_PER_LEVEL = 0.15;
-export const ORDER_COIN_REWARD_BOOST_PER_LEVEL = 0.1;
+export const QUEST_COIN_REWARD_BOOST_PER_LEVEL = 0.1;
 export const COIN_BUG_REWARD_BOOST_PER_LEVEL = 0.2;
 
 const MILLISECONDS_PER_SECOND = 1000;
@@ -111,7 +111,7 @@ export function getPrestigeIncomeMultiplier(totalRitualsPerformed: number): numb
 }
 
 export function getEffectiveMonsterIncome(
-  monster: (Pick<MonsterDefinition, 'family' | 'incomePerSecond'> & { element?: ElementType }) | null | undefined,
+  monster: (Pick<MonsterDefinition, 'family' | 'incomePerSecond'> & { element?: ElementType; elementLevel?: ElementLevel }) | null | undefined,
   slimeIncomeBoostLevel: number,
   mushroomIncomeBoostLevel: number,
   totalRitualsPerformed: number,
@@ -136,7 +136,7 @@ export function getEffectiveMonsterIncome(
       plantIncomeBoostLevel,
     )
     * getPrestigeIncomeMultiplier(totalRitualsPerformed)
-    * getElementIncomeMultiplier(monster.element),
+    * getElementIncomeMultiplier(monster.element, monster.elementLevel),
   );
 }
 
@@ -178,11 +178,11 @@ export function getTapFarmReward(baseReward: number, comboMultiplier: number, ta
   return sanitizeCurrency(safeBaseReward * safeComboMultiplier * tapPowerMultiplier);
 }
 
-export function getOrderCoinReward(baseReward: number, orderBonusLevel: number): number {
+export function getQuestCoinReward(baseReward: number, questBonusLevel: number): number {
   const safeBaseReward = sanitizeCurrency(baseReward);
-  const orderMultiplier = 1 + sanitizeProgressionLevel(orderBonusLevel) * ORDER_COIN_REWARD_BOOST_PER_LEVEL;
+  const questMultiplier = 1 + sanitizeProgressionLevel(questBonusLevel) * QUEST_COIN_REWARD_BOOST_PER_LEVEL;
 
-  return sanitizeCurrency(safeBaseReward * orderMultiplier);
+  return sanitizeCurrency(safeBaseReward * questMultiplier);
 }
 
 export function getCoinBugReward(baseReward: number, coinBugValueLevel: number): number {

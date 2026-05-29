@@ -10,7 +10,7 @@ export type UpgradeId =
   | 'egg-discount'
   | 'tap-power'
   | 'fusion-power'
-  | 'order-bonus'
+  | 'quest-bonus'
   | 'coin-bug-value';
 
 export type UpgradeDefinition = {
@@ -112,9 +112,9 @@ export const UPGRADE_DEFINITIONS: UpgradeDefinition[] = [
     maxLevel: 20,
   },
   {
-    id: 'order-bonus',
-    name: 'Order Bonus',
-    effect: '+10% Order and Goal coin rewards per level',
+    id: 'quest-bonus',
+    name: 'Quest Bonus',
+    effect: '+10% Quest coin rewards per level',
     baseCost: 300,
     costMultiplier: 1.6,
     maxLevel: 15,

@@ -1,4 +1,4 @@
-import type { ElementType } from '../data/elements';
+import type { ElementLevel, ElementType } from '../data/elements';
 
 export type CurrencyState = {
   coins: number;
@@ -29,6 +29,7 @@ export type MonsterDefinition = {
 export type MonsterInstance = MonsterDefinition & {
   id: string;
   element?: ElementType;
+  elementLevel?: ElementLevel;
 };
 
 export type FarmSlotState = {
@@ -46,3 +47,18 @@ export const ONBOARDING_HINT_IDS = [
 ] as const;
 
 export type OnboardingHintId = typeof ONBOARDING_HINT_IDS[number];
+
+export const QUEST_GUIDE_STEP_IDS = [
+  'hatch-1',
+  'hatch-2',
+  'merge-1',
+  'income',
+  'shop-open',
+  'shop-buy',
+  'remove-tip',
+  'ritual-open',
+  'battle-open',
+  'forge-open',
+] as const;
+
+export type QuestGuideStepId = typeof QUEST_GUIDE_STEP_IDS[number];
