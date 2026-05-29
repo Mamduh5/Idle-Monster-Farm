@@ -1254,8 +1254,8 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    if (action === 'quests') {
-      this.openMissionsPanel();
+    if (action === 'forge') {
+      this.openElementForgePanel(true);
       return;
     }
 
@@ -1306,7 +1306,7 @@ export class FarmScene extends Phaser.Scene {
       { label: this.t('ui.menu.settings'), openPanel: () => this.openSettingsPanel() },
       { label: this.t('ui.menu.help'), openPanel: () => this.openHelpPanel() },
       { label: this.t('ui.menu.patchNotes'), openPanel: () => this.openPatchNotesPanel() },
-      { label: this.t('ui.menu.elementForge'), openPanel: () => this.openElementForgePanel() },
+      { label: this.t('ui.menu.goals'), openPanel: () => this.openMissionsPanel() },
       { label: this.t('ui.menu.hatchPool'), openPanel: () => this.openHatchPoolPanel() },
       { label: this.t('ui.menu.compendium'), openPanel: () => this.openCompendiumPanel() },
       { label: this.t('ui.menu.zone'), openPanel: () => this.openZonePanel() },

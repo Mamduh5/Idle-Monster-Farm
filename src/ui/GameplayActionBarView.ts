@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 
-export type GameplayActionBarAction = 'shop' | 'battle' | 'quests' | 'ritual';
+export type GameplayActionBarAction = 'shop' | 'battle' | 'forge' | 'ritual';
 
 type GameplayActionBarLayout = {
   actionBarButtonGap: number;
@@ -50,7 +50,7 @@ type ActionButtonVisual = {
 const ACTION_BUTTONS: ActionButtonDefinition[] = [
   { action: 'shop', labelKey: 'ui.action.shop' },
   { action: 'battle', labelKey: 'ui.action.battle' },
-  { action: 'quests', labelKey: 'ui.action.quests' },
+  { action: 'forge', labelKey: 'ui.action.forge' },
   { action: 'ritual', labelKey: 'ui.action.ritual' },
 ];
 
@@ -270,11 +270,41 @@ export class GameplayActionBarView {
       icon.lineBetween(centerX + size * 0.62, centerY + size * 0.46, centerX - size * 0.58, centerY - size * 0.74);
       icon.fillCircle(centerX - size * 0.68, centerY + size * 0.52, 2.4);
       icon.fillCircle(centerX + size * 0.68, centerY + size * 0.52, 2.4);
-    } else if (action === 'quests') {
-      icon.strokeRoundedRect(centerX - size * 0.55, centerY - size * 0.7, size * 1.1, size * 1.38, 4);
-      icon.lineBetween(centerX - size * 0.34, centerY - size * 0.24, centerX + size * 0.34, centerY - size * 0.24);
-      icon.lineBetween(centerX - size * 0.34, centerY + size * 0.1, centerX + size * 0.28, centerY + size * 0.1);
-      icon.lineBetween(centerX - size * 0.34, centerY + size * 0.42, centerX + size * 0.16, centerY + size * 0.42);
+    } else if (action === 'forge') {
+      icon.fillStyle(accent, 0.3);
+      icon.fillTriangle(
+        centerX,
+        centerY - size * 0.9,
+        centerX + size * 0.72,
+        centerY,
+        centerX,
+        centerY + size * 0.9,
+      );
+      icon.fillTriangle(
+        centerX,
+        centerY - size * 0.9,
+        centerX - size * 0.72,
+        centerY,
+        centerX,
+        centerY + size * 0.9,
+      );
+      icon.strokeTriangle(
+        centerX,
+        centerY - size * 0.9,
+        centerX + size * 0.72,
+        centerY,
+        centerX,
+        centerY + size * 0.9,
+      );
+      icon.strokeTriangle(
+        centerX,
+        centerY - size * 0.9,
+        centerX - size * 0.72,
+        centerY,
+        centerX,
+        centerY + size * 0.9,
+      );
+      icon.lineBetween(centerX - size * 0.72, centerY, centerX + size * 0.72, centerY);
     } else {
       icon.fillCircle(centerX, centerY, size * 0.28);
       icon.lineBetween(centerX, centerY - size, centerX, centerY + size);

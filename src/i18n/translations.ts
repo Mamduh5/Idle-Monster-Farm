@@ -34,10 +34,10 @@ const EN: TranslationTable = {
   'ui.menu.compendium': 'Compendium',
   'ui.menu.help': 'Help',
   'ui.menu.settings': 'Settings',
-  'ui.menu.elementForge': 'Element Forge',
   'ui.action.shop': 'Shop',
   'ui.action.battle': 'Battle',
   'ui.action.quests': 'Quests',
+  'ui.action.forge': 'Forge',
   'ui.action.ritual': 'Ritual',
   'ui.action.questBoard': 'Quest Board',
 
@@ -608,10 +608,10 @@ const TH: TranslationTable = {
   'ui.menu.compendium': 'สารบัญมอนสเตอร์',
   'ui.menu.help': 'ช่วยเหลือ',
   'ui.menu.settings': 'ตั้งค่า',
-  'ui.menu.elementForge': 'Element Forge',
   'ui.action.shop': 'ร้าน',
   'ui.action.battle': 'สู้',
   'ui.action.quests': 'เควสต์',
+  'ui.action.forge': 'Forge',
   'ui.action.ritual': 'พิธี',
   'ui.action.questBoard': 'กระดานเควสต์',
 
