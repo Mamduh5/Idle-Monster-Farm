@@ -216,18 +216,18 @@ const QUEST_GUIDE_SEQUENCE: QuestGuideStepId[] = [
   'ritual-open',
   'essence-upgrade',
 ];
-const QUEST_GUIDE_TEXT: Record<QuestGuideStepId, string> = {
-  'hatch-1': 'Tap Hatch.',
-  'hatch-2': 'Tap Hatch.',
-  'merge-1': 'Drag matching monsters together to merge.',
-  income: 'Monsters earn coins over time.',
-  'shop-open': 'Open Shop.',
-  'shop-buy': 'Buy one upgrade.',
-  'remove-tip': 'Drag unwanted monsters to Remove when the farm is stuck.',
-  'ritual-open': 'Ritual unlocks later with a strong monster.',
-  'battle-open': 'Fight bosses for fragments.',
-  'forge-open': 'Use fragments in Forge.',
-  'essence-upgrade': 'Spend Essence on +Lv hatches.',
+const QUEST_GUIDE_TEXT_KEYS: Record<QuestGuideStepId, string> = {
+  'hatch-1': 'ui.guide.hatch',
+  'hatch-2': 'ui.guide.hatchAnother',
+  'merge-1': 'ui.guide.merge',
+  income: 'ui.guide.income',
+  'shop-open': 'ui.guide.openShop',
+  'shop-buy': 'ui.guide.buyUpgrade',
+  'remove-tip': 'ui.guide.remove',
+  'ritual-open': 'ui.guide.openRitual',
+  'battle-open': 'ui.guide.openBattle',
+  'forge-open': 'ui.guide.openForge',
+  'essence-upgrade': 'ui.guide.essenceUpgrade',
 };
 const UI_FONT_FAMILY = 'Arial, Tahoma, "Noto Sans Thai", sans-serif';
 const MONO_FONT_FAMILY = 'Consolas, monospace';
@@ -2575,7 +2575,7 @@ export class FarmScene extends Phaser.Scene {
       const cost = isGuidedFreeForge ? 0 : selectedMonster ? getElementForgeCost(selectedMonster.element, currentLevel, element) : ELEMENT_FORGE_APPLY_COST;
       const canAfford = isGuidedFreeForge || canAffordElementForge(this.elementFragments, element, cost);
       const enabled = hasSelectedMonster && canAfford && !isMaxed;
-      let status = isGuidedFreeForge ? 'First free' : this.t('ui.elementForge.applyLevel', { level: nextLevel });
+      let status = isGuidedFreeForge ? this.t('ui.elementForge.firstFree') : this.t('ui.elementForge.applyLevel', { level: nextLevel });
 
       if (!hasSelectedMonster) {
         status = this.t('ui.elementForge.needMonster');
@@ -3238,7 +3238,7 @@ export class FarmScene extends Phaser.Scene {
 
   private getQuestGuideRenderState(stepId: QuestGuideStepId): QuestGuideRenderState {
     if (stepId.startsWith('hatch')) {
-      return this.getHatchGuideRenderState();
+      return this.getHatchGuideRenderState(stepId);
     }
 
     if (stepId === 'merge-1') {
@@ -3248,7 +3248,7 @@ export class FarmScene extends Phaser.Scene {
     if (stepId === 'remove-tip') {
       return {
         target: this.isFarmFull() && !this.canGuideMergeNow() ? 'remove' : 'monster',
-        text: QUEST_GUIDE_TEXT[stepId],
+        text: this.getQuestGuideText(stepId),
         autoCompleteAfterMs: 2600,
       };
     }
@@ -3257,20 +3257,20 @@ export class FarmScene extends Phaser.Scene {
       if (stepId === 'shop-buy' && !this.canGuideUpgradeNow()) {
         return {
           target: this.shouldGuideWaitForCoins() ? 'coins' : 'tap',
-          text: 'Earn coins for upgrades.',
+          text: this.t('ui.guide.earnUpgradeCoins'),
         };
       }
 
       if (stepId === 'shop-buy' && this.upgradeShopPanel && this.guideTargetRects.has('upgrade-buy')) {
         return {
           target: 'upgrade-buy',
-          text: 'Buy an upgrade.',
+          text: this.t('ui.guide.buyUpgrade'),
         };
       }
 
       return {
         target: 'shop',
-        text: QUEST_GUIDE_TEXT[stepId],
+        text: this.getQuestGuideText(stepId),
       };
     }
 
@@ -3278,27 +3278,27 @@ export class FarmScene extends Phaser.Scene {
       if (!this.canGuideRitualNow()) {
         return {
           target: this.canGuideMergeNow() ? 'monster' : this.canGuideHatchNow() ? 'hatch' : 'monster',
-          text: 'Build a stronger monster.',
+          text: this.t('ui.guide.buildStrongerForRitual'),
         };
       }
 
       if (this.prestigePanel && this.guideTargetRects.has('safe-ritual')) {
         return {
           target: 'safe-ritual',
-          text: this.isGuidedFreeSafeRitualAvailable() ? 'First Safe Ritual is free.' : 'Use Safe Ritual for Essence.',
+          text: this.isGuidedFreeSafeRitualAvailable() ? this.t('ui.guide.firstSafeRitualFree') : this.t('ui.guide.safeRitual'),
         };
       }
 
       return {
         target: 'ritual',
-        text: 'Use Safe Ritual for Essence.',
+        text: this.t('ui.guide.safeRitual'),
       };
     }
 
     if (stepId === 'battle-open') {
       return {
         target: 'battle',
-        text: QUEST_GUIDE_TEXT[stepId],
+        text: this.getQuestGuideText(stepId),
       };
     }
 
@@ -3306,13 +3306,13 @@ export class FarmScene extends Phaser.Scene {
       if (this.elementForgePanel && this.guideTargetRects.has('forge-apply')) {
         return {
           target: 'forge-apply',
-          text: this.isGuidedFreeForgeAvailable() ? 'First Forge is free.' : QUEST_GUIDE_TEXT[stepId],
+          text: this.isGuidedFreeForgeAvailable() ? this.t('ui.guide.firstForgeFree') : this.getQuestGuideText(stepId),
         };
       }
 
       return {
         target: this.canGuideForgeNow() ? 'forge' : 'battle',
-        text: this.canGuideForgeNow() ? QUEST_GUIDE_TEXT[stepId] : 'Bosses drop Forge fragments.',
+        text: this.canGuideForgeNow() ? this.getQuestGuideText(stepId) : this.t('ui.guide.bossFragments'),
       };
     }
 
@@ -3320,7 +3320,7 @@ export class FarmScene extends Phaser.Scene {
       if (!this.canGuideEssenceUpgradeNow()) {
         return {
           target: 'ritual',
-          text: 'Essence powers upgrades.',
+          text: this.t('ui.guide.essenceTip'),
           autoCompleteAfterMs: 2200,
         };
       }
@@ -3328,47 +3328,47 @@ export class FarmScene extends Phaser.Scene {
       if (this.prestigePanel && this.guideTargetRects.has('essence-hatch-blessing')) {
         return {
           target: 'essence-hatch-blessing',
-          text: QUEST_GUIDE_TEXT[stepId],
+          text: this.getQuestGuideText(stepId),
         };
       }
 
       if (this.prestigePanel && this.guideTargetRects.has('essence-rare-hatch')) {
         return {
           target: 'essence-rare-hatch',
-          text: 'Spend Essence on upgrades.',
+          text: this.t('ui.guide.spendEssence'),
         };
       }
 
       return {
         target: 'ritual',
-        text: QUEST_GUIDE_TEXT[stepId],
+        text: this.getQuestGuideText(stepId),
       };
     }
 
     return {
       target: 'coins',
-      text: QUEST_GUIDE_TEXT[stepId],
+      text: this.getQuestGuideText(stepId),
       autoCompleteAfterMs: stepId === 'income' ? 1800 : undefined,
     };
   }
 
-  private getHatchGuideRenderState(): QuestGuideRenderState {
+  private getHatchGuideRenderState(stepId: QuestGuideStepId): QuestGuideRenderState {
     if (this.isFarmFull()) {
       return this.canGuideMergeNow()
         ? {
           target: 'monster',
-          text: 'Drag matching monsters together.',
+          text: this.t('ui.guide.merge'),
         }
         : {
           target: 'remove',
-          text: 'Remove one monster.',
+          text: this.t('ui.guide.remove'),
         };
     }
 
     if (!this.isHatchReady()) {
       return {
         target: 'hatch',
-        text: 'Wait for the egg.',
+        text: this.t('ui.guide.waitEgg'),
       };
     }
 
@@ -3381,7 +3381,7 @@ export class FarmScene extends Phaser.Scene {
 
     return {
       target: 'hatch',
-      text: QUEST_GUIDE_TEXT['hatch-1'],
+      text: this.getQuestGuideText(stepId),
     };
   }
 
@@ -3389,21 +3389,21 @@ export class FarmScene extends Phaser.Scene {
     if (this.canGuideMergeNow()) {
       return {
         target: 'monster',
-        text: 'Drag matching monsters together.',
+        text: this.t('ui.guide.merge'),
       };
     }
 
     if (this.isFarmFull()) {
       return {
         target: 'remove',
-        text: 'Remove one monster.',
+        text: this.t('ui.guide.remove'),
       };
     }
 
     if (!this.isHatchReady()) {
       return {
         target: 'hatch',
-        text: 'Wait for the egg.',
+        text: this.t('ui.guide.waitEgg'),
       };
     }
 
@@ -3416,14 +3416,20 @@ export class FarmScene extends Phaser.Scene {
 
     return {
       target: 'hatch',
-      text: 'Hatch until a pair appears.',
+      text: this.t('ui.guide.hatchForPair'),
     };
   }
 
   private getGuideCoinsNeededText(): string {
     const neededCoins = Math.max(0, Math.ceil(this.getEffectiveEggCost() - this.currency.coins));
 
-    return neededCoins > 0 ? `Need ${this.formatCoinAmount(neededCoins)} more coins.` : 'Wait for coins.';
+    return neededCoins > 0
+      ? this.t('ui.guide.needCoins', { amount: this.formatCoinAmount(neededCoins) })
+      : this.t('ui.guide.waitCoins');
+  }
+
+  private getQuestGuideText(stepId: QuestGuideStepId): string {
+    return this.t(QUEST_GUIDE_TEXT_KEYS[stepId]);
   }
 
   private canGuideHatchNow(): boolean {
@@ -3580,14 +3586,14 @@ export class FarmScene extends Phaser.Scene {
       focusRect.centerX,
       focusRect.centerY,
     );
-    const text = this.add.text(bubbleX - bubbleWidth / 2 + 12, bubbleY - 15, guideText ?? (stepId ? QUEST_GUIDE_TEXT[stepId] : ''), {
+    const text = this.add.text(bubbleX - bubbleWidth / 2 + 12, bubbleY - 15, guideText ?? (stepId ? this.getQuestGuideText(stepId) : ''), {
       color: THEME.text,
       fontFamily: UI_FONT_FAMILY,
       fontSize: layout.isNarrow ? '12px' : '13px',
       fontStyle: 'bold',
       wordWrap: { width: bubbleWidth - 76 },
     });
-    const skip = this.add.text(bubbleX + bubbleWidth / 2 - 12, bubbleY, this.t('common.skip'), {
+    const skip = this.add.text(bubbleX + bubbleWidth / 2 - 12, bubbleY, this.t('ui.guide.skip'), {
       color: THEME.goldText,
       fontFamily: UI_FONT_FAMILY,
       fontSize: '12px',
@@ -6865,7 +6871,7 @@ export class FarmScene extends Phaser.Scene {
     const safeDetail = this.safeRitualInProgress
       ? this.t('ui.prestige.safePending')
       : this.isGuidedFreeSafeRitualAvailable()
-        ? 'First Safe Ritual is free.'
+        ? this.t('ui.guide.firstSafeRitualFree')
         : this.t('ui.prestige.safeDetailSacrifice');
 
     panel.add(this.add.text(safeX, actionY + 23, safeDetail, {
