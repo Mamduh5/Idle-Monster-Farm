@@ -2114,6 +2114,7 @@ export class FarmScene extends Phaser.Scene {
     const contentX = -panelWidth / 2 + 24;
     const contentWidth = panelWidth - 48;
     const patchNoteKeys = [
+      'ui.patchNotes.bossBranches',
       'ui.patchNotes.hatchPool',
       'ui.patchNotes.rareHatch',
       'ui.patchNotes.hatchBlessing',
