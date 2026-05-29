@@ -1,5 +1,6 @@
 import { STARTING_EGG_COST } from '../data/economy';
 import { BOSS_BATTLE_DEFINITIONS, BOSS_BATTLE_STAGE_IDS } from '../data/bossBattles';
+import { sanitizeElementFragmentInventory, type ElementFragmentInventory } from '../data/elements';
 import { MISSION_DEFINITIONS, MISSION_IDS, type MissionId } from '../data/missions';
 import { ORDER_IDS, type OrderId } from '../data/orders';
 import { UPGRADE_DEFINITIONS, type UpgradeId } from '../data/upgrades';
@@ -44,6 +45,7 @@ export type LocalSaveData = {
   claimedMissionIds: MissionId[];
   claimedOrderIds: OrderId[];
   claimedBossBattleStageIds: string[];
+  elementFragments: ElementFragmentInventory;
   bossDailyClearCounts: Record<string, number>;
   bossDailyClearLastResetDay: string;
   unlockedZones: ZoneId[];
@@ -130,6 +132,7 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
     claimedMissionIds: normalizeMissionIds(rawData.claimedMissionIds),
     claimedOrderIds: normalizeOrderIds(rawData.claimedOrderIds),
     claimedBossBattleStageIds: normalizeBossBattleStageIds(rawData.claimedBossBattleStageIds),
+    elementFragments: sanitizeElementFragmentInventory(rawData.elementFragments),
     bossDailyClearCounts: normalizeBossDailyClearCounts(rawData.bossDailyClearCounts),
     bossDailyClearLastResetDay: normalizeBossDailyClearLastResetDay(rawData.bossDailyClearLastResetDay),
     unlockedZones: normalizeUnlockedZones(rawData.unlockedZones),

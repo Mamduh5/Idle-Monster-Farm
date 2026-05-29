@@ -2,6 +2,7 @@ import type { MissionId } from '../data/missions';
 import type { OrderId } from '../data/orders';
 import type { UpgradeId } from '../data/upgrades';
 import type { ZoneId } from '../data/zones';
+import type { ElementFragmentInventory } from '../data/elements';
 import type {
   LocalSaveData,
   SavedMonsterDiscovery,
@@ -36,6 +37,7 @@ export type SaveSourceState = {
   claimedMissionIds: ReadonlySet<MissionId>;
   claimedOrderIds: ReadonlySet<OrderId>;
   claimedBossBattleStageIds: ReadonlySet<string>;
+  elementFragments: ElementFragmentInventory;
   bossDailyClearCounts: Record<string, number>;
   bossDailyClearLastResetDay: string;
   unlockedZones: ReadonlySet<ZoneId>;
@@ -71,6 +73,7 @@ export function createLocalSaveData(sourceState: SaveSourceState): LocalSaveData
     claimedMissionIds: Array.from(sourceState.claimedMissionIds),
     claimedOrderIds: Array.from(sourceState.claimedOrderIds),
     claimedBossBattleStageIds: Array.from(sourceState.claimedBossBattleStageIds),
+    elementFragments: { ...sourceState.elementFragments },
     bossDailyClearCounts: { ...sourceState.bossDailyClearCounts },
     bossDailyClearLastResetDay: sourceState.bossDailyClearLastResetDay,
     unlockedZones: Array.from(sourceState.unlockedZones),

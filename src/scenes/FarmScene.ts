@@ -26,7 +26,14 @@ import {
   type BossBattleReward,
   type BossBattleStage,
   type BossVisualTheme,
+  type ElementFragmentReward,
 } from '../data/bossBattles';
+import {
+  addElementFragments,
+  createInitialElementFragments,
+  ELEMENT_TYPES,
+  type ElementFragmentInventory,
+} from '../data/elements';
 import { MISSION_DEFINITIONS, type MissionDefinition, type MissionId, type MissionReward } from '../data/missions';
 import { ORDER_DEFINITIONS, type OrderDefinition, type OrderId, type OrderReward } from '../data/orders';
 import {
@@ -403,6 +410,7 @@ export class FarmScene extends Phaser.Scene {
   private claimedMissionIds = new Set<MissionId>();
   private claimedOrderIds = new Set<OrderId>();
   private claimedBossBattleStageIds = new Set<string>();
+  private elementFragments: ElementFragmentInventory = createInitialElementFragments();
   private bossDailyClearCounts: Record<string, number> = {};
   private bossDailyClearLastResetDay = '';
   private unlockedZones = createInitialUnlockedZones(GRASS_FARM_ZONE_ID);
@@ -2001,7 +2009,7 @@ export class FarmScene extends Phaser.Scene {
     this.showModalOverlay();
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
-    const { width: panelWidth, height: panelHeight } = getPanelSize(this.scale, 500, 430);
+    const { width: panelWidth, height: panelHeight } = getPanelSize(this.scale, 500, 460);
 
     panel.setDepth(26);
 
@@ -2022,6 +2030,7 @@ export class FarmScene extends Phaser.Scene {
       [this.t('ui.help.merge.label'), this.t('ui.help.merge.description')],
       [this.t('ui.help.upgrades.label'), this.t('ui.help.upgrades.description')],
       [this.t('ui.help.orders.label'), this.t('ui.help.orders.description')],
+      [this.t('ui.help.fragments.label'), this.t('ui.help.fragments.description')],
       [this.t('ui.help.info.label'), this.t('ui.help.info.description')],
       [this.t('ui.help.compendium.label'), this.t('ui.help.compendium.description')],
       [this.t('ui.help.settings.label'), this.t('ui.help.settings.description')],
@@ -2115,6 +2124,7 @@ export class FarmScene extends Phaser.Scene {
     const contentWidth = panelWidth - 48;
     const patchNoteKeys = [
       'ui.patchNotes.bossBranches',
+      'ui.patchNotes.elementFragments',
       'ui.patchNotes.hatchPool',
       'ui.patchNotes.rareHatch',
       'ui.patchNotes.hatchBlessing',
@@ -2875,8 +2885,8 @@ export class FarmScene extends Phaser.Scene {
     const cardGap = isCompactPanel ? 8 : 12;
     const rowGap = isCompactPanel ? 10 : 12;
     const cardWidth = (contentWidth - cardGap) / 2;
-    const cardHeight = isCompactPanel ? 154 : 166;
-    const gridTop = headerY + (isCompactPanel ? 38 : 44);
+    const cardHeight = isCompactPanel ? 164 : 178;
+    const gridTop = headerY + (isCompactPanel ? 58 : 64);
     const startX = -contentWidth / 2 + cardWidth / 2;
     const pageControlsY = gridTop + cardHeight * 2 + rowGap + (isCompactPanel ? 26 : 30);
 
@@ -2888,6 +2898,16 @@ export class FarmScene extends Phaser.Scene {
       fontSize: isCompactPanel ? '12px' : '14px',
       wordWrap: { width: contentWidth },
     }).setOrigin(0.5, 0));
+
+    this.getElementFragmentInventoryLines().forEach((line, index) => {
+      panel.add(this.add.text(0, headerY + 18 + index * 13, line, {
+        align: 'center',
+        color: index === 0 ? '#fff4a8' : THEME.mutedText,
+        fixedWidth: contentWidth,
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: isCompactPanel ? '10px' : '11px',
+      }).setOrigin(0.5, 0));
+    });
 
     visibleBosses.forEach((boss, index) => {
       const column = index % 2;
@@ -2956,9 +2976,12 @@ export class FarmScene extends Phaser.Scene {
     const statusText = isAllCleared ? this.t('ui.bossBattle.cleared') : this.t('ui.bossBattle.readySkill');
     const rewardText = nextStage
       ? isAllCleared
-        ? this.t('ui.bossBattle.replayRewardShort', { reward: this.getBossBattleRewardText(nextStage.replayReward) })
-        : this.t('ui.bossBattle.rewardShort', { reward: this.getBossBattleRewardText(nextStage.firstClearReward) })
+        ? this.t('ui.bossBattle.replayRewardShort', { reward: this.getBossBattleFullRewardText(nextStage.replayReward, nextStage.replayFragmentReward) })
+        : this.t('ui.bossBattle.rewardShort', { reward: this.getBossBattleFullRewardText(nextStage.firstClearReward, nextStage.firstClearFragmentReward) })
       : '';
+    const branchText = this.t('ui.bossBattle.branch', {
+      branch: this.t(`element.${boss.futureElementTheme}`),
+    });
 
     panel.add(this.add.rectangle(centerX, centerY, cardWidth, cardHeight, THEME.panelAlt, 0.92)
       .setStrokeStyle(2, isAllCleared ? THEME.slot : THEME.panelBorder, 0.72));
@@ -2984,7 +3007,16 @@ export class FarmScene extends Phaser.Scene {
       fontSize: isCompactPanel ? '10px' : '11px',
       wordWrap: { width: cardWidth - 14 },
     }).setOrigin(0.5, 0));
-    panel.add(this.add.text(centerX, cardTop + (isCompactPanel ? 105 : 118), this.t('ui.bossBattle.bossProgress', {
+
+    panel.add(this.add.text(centerX, cardTop + (isCompactPanel ? 102 : 114), this.getCompactBossBattleText(branchText, isCompactPanel ? 20 : 28), {
+      align: 'center',
+      color: '#fff4a8',
+      fixedWidth: cardWidth - 14,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '9px' : '10px',
+      wordWrap: { width: cardWidth - 14 },
+    }).setOrigin(0.5, 0));
+    panel.add(this.add.text(centerX, cardTop + (isCompactPanel ? 116 : 130), this.t('ui.bossBattle.bossProgress', {
       cleared: clearedCount,
       total: boss.stages.length,
     }), {
@@ -2994,7 +3026,7 @@ export class FarmScene extends Phaser.Scene {
       fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '10px' : '11px',
     }).setOrigin(0.5, 0));
-    panel.add(this.add.text(centerX, cardTop + (isCompactPanel ? 121 : 136), this.getCompactBossBattleText(rewardText, isCompactPanel ? 24 : 32), {
+    panel.add(this.add.text(centerX, cardTop + (isCompactPanel ? 130 : 146), this.getCompactBossBattleText(rewardText, isCompactPanel ? 28 : 38), {
       align: 'center',
       color: THEME.mutedText,
       fixedWidth: cardWidth - 14,
@@ -3077,8 +3109,8 @@ export class FarmScene extends Phaser.Scene {
     this.addBossBattleStageSelector(panel, boss, stageY + 50, contentWidth, isCompactPanel);
 
     const rewardText = isCleared
-      ? this.t('ui.bossBattle.replayReward', { reward: this.getBossBattleRewardText(stage.replayReward) })
-      : this.t('ui.bossBattle.firstClearReward', { reward: this.getBossBattleRewardText(stage.firstClearReward) });
+      ? this.t('ui.bossBattle.replayReward', { reward: this.getBossBattleFullRewardText(stage.replayReward, stage.replayFragmentReward) })
+      : this.t('ui.bossBattle.firstClearReward', { reward: this.getBossBattleFullRewardText(stage.firstClearReward, stage.firstClearFragmentReward) });
     panel.add(this.add.text(contentLeft + contentWidth, stageY + (isCompactPanel ? 14 : 18), isCleared ? this.t('ui.bossBattle.cleared') : this.t('ui.bossBattle.readySkill'), {
       align: 'center',
       backgroundColor: `#${(isCleared ? THEME.buttonHover : THEME.buttonWarm).toString(16).padStart(6, '0')}`,
@@ -4592,17 +4624,20 @@ export class FarmScene extends Phaser.Scene {
     }
 
     const reward = getBossReplayReward(stage);
+    const fragmentReward = stage.replayFragmentReward;
+    const fullRewardText = this.getBossBattleFullRewardText(reward, fragmentReward);
 
     this.clearBattleAnimationEvents();
     this.clearBossBattleRewardX2Opportunity();
     this.grantBossBattleReward(reward);
+    this.grantElementFragmentReward(fragmentReward);
     this.bossBattleSession = undefined;
     this.bossBattleTargetMonsterId = undefined;
     this.bossBattleTurnBanner = '';
     this.bossBattlePlayerVisualEffect = undefined;
     this.bossBattleBossVisualEffect = undefined;
     this.bossBattleStatusText = this.t('ui.bossBattle.autoClearGranted', {
-      reward: this.getBossBattleRewardText(reward),
+      reward: fullRewardText,
     });
     this.bossBattleLogText = this.bossBattleStatusText;
     this.skipSavingUntilProgress = false;
@@ -4610,7 +4645,7 @@ export class FarmScene extends Phaser.Scene {
     this.saveProgress();
     this.refreshBossBattlePanel();
     this.showToast(this.t('toast.bossBattleReward', {
-      reward: this.getBossBattleRewardText(reward),
+      reward: fullRewardText,
     }), 'success');
   }
 
@@ -4672,12 +4707,15 @@ export class FarmScene extends Phaser.Scene {
     }
 
     const doubledReward = this.getDoubledBossBattleCoinReward(currentOpportunity.reward);
+    const fragmentReward = stage.replayFragmentReward;
+    const fullRewardText = this.getBossBattleFullRewardText(doubledReward, fragmentReward);
 
     currentOpportunity.consumed = true;
     this.grantBossBattleReward(doubledReward);
+    this.grantElementFragmentReward(fragmentReward);
     this.clearBossBattleRewardX2Opportunity();
     this.bossBattleStatusText = this.t('ui.bossBattle.autoClearX2Granted', {
-      reward: this.getBossBattleRewardText(doubledReward),
+      reward: fullRewardText,
     });
     this.bossBattleLogText = this.bossBattleStatusText;
     this.skipSavingUntilProgress = false;
@@ -4685,7 +4723,7 @@ export class FarmScene extends Phaser.Scene {
     this.saveProgress();
     this.refreshBossBattlePanel();
     this.showToast(this.t('toast.bossBattleRewardX2', {
-      reward: this.getBossBattleRewardText(doubledReward),
+      reward: fullRewardText,
     }), 'success');
   }
 
@@ -4901,18 +4939,22 @@ export class FarmScene extends Phaser.Scene {
           return;
         }
 
+        const fragmentReward = stage.firstClearFragmentReward;
+        const fullRewardText = this.getBossBattleFullRewardText(stage.firstClearReward, fragmentReward);
+
         this.grantBossBattleReward(stage.firstClearReward);
+        this.grantElementFragmentReward(fragmentReward);
         this.setBossBattleRewardX2Opportunity(stage, 'first-clear', stage.firstClearReward);
         this.claimedBossBattleStageIds.add(stage.id);
         this.bossBattleStatusText = this.t('ui.bossBattle.firstClearGranted', {
-          reward: this.getBossBattleRewardText(stage.firstClearReward),
+          reward: fullRewardText,
         });
         this.bossBattleLogText = this.bossBattleStatusText;
         this.skipSavingUntilProgress = false;
         this.updateHud();
         this.saveProgress();
         this.showToast(this.t('toast.bossBattleFirstClear', {
-          reward: this.getBossBattleRewardText(stage.firstClearReward),
+          reward: fullRewardText,
         }), 'success');
         return;
       }
@@ -4959,6 +5001,15 @@ export class FarmScene extends Phaser.Scene {
 
     this.monsterEssence = sanitizePrestigeIntegerState(this.monsterEssence + reward.amount);
     this.syncZoneUnlockFromPrestigeProgress();
+  }
+
+  private grantElementFragmentReward(reward: ElementFragmentReward | undefined): void {
+    if (!reward || reward.amount <= 0) {
+      return;
+    }
+
+    this.elementFragments = addElementFragments(this.elementFragments, reward.element, reward.amount);
+    this.hasUnsavedProgress = true;
   }
 
   private getBossBattleStatusText(stage: BossBattleStage, session: BattleSessionState | undefined): string {
@@ -5053,6 +5104,50 @@ export class FarmScene extends Phaser.Scene {
     return this.t('common.essence', {
       amount: reward.amount,
     });
+  }
+
+  private getElementFragmentRewardText(reward: ElementFragmentReward): string {
+    return this.t('ui.fragments.shortAmount', {
+      amount: reward.amount,
+      element: this.t(`element.${reward.element}`),
+    });
+  }
+
+  private getBossStageFragmentRewardText(
+    stage: BossBattleStage,
+    source: 'first-clear' | 'replay',
+  ): string {
+    const reward = source === 'first-clear' ? stage.firstClearFragmentReward : stage.replayFragmentReward;
+
+    return reward ? this.getElementFragmentRewardText(reward) : '';
+  }
+
+  private getBossBattleFullRewardText(
+    baseReward: BossBattleReward,
+    fragmentReward: ElementFragmentReward | undefined,
+  ): string {
+    const baseRewardText = this.getBossBattleRewardText(baseReward);
+
+    if (!fragmentReward) {
+      return baseRewardText;
+    }
+
+    return this.t('ui.bossBattle.rewardWithFragments', {
+      reward: baseRewardText,
+      fragments: this.getElementFragmentRewardText(fragmentReward),
+    });
+  }
+
+  private getElementFragmentInventoryLines(): string[] {
+    const labels = ELEMENT_TYPES.map((element) => this.t('ui.fragments.amount', {
+      amount: this.elementFragments[element] ?? 0,
+      element: this.t(`element.${element}`),
+    }));
+
+    return [
+      this.t('ui.fragments.inventory'),
+      `${labels[0]} | ${labels[1]}   ${labels[2]} | ${labels[3]}`,
+    ];
   }
 
   private getCompactBossBattleText(text: string, maxLength: number): string {
@@ -8571,6 +8666,7 @@ export class FarmScene extends Phaser.Scene {
     this.claimedMissionIds = loadedSets.claimedMissionIds;
     this.claimedOrderIds = loadedSets.claimedOrderIds;
     this.claimedBossBattleStageIds = loadedSets.claimedBossBattleStageIds;
+    this.elementFragments = { ...saveData.elementFragments };
     this.bossDailyClearCounts = { ...saveData.bossDailyClearCounts };
     this.bossDailyClearLastResetDay = saveData.bossDailyClearLastResetDay;
     this.syncBossDailyClearReset();
@@ -8659,6 +8755,7 @@ export class FarmScene extends Phaser.Scene {
       claimedMissionIds: this.claimedMissionIds,
       claimedOrderIds: this.claimedOrderIds,
       claimedBossBattleStageIds: this.claimedBossBattleStageIds,
+      elementFragments: this.elementFragments,
       bossDailyClearCounts: { ...this.bossDailyClearCounts },
       bossDailyClearLastResetDay: this.bossDailyClearLastResetDay || this.getCurrentLocalDayKey(),
       unlockedZones: this.unlockedZones,
@@ -8702,6 +8799,7 @@ export class FarmScene extends Phaser.Scene {
     this.claimedMissionIds = new Set<MissionId>();
     this.claimedOrderIds = new Set<OrderId>();
     this.claimedBossBattleStageIds = new Set<string>();
+    this.elementFragments = createInitialElementFragments();
     this.bossDailyClearCounts = {};
     this.bossDailyClearLastResetDay = this.getCurrentLocalDayKey();
     this.selectedBossBattleBossId = undefined;
@@ -8807,6 +8905,7 @@ export class FarmScene extends Phaser.Scene {
       || this.claimedMissionIds.size > 0
       || this.claimedOrderIds.size > 0
       || this.claimedBossBattleStageIds.size > 0
+      || Object.values(this.elementFragments).some((amount) => amount > 0)
       || Object.values(this.bossDailyClearCounts).some((count) => count > 0)
       || Object.values(this.missionProgress).some((progress) => progress > 0)
       || this.farmSlots.some((slot) => slot.monster !== null)
