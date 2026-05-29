@@ -56,9 +56,10 @@ export const QUEST_GUIDE_STEP_IDS = [
   'shop-open',
   'shop-buy',
   'remove-tip',
-  'ritual-open',
   'battle-open',
   'forge-open',
+  'ritual-open',
+  'essence-upgrade',
 ] as const;
 
 export type QuestGuideStepId = typeof QUEST_GUIDE_STEP_IDS[number];

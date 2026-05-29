@@ -64,6 +64,8 @@ export type LocalSaveData = {
   unlockedZones: ZoneId[];
   currentZone: ZoneId;
   hasPrestigedOnce: boolean;
+  hasUsedGuidedFreeForge: boolean;
+  hasUsedGuidedFreeSafeRitual: boolean;
 };
 
 export function loadSaveData(slotCount: number): LocalSaveData | null {
@@ -154,6 +156,8 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
     unlockedZones: normalizeUnlockedZones(rawData.unlockedZones),
     currentZone: normalizeCurrentZone(rawData.currentZone, rawData.unlockedZones),
     hasPrestigedOnce,
+    hasUsedGuidedFreeForge: rawData.hasUsedGuidedFreeForge === true,
+    hasUsedGuidedFreeSafeRitual: rawData.hasUsedGuidedFreeSafeRitual === true,
   };
 }
 

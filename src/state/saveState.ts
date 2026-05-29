@@ -46,6 +46,8 @@ export type SaveSourceState = {
   unlockedZones: ReadonlySet<ZoneId>;
   currentZone: ZoneId;
   hasPrestigedOnce: boolean;
+  hasUsedGuidedFreeForge: boolean;
+  hasUsedGuidedFreeSafeRitual: boolean;
 };
 
 export type LoadedSceneStateFragments = {
@@ -85,6 +87,8 @@ export function createLocalSaveData(sourceState: SaveSourceState): LocalSaveData
     unlockedZones: Array.from(sourceState.unlockedZones),
     currentZone: sourceState.currentZone,
     hasPrestigedOnce: sourceState.hasPrestigedOnce,
+    hasUsedGuidedFreeForge: sourceState.hasUsedGuidedFreeForge,
+    hasUsedGuidedFreeSafeRitual: sourceState.hasUsedGuidedFreeSafeRitual,
   };
 }
 

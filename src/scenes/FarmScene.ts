@@ -211,9 +211,10 @@ const QUEST_GUIDE_SEQUENCE: QuestGuideStepId[] = [
   'shop-open',
   'shop-buy',
   'remove-tip',
-  'ritual-open',
   'battle-open',
   'forge-open',
+  'ritual-open',
+  'essence-upgrade',
 ];
 const QUEST_GUIDE_TEXT: Record<QuestGuideStepId, string> = {
   'hatch-1': 'Tap Hatch.',
@@ -226,6 +227,7 @@ const QUEST_GUIDE_TEXT: Record<QuestGuideStepId, string> = {
   'ritual-open': 'Ritual unlocks later with a strong monster.',
   'battle-open': 'Fight bosses for fragments.',
   'forge-open': 'Use fragments in Forge.',
+  'essence-upgrade': 'Spend Essence on +Lv hatches.',
 };
 const UI_FONT_FAMILY = 'Arial, Tahoma, "Noto Sans Thai", sans-serif';
 const MONO_FONT_FAMILY = 'Consolas, monospace';
@@ -358,7 +360,13 @@ type FarmSceneLayout = {
   hatchWidth: number;
   hatchHeight: number;
 };
-type QuestGuideFocusTarget = QuestDefinition['focusTarget'] | 'coins' | 'tap' | 'remove';
+type GuideTargetKey =
+  | 'upgrade-buy'
+  | 'forge-apply'
+  | 'safe-ritual'
+  | 'essence-hatch-blessing'
+  | 'essence-rare-hatch';
+type QuestGuideFocusTarget = QuestDefinition['focusTarget'] | 'coins' | 'tap' | 'remove' | GuideTargetKey;
 type QuestGuideRenderState = {
   target: QuestGuideFocusTarget;
   text: string;
@@ -423,6 +431,7 @@ export class FarmScene extends Phaser.Scene {
   private isFirstGuideSkipped = false;
   private questGuideOverlay?: Phaser.GameObjects.Container;
   private questGuideStartedAt = 0;
+  private guideTargetRects = new Map<GuideTargetKey, Phaser.Geom.Rectangle>();
   private compendiumPanel?: Phaser.GameObjects.Container;
   private settingsPanel?: Phaser.GameObjects.Container;
   private helpPanel?: Phaser.GameObjects.Container;
@@ -452,6 +461,8 @@ export class FarmScene extends Phaser.Scene {
   private unlockedZones = createInitialUnlockedZones(GRASS_FARM_ZONE_ID);
   private currentZone: ZoneId = GRASS_FARM_ZONE_ID;
   private hasPrestigedOnce = false;
+  private hasUsedGuidedFreeForge = false;
+  private hasUsedGuidedFreeSafeRitual = false;
   private settings: GameSettings = loadSettings();
   private resetConfirmationArmed = false;
   private prestigeConfirmationArmed = false;
@@ -667,6 +678,8 @@ export class FarmScene extends Phaser.Scene {
     this.unlockedZones = createInitialUnlockedZones(GRASS_FARM_ZONE_ID);
     this.currentZone = GRASS_FARM_ZONE_ID;
     this.hasPrestigedOnce = false;
+    this.hasUsedGuidedFreeForge = false;
+    this.hasUsedGuidedFreeSafeRitual = false;
     this.settings = loadSettings();
     this.syncAudioSettings();
     this.resetConfirmationArmed = false;
@@ -1312,23 +1325,19 @@ export class FarmScene extends Phaser.Scene {
 
     if (action === 'forge') {
       if (this.activeQuestGuideStepId === 'forge-open' && !this.canGuideForgeNow()) {
-        this.completeQuestGuideStep('forge-open');
         this.showToast(this.t('ui.elementForge.needFragments'), 'info');
         return;
       }
 
-      this.completeQuestGuideStep('forge-open');
       this.openElementForgePanel(true);
       return;
     }
 
     if (this.activeQuestGuideStepId === 'ritual-open' && !this.canGuideRitualNow()) {
-      this.completeQuestGuideStep('ritual-open');
       this.showToast(this.t('ui.prestige.notReady'), 'info');
       return;
     }
 
-    this.completeQuestGuideStep('ritual-open');
     this.prestigeConfirmationArmed = false;
     this.openPrestigePanel();
   }
@@ -2269,10 +2278,12 @@ export class FarmScene extends Phaser.Scene {
       if (hideOverlay) {
         this.hideModalOverlay();
       }
+      this.syncQuestGuide();
     }
   }
 
   private openElementForgePanel(resetPage = false): void {
+    this.clearGuideTargetRects();
     this.closeElementForgePanel(false, { resetSelection: false });
     this.closeNavigationMenuPanel();
     this.closeCompendiumPanel();
@@ -2297,7 +2308,13 @@ export class FarmScene extends Phaser.Scene {
     }
 
     if (!ownedSlots.some((slot) => slot.id === this.selectedElementForgeSlotId)) {
-      this.selectedElementForgeSlotId = ownedSlots[0]?.id;
+      this.selectedElementForgeSlotId = this.isGuidedFreeForgeAvailable()
+        ? ownedSlots.find((slot) => !slot.monster?.element)?.id ?? ownedSlots[0]?.id
+        : ownedSlots[0]?.id;
+    }
+
+    if (this.isGuidedFreeForgeAvailable() && this.getSelectedElementForgeMonster()?.element) {
+      this.selectedElementForgeSlotId = ownedSlots.find((slot) => !slot.monster?.element)?.id ?? this.selectedElementForgeSlotId;
     }
 
     const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
@@ -2363,6 +2380,7 @@ export class FarmScene extends Phaser.Scene {
 
     this.addElementForgeApplyControls(panel, panelWidth, panelHeight, isCompactPanel);
     this.elementForgePanel = panel;
+    this.syncQuestGuide();
   }
 
   private addElementForgePaginationControls(
@@ -2553,10 +2571,11 @@ export class FarmScene extends Phaser.Scene {
       const isSameElement = selectedMonster?.element === element;
       const isMaxed = isSameElement && currentLevel === 3;
       const nextLevel = isSameElement ? Math.min(3, (currentLevel ?? 1) + 1) as ElementLevel : 1;
-      const cost = selectedMonster ? getElementForgeCost(selectedMonster.element, currentLevel, element) : ELEMENT_FORGE_APPLY_COST;
-      const canAfford = canAffordElementForge(this.elementFragments, element, cost);
+      const isGuidedFreeForge = this.isGuidedFreeForgeAvailable() && hasSelectedMonster && !selectedMonster?.element;
+      const cost = isGuidedFreeForge ? 0 : selectedMonster ? getElementForgeCost(selectedMonster.element, currentLevel, element) : ELEMENT_FORGE_APPLY_COST;
+      const canAfford = isGuidedFreeForge || canAffordElementForge(this.elementFragments, element, cost);
       const enabled = hasSelectedMonster && canAfford && !isMaxed;
-      let status = this.t('ui.elementForge.applyLevel', { level: nextLevel });
+      let status = isGuidedFreeForge ? 'First free' : this.t('ui.elementForge.applyLevel', { level: nextLevel });
 
       if (!hasSelectedMonster) {
         status = this.t('ui.elementForge.needMonster');
@@ -2610,6 +2629,14 @@ export class FarmScene extends Phaser.Scene {
         fontFamily: UI_FONT_FAMILY,
         fontSize: isCompactPanel ? '8px' : '9px',
       }).setOrigin(0.5));
+      if (enabled && !this.guideTargetRects.has('forge-apply')) {
+        this.registerGuideTargetRect('forge-apply', new Phaser.Geom.Rectangle(
+          this.scale.width / 2 + x - buttonWidth / 2 - 6,
+          this.scale.height / 2 + y - buttonHeight / 2 - 6,
+          buttonWidth + 12,
+          buttonHeight + 12,
+        ));
+      }
     });
 
     if (selectedMonster?.element) {
@@ -2630,6 +2657,7 @@ export class FarmScene extends Phaser.Scene {
     if (this.elementForgePanel) {
       this.elementForgePanel.destroy();
       this.elementForgePanel = undefined;
+      this.clearGuideTargetRects();
 
       if (hideOverlay) {
         this.hideModalOverlay();
@@ -2681,19 +2709,25 @@ export class FarmScene extends Phaser.Scene {
     const isSameElement = monster.element === element;
     const isMaxed = isSameElement && currentLevel === 3;
     const nextLevel = isSameElement ? Math.min(3, (currentLevel ?? 1) + 1) as ElementLevel : 1;
-    const cost = getElementForgeCost(monster.element, currentLevel, element);
+    const isGuidedFreeForge = this.isGuidedFreeForgeAvailable() && !monster.element;
+    const cost = isGuidedFreeForge ? 0 : getElementForgeCost(monster.element, currentLevel, element);
 
     if (isMaxed) {
       this.showToast(this.t('ui.elementForge.maxLevel'), 'warning');
       return;
     }
 
-    if (!canAffordElementForge(this.elementFragments, element, cost)) {
+    if (!isGuidedFreeForge && !canAffordElementForge(this.elementFragments, element, cost)) {
       this.showToast(this.t('ui.elementForge.needFragments'), 'warning');
       return;
     }
 
-    this.elementFragments = spendElementFragments(this.elementFragments, element, cost);
+    if (isGuidedFreeForge) {
+      this.hasUsedGuidedFreeForge = true;
+    } else {
+      this.elementFragments = spendElementFragments(this.elementFragments, element, cost);
+    }
+    this.completeQuestGuideStep('forge-open');
     this.farmSlots = setSlotMonster(this.farmSlots, slotId, {
       ...monster,
       element,
@@ -3061,6 +3095,25 @@ export class FarmScene extends Phaser.Scene {
     this.createNextQuestWidget();
   }
 
+  private clearGuideTargetRects(): void {
+    this.guideTargetRects.clear();
+  }
+
+  private registerGuideTargetRect(key: GuideTargetKey, rect: Phaser.Geom.Rectangle): void {
+    this.guideTargetRects.set(key, rect);
+  }
+
+  private registerGuideTargetFromText(key: GuideTargetKey, text: Phaser.GameObjects.Text, padding = 8): void {
+    const bounds = text.getBounds();
+
+    this.registerGuideTargetRect(key, new Phaser.Geom.Rectangle(
+      bounds.x - padding,
+      bounds.y - padding,
+      bounds.width + padding * 2,
+      bounds.height + padding * 2,
+    ));
+  }
+
   private getNextQuest(): QuestDefinition | undefined {
     return QUEST_DEFINITIONS.find((quest) => !this.claimedQuestIds.has(quest.id));
   }
@@ -3107,6 +3160,10 @@ export class FarmScene extends Phaser.Scene {
     }
 
     this.skipCompletedQuestGuideSteps();
+    if (this.activeQuestGuideStepId && this.completedQuestGuideStepIds.has(this.activeQuestGuideStepId)) {
+      this.activeQuestGuideStepId = undefined;
+      this.questGuideStartedAt = 0;
+    }
     this.activeQuestGuideStepId ??= QUEST_GUIDE_SEQUENCE.find((stepId) => !this.completedQuestGuideStepIds.has(stepId));
 
     if (!this.activeQuestGuideStepId) {
@@ -3165,9 +3222,18 @@ export class FarmScene extends Phaser.Scene {
       this.completedQuestGuideStepIds.add('income');
     }
 
-    if (this.elementForgePanel) {
+    if (this.farmSlots.some((slot) => slot.monster?.element) || this.hasUsedGuidedFreeForge) {
       this.completedQuestGuideStepIds.add('forge-open');
     }
+
+    if (this.totalRitualsPerformed > 0 || this.hasUsedGuidedFreeSafeRitual) {
+      this.completedQuestGuideStepIds.add('ritual-open');
+    }
+
+    if (this.essencePowerLevel > 0 || this.rareHatchLevel > 0) {
+      this.completedQuestGuideStepIds.add('essence-upgrade');
+    }
+
   }
 
   private getQuestGuideRenderState(stepId: QuestGuideStepId): QuestGuideRenderState {
@@ -3195,6 +3261,13 @@ export class FarmScene extends Phaser.Scene {
         };
       }
 
+      if (stepId === 'shop-buy' && this.upgradeShopPanel && this.guideTargetRects.has('upgrade-buy')) {
+        return {
+          target: 'upgrade-buy',
+          text: 'Buy an upgrade.',
+        };
+      }
+
       return {
         target: 'shop',
         text: QUEST_GUIDE_TEXT[stepId],
@@ -3202,10 +3275,23 @@ export class FarmScene extends Phaser.Scene {
     }
 
     if (stepId === 'ritual-open') {
+      if (!this.canGuideRitualNow()) {
+        return {
+          target: this.canGuideMergeNow() ? 'monster' : this.canGuideHatchNow() ? 'hatch' : 'monster',
+          text: 'Build a stronger monster.',
+        };
+      }
+
+      if (this.prestigePanel && this.guideTargetRects.has('safe-ritual')) {
+        return {
+          target: 'safe-ritual',
+          text: this.isGuidedFreeSafeRitualAvailable() ? 'First Safe Ritual is free.' : 'Use Safe Ritual for Essence.',
+        };
+      }
+
       return {
-        target: this.canGuideRitualNow() ? 'ritual' : 'monster',
-        text: this.canGuideRitualNow() ? 'Use Ritual for Essence.' : QUEST_GUIDE_TEXT[stepId],
-        autoCompleteAfterMs: this.canGuideRitualNow() ? undefined : 2200,
+        target: 'ritual',
+        text: 'Use Safe Ritual for Essence.',
       };
     }
 
@@ -3217,10 +3303,45 @@ export class FarmScene extends Phaser.Scene {
     }
 
     if (stepId === 'forge-open') {
+      if (this.elementForgePanel && this.guideTargetRects.has('forge-apply')) {
+        return {
+          target: 'forge-apply',
+          text: this.isGuidedFreeForgeAvailable() ? 'First Forge is free.' : QUEST_GUIDE_TEXT[stepId],
+        };
+      }
+
       return {
         target: this.canGuideForgeNow() ? 'forge' : 'battle',
         text: this.canGuideForgeNow() ? QUEST_GUIDE_TEXT[stepId] : 'Bosses drop Forge fragments.',
-        autoCompleteAfterMs: this.canGuideForgeNow() ? undefined : 2200,
+      };
+    }
+
+    if (stepId === 'essence-upgrade') {
+      if (!this.canGuideEssenceUpgradeNow()) {
+        return {
+          target: 'ritual',
+          text: 'Essence powers upgrades.',
+          autoCompleteAfterMs: 2200,
+        };
+      }
+
+      if (this.prestigePanel && this.guideTargetRects.has('essence-hatch-blessing')) {
+        return {
+          target: 'essence-hatch-blessing',
+          text: QUEST_GUIDE_TEXT[stepId],
+        };
+      }
+
+      if (this.prestigePanel && this.guideTargetRects.has('essence-rare-hatch')) {
+        return {
+          target: 'essence-rare-hatch',
+          text: 'Spend Essence on upgrades.',
+        };
+      }
+
+      return {
+        target: 'ritual',
+        text: QUEST_GUIDE_TEXT[stepId],
       };
     }
 
@@ -3333,6 +3454,10 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private canGuideForgeNow(): boolean {
+    if (this.isGuidedFreeForgeAvailable()) {
+      return this.getElementForgeMonsterSlots().some((slot) => slot.monster && !slot.monster.element);
+    }
+
     return this.getElementForgeMonsterSlots().some((slot) => {
       const monster = slot.monster;
 
@@ -3359,7 +3484,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private canGuideRitualNow(): boolean {
-    return getRitualCompletionResult(this.farmSlots, this.totalRitualsPerformed).success;
+    return canPerformSafeRitual(this.farmSlots, this.totalRitualsPerformed);
   }
 
   private canGuideUpgradeNow(): boolean {
@@ -3371,6 +3496,28 @@ export class FarmScene extends Phaser.Scene {
     });
   }
 
+  private canGuideEssenceUpgradeNow(): boolean {
+    return canAffordEssencePower(this.monsterEssence, ESSENCE_POWER_COST)
+      || canAffordRareHatch(this.monsterEssence, RARE_HATCH_COST);
+  }
+
+  private isFirstGuideActive(): boolean {
+    return !this.isFirstGuideComplete && !this.isFirstGuideSkipped;
+  }
+
+  private isGuidedFreeForgeAvailable(): boolean {
+    return this.isFirstGuideActive()
+      && this.activeQuestGuideStepId === 'forge-open'
+      && !this.hasUsedGuidedFreeForge;
+  }
+
+  private isGuidedFreeSafeRitualAvailable(): boolean {
+    return this.isFirstGuideActive()
+      && this.activeQuestGuideStepId === 'ritual-open'
+      && !this.hasUsedGuidedFreeSafeRitual
+      && canPerformSafeRitual(this.farmSlots, this.totalRitualsPerformed);
+  }
+
   private renderQuestGuideOverlay(target: QuestGuideFocusTarget, guideText?: string): void {
     const stepId = this.activeQuestGuideStepId;
 
@@ -3380,23 +3527,59 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    if (this.isModalOpen() && target !== 'shop' && target !== 'battle' && target !== 'forge' && target !== 'ritual') {
+    const isModalGuideTarget = target === 'shop'
+      || target === 'battle'
+      || target === 'forge'
+      || target === 'ritual'
+      || target === 'upgrade-buy'
+      || target === 'forge-apply'
+      || target === 'safe-ritual'
+      || target === 'essence-hatch-blessing'
+      || target === 'essence-rare-hatch';
+
+    if (this.isModalOpen() && !isModalGuideTarget) {
       return;
     }
 
     const layout = this.getLayout();
     const rect = this.getGuideTargetRect(target, layout);
     const overlay = this.add.container(0, 0).setDepth(80);
-    const dim = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x000000, 0.42).setOrigin(0);
-    const pulse = this.add.rectangle(rect.centerX, rect.centerY, rect.width + 10, rect.height + 10, 0xffffff, 0)
-      .setStrokeStyle(3, THEME.goldText === '#fff0a8' ? 0xfff0a8 : THEME.panelBorder, 0.95);
+    const focusPadding = layout.isNarrow ? 8 : 10;
+    const focusRect = new Phaser.Geom.Rectangle(
+      Phaser.Math.Clamp(rect.x - focusPadding, 0, this.scale.width),
+      Phaser.Math.Clamp(rect.y - focusPadding, 0, this.scale.height),
+      Math.min(this.scale.width, rect.width + focusPadding * 2),
+      Math.min(this.scale.height, rect.height + focusPadding * 2),
+    );
+    focusRect.width = Math.min(focusRect.width, this.scale.width - focusRect.x);
+    focusRect.height = Math.min(focusRect.height, this.scale.height - focusRect.y);
+    const dimAlpha = 0.64;
+    const dimTop = this.add.rectangle(0, 0, this.scale.width, focusRect.top, 0x000000, dimAlpha).setOrigin(0);
+    const dimBottom = this.add.rectangle(0, focusRect.bottom, this.scale.width, Math.max(0, this.scale.height - focusRect.bottom), 0x000000, dimAlpha).setOrigin(0);
+    const dimLeft = this.add.rectangle(0, focusRect.top, focusRect.left, focusRect.height, 0x000000, dimAlpha).setOrigin(0);
+    const dimRight = this.add.rectangle(focusRect.right, focusRect.top, Math.max(0, this.scale.width - focusRect.right), focusRect.height, 0x000000, dimAlpha).setOrigin(0);
+    const focusGlow = this.add.rectangle(focusRect.centerX, focusRect.centerY, focusRect.width + 16, focusRect.height + 16, 0xfff0a8, 0.12)
+      .setStrokeStyle(5, 0xfff0a8, 0.42);
+    const pulse = this.add.rectangle(focusRect.centerX, focusRect.centerY, focusRect.width + 4, focusRect.height + 4, 0xffffff, 0)
+      .setStrokeStyle(3, 0xfff0a8, 0.98);
     const bubbleWidth = Math.min(310, this.scale.width - 28);
-    const bubbleX = Phaser.Math.Clamp(rect.centerX, bubbleWidth / 2 + 14, this.scale.width - bubbleWidth / 2 - 14);
-    const bubbleY = rect.centerY < this.scale.height * 0.5
-      ? Math.min(this.scale.height - 84, rect.bottom + 56)
-      : Math.max(58, rect.top - 56);
-    const bubble = this.add.rectangle(bubbleX, bubbleY, bubbleWidth, 54, THEME.panel, 0.96)
+    const bubbleHeight = 58;
+    const bubbleX = Phaser.Math.Clamp(focusRect.centerX, bubbleWidth / 2 + 14, this.scale.width - bubbleWidth / 2 - 14);
+    const bubbleY = focusRect.centerY < this.scale.height * 0.5
+      ? Math.min(this.scale.height - bubbleHeight / 2 - 18, focusRect.bottom + 60)
+      : Math.max(bubbleHeight / 2 + 18, focusRect.top - 60);
+    const bubbleGlow = this.add.rectangle(bubbleX, bubbleY, bubbleWidth + 16, bubbleHeight + 14, 0xfff0a8, 0.13)
+      .setStrokeStyle(4, 0xfff0a8, 0.35);
+    const bubble = this.add.rectangle(bubbleX, bubbleY, bubbleWidth, bubbleHeight, THEME.panel, 0.98)
       .setStrokeStyle(2, THEME.panelBorder, 0.9);
+    const pointer = this.add.graphics();
+    pointer.lineStyle(3, 0xfff0a8, 0.65);
+    pointer.lineBetween(
+      Phaser.Math.Clamp(bubbleX, bubbleX - bubbleWidth / 2 + 20, bubbleX + bubbleWidth / 2 - 20),
+      bubbleY + (bubbleY < focusRect.centerY ? bubbleHeight / 2 : -bubbleHeight / 2),
+      focusRect.centerX,
+      focusRect.centerY,
+    );
     const text = this.add.text(bubbleX - bubbleWidth / 2 + 12, bubbleY - 15, guideText ?? (stepId ? QUEST_GUIDE_TEXT[stepId] : ''), {
       color: THEME.text,
       fontFamily: UI_FONT_FAMILY,
@@ -3416,7 +3599,18 @@ export class FarmScene extends Phaser.Scene {
       this.skipQuestGuide();
     });
 
-    const overlayChildren: Phaser.GameObjects.GameObject[] = [dim, pulse, bubble, text];
+    const overlayChildren: Phaser.GameObjects.GameObject[] = [
+      dimTop,
+      dimBottom,
+      dimLeft,
+      dimRight,
+      focusGlow,
+      pulse,
+      pointer,
+      bubbleGlow,
+      bubble,
+      text,
+    ];
 
     if (stepId) {
       overlayChildren.push(skip);
@@ -3447,6 +3641,10 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getGuideTargetRect(target: QuestGuideFocusTarget, layout: FarmSceneLayout): Phaser.Geom.Rectangle {
+    if (target === 'upgrade-buy' || target === 'forge-apply' || target === 'safe-ritual' || target === 'essence-hatch-blessing' || target === 'essence-rare-hatch') {
+      return this.guideTargetRects.get(target) ?? new Phaser.Geom.Rectangle(this.scale.width / 2 - 70, this.scale.height / 2 - 22, 140, 44);
+    }
+
     if (target === 'hatch') {
       return new Phaser.Geom.Rectangle(layout.hatchX, layout.hatchY, layout.hatchWidth, layout.hatchHeight);
     }
@@ -6063,6 +6261,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private openUpgradeShopPanel(): void {
+    this.clearGuideTargetRects();
     this.closeUpgradeShopPanel();
     this.closeNavigationMenuPanel();
     this.closeCompendiumPanel();
@@ -6118,6 +6317,7 @@ export class FarmScene extends Phaser.Scene {
 
     this.upgradeShopPanel = panel;
     this.showOnboardingHint('upgrades', this.t('hint.upgrades'));
+    this.syncQuestGuide();
   }
 
   private addUpgradeRow(
@@ -6214,6 +6414,9 @@ export class FarmScene extends Phaser.Scene {
     }
 
     panel.add(buyText);
+    if (canAfford && !this.guideTargetRects.has('upgrade-buy')) {
+      this.registerGuideTargetFromText('upgrade-buy', buyText, 10);
+    }
     return buyText;
   }
 
@@ -6221,7 +6424,9 @@ export class FarmScene extends Phaser.Scene {
     if (this.upgradeShopPanel) {
       this.upgradeShopPanel.destroy();
       this.upgradeShopPanel = undefined;
+      this.clearGuideTargetRects();
       this.hideModalOverlay();
+      this.syncQuestGuide();
     }
   }
 
@@ -6236,6 +6441,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private openPrestigePanel(): void {
+    this.clearGuideTargetRects();
     this.closePrestigePanel(false);
     this.closeNavigationMenuPanel();
     this.closeCompendiumPanel();
@@ -6382,6 +6588,7 @@ export class FarmScene extends Phaser.Scene {
     this.addPrestigeAction(panel, panelWidth, panelHeight, canPrestige, canSafeRitual);
 
     this.prestigePanel = panel;
+    this.syncQuestGuide();
   }
 
   private addEssenceUpgradeSection(
@@ -6429,6 +6636,7 @@ export class FarmScene extends Phaser.Scene {
       canBuy: canBuyEssencePower,
       onBuy: () => this.buyHatchBlessing(),
       panelWidth,
+      guideTargetKey: 'essence-hatch-blessing',
     });
 
     this.addEssenceUpgradeRow(panel, {
@@ -6448,6 +6656,7 @@ export class FarmScene extends Phaser.Scene {
       canBuy: canBuyRareHatch,
       onBuy: () => this.buyRareHatch(),
       panelWidth,
+      guideTargetKey: 'essence-rare-hatch',
     });
   }
 
@@ -6468,6 +6677,7 @@ export class FarmScene extends Phaser.Scene {
       canBuy: boolean;
       onBuy: () => void;
       panelWidth: number;
+      guideTargetKey: GuideTargetKey;
     },
   ): void {
     const {
@@ -6485,6 +6695,7 @@ export class FarmScene extends Phaser.Scene {
       canBuy,
       onBuy,
       panelWidth,
+      guideTargetKey,
     } = options;
 
     panel.add(this.add.rectangle(0, y, rowWidth, rowHeight, THEME.panelAlt, 0.92)
@@ -6552,6 +6763,9 @@ export class FarmScene extends Phaser.Scene {
       });
 
     panel.add(buyText);
+    if (canBuy) {
+      this.registerGuideTargetFromText(guideTargetKey, buyText, 10);
+    }
   }
 
   private addPrestigeAction(
@@ -6650,7 +6864,9 @@ export class FarmScene extends Phaser.Scene {
 
     const safeDetail = this.safeRitualInProgress
       ? this.t('ui.prestige.safePending')
-      : this.t('ui.prestige.safeDetailSacrifice');
+      : this.isGuidedFreeSafeRitualAvailable()
+        ? 'First Safe Ritual is free.'
+        : this.t('ui.prestige.safeDetailSacrifice');
 
     panel.add(this.add.text(safeX, actionY + 23, safeDetail, {
       color: canSafeRitual ? '#cdebb3' : '#9ca79f',
@@ -6665,13 +6881,18 @@ export class FarmScene extends Phaser.Scene {
 
     panel.add(normalText);
     panel.add(safeText);
+    if (canSafeRitual) {
+      this.registerGuideTargetFromText('safe-ritual', safeText, 10);
+    }
   }
 
   private closePrestigePanel(resetConfirmation = true): void {
     if (this.prestigePanel) {
       this.prestigePanel.destroy();
       this.prestigePanel = undefined;
+      this.clearGuideTargetRects();
       this.hideModalOverlay();
+      this.syncQuestGuide();
     }
 
     if (resetConfirmation) {
@@ -7800,6 +8021,7 @@ export class FarmScene extends Phaser.Scene {
     this.syncZoneUnlockFromPrestigeProgress();
     this.prestigeConfirmationArmed = false;
     this.updateHud();
+    this.completeQuestGuideStep('essence-upgrade');
     this.saveProgress();
     this.openPrestigePanel();
     this.showToast(this.t('toast.hatchBlessingUpgraded'), 'success');
@@ -7817,6 +8039,7 @@ export class FarmScene extends Phaser.Scene {
     this.syncZoneUnlockFromPrestigeProgress();
     this.prestigeConfirmationArmed = false;
     this.updateHud();
+    this.completeQuestGuideStep('essence-upgrade');
     this.saveProgress();
     this.openPrestigePanel();
     this.showToast(this.t('toast.rareHatchUpgraded'), 'success');
@@ -7857,7 +8080,10 @@ export class FarmScene extends Phaser.Scene {
     this.prestigeConfirmationArmed = false;
     this.openPrestigePanel();
 
-    const adCompleted = await showRewardedAd('safe-ritual').catch(() => false);
+    const isGuidedFreeSafeRitual = this.isGuidedFreeSafeRitualAvailable();
+    const adCompleted = isGuidedFreeSafeRitual
+      ? true
+      : await showRewardedAd('safe-ritual').catch(() => false);
     this.safeRitualInProgress = false;
 
     if (!adCompleted) {
@@ -7875,6 +8101,10 @@ export class FarmScene extends Phaser.Scene {
     }
 
     this.performSafeRitualReward(latestRitualResult);
+    if (isGuidedFreeSafeRitual) {
+      this.hasUsedGuidedFreeSafeRitual = true;
+    }
+    this.completeQuestGuideStep('ritual-open');
     this.openPrestigePanel();
     this.showToast(this.t('toast.safeRitualComplete', { amount: latestRitualResult.rewardEssence }), 'success');
   }
@@ -9060,9 +9290,9 @@ export class FarmScene extends Phaser.Scene {
   private getMonsterRemoveZoneBounds(): Phaser.Geom.Rectangle {
     const layout = this.getLayout();
     let width = layout.isNarrow
-      ? Math.min(172, this.scale.width - layout.margin * 4)
+      ? Math.min(148, this.scale.width - layout.margin * 5)
       : 208;
-    const height = layout.isNarrow ? 54 : 62;
+    const height = layout.isNarrow ? 48 : 62;
     const gap = layout.isNarrow ? 8 : 12;
     const gridWidth = layout.cellSize * GRID_COLUMNS + layout.gridGap * (GRID_COLUMNS - 1);
     const gridHeight = layout.cellSize * GRID_ROWS + layout.gridGap * (GRID_ROWS - 1);
@@ -9599,6 +9829,8 @@ export class FarmScene extends Phaser.Scene {
     this.unlockedZones = getSanitizedUnlockedZones(saveData.unlockedZones, ZONE_IDS, GRASS_FARM_ZONE_ID);
     this.currentZone = saveData.currentZone;
     this.hasPrestigedOnce = saveData.hasPrestigedOnce;
+    this.hasUsedGuidedFreeForge = saveData.hasUsedGuidedFreeForge;
+    this.hasUsedGuidedFreeSafeRitual = saveData.hasUsedGuidedFreeSafeRitual;
     this.syncZoneUnlockFromPrestigeProgress();
     this.createFarmBackground();
     this.refreshNextQuestWidget();
@@ -9687,6 +9919,8 @@ export class FarmScene extends Phaser.Scene {
       unlockedZones: this.unlockedZones,
       currentZone: this.currentZone,
       hasPrestigedOnce: this.hasPrestigedOnce,
+      hasUsedGuidedFreeForge: this.hasUsedGuidedFreeForge,
+      hasUsedGuidedFreeSafeRitual: this.hasUsedGuidedFreeSafeRitual,
     }));
 
     this.hasUnsavedProgress = false;
@@ -9750,6 +9984,8 @@ export class FarmScene extends Phaser.Scene {
     this.unlockedZones = createInitialUnlockedZones(GRASS_FARM_ZONE_ID);
     this.currentZone = GRASS_FARM_ZONE_ID;
     this.hasPrestigedOnce = false;
+    this.hasUsedGuidedFreeForge = false;
+    this.hasUsedGuidedFreeSafeRitual = false;
     this.monsterEssence = 0;
     this.essencePowerLevel = 0;
     this.rareHatchLevel = 0;
