@@ -1,5 +1,13 @@
-import type { BossBattleDefinition, BossBattleStage } from '../data/bossBattles';
-import type { ElementType } from '../data/elements';
+import {
+  BOSS_BATTLE_DEFINITIONS,
+  type BossBattleDefinition,
+  type BossBattleStage,
+} from '../data/bossBattles';
+import {
+  ELEMENT_BOSS_DAMAGE_MATCH_MULTIPLIER,
+  getElementBossDamageMultiplier,
+  type ElementType,
+} from '../data/elements';
 import type { FarmSlotState, MonsterFamily, MonsterInstance } from '../types/game-state';
 
 export type BattleSkillId =
@@ -56,6 +64,7 @@ export type BattleResultStatus = 'ready' | 'victory' | 'defeat';
 
 export type BattleSessionState = {
   stageId: string;
+  bossElementTheme?: ElementType;
   bossHp: number;
   bossMaxHp: number;
   bossAttack: number;
@@ -76,6 +85,10 @@ export type BattleTurnResult = {
   damage: number;
   healing: number;
   bossDamage: number;
+  elementMatch?: {
+    element: ElementType;
+    multiplier: number;
+  };
   bossTargetId?: string;
   defeatedMonsterId?: string;
 };
@@ -257,6 +270,7 @@ export function getAvailableSkillsForMonster(monster: Pick<BattleMonsterSnapshot
 export function createBattleSession(stage: BossBattleStage, team: readonly BattleMonsterSnapshot[]): BattleSessionState {
   return {
     stageId: stage.id,
+    bossElementTheme: getBossElementTheme(stage.bossId),
     bossHp: Math.max(0, Math.floor(stage.hp)),
     bossMaxHp: Math.max(1, Math.floor(stage.hp)),
     bossAttack: Math.max(0, Math.floor(stage.attack)),
@@ -324,8 +338,20 @@ export function applyPlayerSkill(session: BattleSessionState, skillId: BattleSki
     return createTurnResult(nextSession);
   }
 
+  let elementMatch: BattleTurnResult['elementMatch'];
+
   if (skill.damageMultiplier) {
-    damage = Math.max(1, Math.floor(caster.attack * skill.damageMultiplier));
+    const baseDamage = Math.max(1, Math.floor(caster.attack * skill.damageMultiplier));
+    const elementMultiplier = getElementBossDamageMultiplier(caster.element, session.bossElementTheme);
+    damage = elementMultiplier > 1
+      ? Math.max(1, Math.ceil(baseDamage * elementMultiplier))
+      : baseDamage;
+    if (caster.element && elementMultiplier === ELEMENT_BOSS_DAMAGE_MATCH_MULTIPLIER) {
+      elementMatch = {
+        element: caster.element,
+        multiplier: elementMultiplier,
+      };
+    }
     nextSession.bossHp = Math.max(0, nextSession.bossHp - damage);
   }
 
@@ -375,6 +401,7 @@ export function applyPlayerSkill(session: BattleSessionState, skillId: BattleSki
   return createTurnResult(nextSession, {
     damage,
     healing,
+    elementMatch,
   });
 }
 
@@ -569,6 +596,7 @@ function createTurnResult(
     damage: result.damage ?? 0,
     healing: result.healing ?? 0,
     bossDamage: result.bossDamage ?? 0,
+    elementMatch: result.elementMatch,
     bossTargetId: result.bossTargetId,
     defeatedMonsterId: result.defeatedMonsterId,
   };
@@ -580,6 +608,10 @@ function getSkillCooldown(session: BattleSessionState, monsterId: string, skillI
 
 function getSkillCooldownKey(monsterId: string, skillId: BattleSkillId): string {
   return `${monsterId}:${skillId}`;
+}
+
+function getBossElementTheme(bossId: BossBattleStage['bossId']): ElementType | undefined {
+  return BOSS_BATTLE_DEFINITIONS.find((boss) => boss.id === bossId)?.futureElementTheme;
 }
 
 function decrementCooldowns(cooldowns: Record<string, number>): Record<string, number> {

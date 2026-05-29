@@ -36,6 +36,7 @@ import {
   ELEMENT_FORGE_APPLY_COST,
   getElementDefinition,
   getElementIncomeMultiplier,
+  isElementStrongAgainstBoss,
   spendElementFragments,
   type ElementFragmentInventory,
   type ElementType,
@@ -2157,6 +2158,8 @@ export class FarmScene extends Phaser.Scene {
       'ui.patchNotes.bossBranches',
       'ui.patchNotes.elementFragments',
       'ui.patchNotes.elementForge',
+      'ui.patchNotes.elementMatch',
+      'ui.patchNotes.autoClearFragments',
       'ui.patchNotes.hatchPool',
       'ui.patchNotes.rareHatch',
       'ui.patchNotes.hatchBlessing',
@@ -3609,11 +3612,19 @@ export class FarmScene extends Phaser.Scene {
       fontSize: isCompactPanel ? '12px' : '13px',
       fontStyle: 'bold',
     }).setOrigin(0.5));
+    panel.add(this.add.text(panelWidth / 2 - 96, arenaTop + 25, this.t('ui.bossBattle.recommendedElement', {
+      element: this.getLocalizedElementName(boss.futureElementTheme),
+    }), {
+      color: '#fff4a8',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '8px' : '9px',
+      fontStyle: 'bold',
+    }).setOrigin(0.5));
 
     const teamLeft = contentLeft + 16;
     const teamTop = arenaTop + 38;
     const teamWidth = contentWidth * 0.47;
-    this.addBossBattleTeamCards(panel, team, teamLeft, teamTop, teamWidth, isCompactPanel, session);
+    this.addBossBattleTeamCards(panel, team, teamLeft, teamTop, teamWidth, isCompactPanel, session, boss.futureElementTheme);
     if (this.bossBattlePlayerVisualEffect?.kind === 'support') {
       this.addBossBattleSupportEffect(panel, this.bossBattlePlayerVisualEffect, teamLeft, teamTop, teamWidth, team.length, isCompactPanel);
     }
@@ -3773,6 +3784,10 @@ export class FarmScene extends Phaser.Scene {
     const dailyClearsRemaining = this.getBossDailyClearsRemaining(stage.bossId);
     const canClearToday = dailyClearsRemaining > 0;
     const firstClearX2Opportunity = this.getBossBattleRewardX2Opportunity(stage.id, 'first-clear');
+    const autoClearX2RewardText = this.getBossBattleCompactFullRewardText(
+      this.getDoubledBossBattleCoinReward(stage.replayReward),
+      this.getMultipliedElementFragmentReward(stage.replayFragmentReward, 2),
+    );
 
     if (firstClearX2Opportunity) {
       this.addBattleButton(
@@ -3841,7 +3856,7 @@ export class FarmScene extends Phaser.Scene {
         canClearToday
           ? autoClearX2Opportunity?.adInProgress
             ? this.t('ui.bossBattle.adPending')
-            : this.t('ui.bossBattle.autoClearX2Detail')
+            : this.t('ui.bossBattle.autoClearX2Detail', { reward: autoClearX2RewardText })
           : this.t('ui.bossBattle.resetsTomorrow'),
         isCompactPanel,
         canClearToday ? THEME.mutedText : '#ffcfba',
@@ -3962,6 +3977,7 @@ export class FarmScene extends Phaser.Scene {
     width: number,
     isCompactPanel: boolean,
     session: BattleSessionState | undefined,
+    recommendedElement: ElementType,
   ): void {
     const cardHeight = isCompactPanel ? 54 : 60;
     const gap = isCompactPanel ? 7 : 9;
@@ -4002,11 +4018,16 @@ export class FarmScene extends Phaser.Scene {
         fontSize: isCompactPanel ? '9px' : '10px',
       }));
       if (monster.element) {
-        panel.add(this.add.text(leftX + 58, y + 34, this.getLocalizedElementName(monster.element), {
+        const isElementMatch = isElementStrongAgainstBoss(monster.element, recommendedElement);
+        const elementText = isElementMatch
+          ? this.t('ui.bossBattle.elementMatchInline', { element: this.getLocalizedElementName(monster.element) })
+          : this.getLocalizedElementName(monster.element);
+        panel.add(this.add.text(leftX + 58, y + 34, elementText, {
           color: '#fff4a8',
           fontFamily: UI_FONT_FAMILY,
           fontSize: isCompactPanel ? '8px' : '9px',
           fontStyle: 'bold',
+          fixedWidth: width - 64,
         }));
       }
       panel.add(this.add.text(leftX + width - 8, y + 21, isDown ? this.t('ui.bossBattle.down') : isActive ? this.t('ui.bossBattle.active') : '', {
@@ -5070,6 +5091,20 @@ export class FarmScene extends Phaser.Scene {
     };
   }
 
+  private getMultipliedElementFragmentReward(
+    reward: ElementFragmentReward | undefined,
+    multiplier: number,
+  ): ElementFragmentReward | undefined {
+    if (!reward) {
+      return undefined;
+    }
+
+    return {
+      ...reward,
+      amount: Math.max(0, Math.floor(reward.amount * multiplier)),
+    };
+  }
+
   private autoClearBossBattle(stage: BossBattleStage): void {
     if (this.battleAnimationInProgress || !isBossStageCleared(stage.id, this.claimedBossBattleStageIds)) {
       return;
@@ -5165,7 +5200,7 @@ export class FarmScene extends Phaser.Scene {
     }
 
     const doubledReward = this.getDoubledBossBattleCoinReward(currentOpportunity.reward);
-    const fragmentReward = stage.replayFragmentReward;
+    const fragmentReward = this.getMultipliedElementFragmentReward(stage.replayFragmentReward, 2);
     const fullRewardText = this.getBossBattleFullRewardText(doubledReward, fragmentReward);
 
     currentOpportunity.consumed = true;
@@ -5268,6 +5303,9 @@ export class FarmScene extends Phaser.Scene {
         skill: skill ? this.t(skill.labelKey) : '',
         amount: playerResult.damage,
       }));
+      if (playerResult.elementMatch) {
+        resultParts.push(this.t('ui.bossBattle.elementMatchLog'));
+      }
     }
 
     if (playerResult.healing > 0) {
@@ -5571,6 +5609,20 @@ export class FarmScene extends Phaser.Scene {
     });
   }
 
+  private getElementFragmentRewardShortText(reward: ElementFragmentReward): string {
+    return `${reward.amount} ${this.t(`element.${reward.element}`)}`;
+  }
+
+  private getBossBattleCompactRewardText(reward: BossBattleReward): string {
+    if (reward.type === 'coins') {
+      return `${this.formatCoinAmount(reward.amount)}c`;
+    }
+
+    return this.t('common.essence', {
+      amount: reward.amount,
+    });
+  }
+
   private getBossStageFragmentRewardText(
     stage: BossBattleStage,
     source: 'first-clear' | 'replay',
@@ -5594,6 +5646,19 @@ export class FarmScene extends Phaser.Scene {
       reward: baseRewardText,
       fragments: this.getElementFragmentRewardText(fragmentReward),
     });
+  }
+
+  private getBossBattleCompactFullRewardText(
+    baseReward: BossBattleReward,
+    fragmentReward: ElementFragmentReward | undefined,
+  ): string {
+    const baseRewardText = this.getBossBattleCompactRewardText(baseReward);
+
+    if (!fragmentReward) {
+      return baseRewardText;
+    }
+
+    return `${baseRewardText} + ${this.getElementFragmentRewardShortText(fragmentReward)}`;
   }
 
   private getElementFragmentInventoryLines(): string[] {

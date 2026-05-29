@@ -11,6 +11,7 @@ export type ElementFragmentInventory = Record<ElementType, number>;
 
 export const ELEMENT_FORGE_APPLY_COST = 10;
 export const ELEMENT_INCOME_MULTIPLIER = 1.1;
+export const ELEMENT_BOSS_DAMAGE_MATCH_MULTIPLIER = 1.25;
 
 export const ELEMENT_DEFINITIONS: ElementDefinition[] = [
   {
@@ -111,6 +112,22 @@ export function getElementDefinition(element: ElementType): ElementDefinition {
 
 export function getElementIncomeMultiplier(element?: ElementType): number {
   return element ? ELEMENT_INCOME_MULTIPLIER : 1;
+}
+
+export function isElementStrongAgainstBoss(
+  monsterElement: ElementType | undefined,
+  bossElementTheme: ElementType | undefined,
+): boolean {
+  return Boolean(monsterElement && bossElementTheme && monsterElement === bossElementTheme);
+}
+
+export function getElementBossDamageMultiplier(
+  monsterElement: ElementType | undefined,
+  bossElementTheme: ElementType | undefined,
+): number {
+  return isElementStrongAgainstBoss(monsterElement, bossElementTheme)
+    ? ELEMENT_BOSS_DAMAGE_MATCH_MULTIPLIER
+    : 1;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
