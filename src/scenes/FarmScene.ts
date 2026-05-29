@@ -1046,9 +1046,9 @@ export class FarmScene extends Phaser.Scene {
       tapFarmHeight = hatchHeight;
       hatchX = (width - desktopControlWidth) / 2;
       tapFarmX = hatchX + hatchWidth + desktopControlGap;
-      const desiredControlY = expansionStartY + cellSize + 10;
-      const maxControlY = actionBarY - controlGap - hatchHeight;
-      hatchY = Math.min(desiredControlY, maxControlY);
+      const desktopFooterGap = 16;
+      const maxControlY = actionBarY - desktopFooterGap - hatchHeight;
+      hatchY = maxControlY;
       tapFarmY = hatchY;
     }
 
@@ -3464,8 +3464,7 @@ export class FarmScene extends Phaser.Scene {
         return this.monsterRemoveDropZone.bounds;
       }
 
-      const gridWidth = layout.cellSize * GRID_COLUMNS + layout.gridGap * (GRID_COLUMNS - 1);
-      return new Phaser.Geom.Rectangle(layout.gridStartX, layout.gridStartY, gridWidth, layout.cellSize * GRID_ROWS + layout.gridGap * (GRID_ROWS - 1));
+      return this.getMonsterRemoveZoneBounds();
     }
 
     if (target === 'shop' || target === 'battle' || target === 'forge' || target === 'ritual') {
@@ -9060,17 +9059,52 @@ export class FarmScene extends Phaser.Scene {
 
   private getMonsterRemoveZoneBounds(): Phaser.Geom.Rectangle {
     const layout = this.getLayout();
-    const width = layout.isNarrow
+    let width = layout.isNarrow
       ? Math.min(172, this.scale.width - layout.margin * 4)
       : 208;
     const height = layout.isNarrow ? 54 : 62;
-    const bottomLimit = Math.min(layout.hatchY, layout.tapFarmY, layout.actionBarY) - (layout.isNarrow ? 8 : 12);
-    const centerY = Math.max(layout.margin + height / 2, bottomLimit - height / 2);
-    const centerX = this.scale.width / 2;
+    const gap = layout.isNarrow ? 8 : 12;
+    const gridWidth = layout.cellSize * GRID_COLUMNS + layout.gridGap * (GRID_COLUMNS - 1);
+    const gridHeight = layout.cellSize * GRID_ROWS + layout.gridGap * (GRID_ROWS - 1);
+    const gridLeft = layout.gridStartX;
+    const gridRight = gridLeft + gridWidth;
+    const gridTop = layout.gridStartY;
+    const expansionLeft = layout.expansionStartX;
+    const expansionRight = expansionLeft + layout.cellSize * EXPANSION_COLUMNS + layout.gridGap * (EXPANSION_COLUMNS - 1);
+    const expansionBottom = layout.expansionStartY + layout.cellSize;
+    const controlsTop = Math.min(layout.hatchY, layout.tapFarmY, layout.actionBarY);
+    const bottomDockTop = controlsTop - gap - height;
+    let left = (this.scale.width - width) / 2;
+    let top = bottomDockTop;
+
+    if (bottomDockTop < expansionBottom + gap) {
+      const rightSideLeft = Math.max(gridRight, expansionRight) + gap;
+      const leftSideRight = Math.min(gridLeft, expansionLeft) - gap;
+      const sideTopMax = Math.max(layout.margin, controlsTop - gap - height);
+      const sideTop = Phaser.Math.Clamp(
+        gridTop + (gridHeight - height) / 2,
+        layout.margin,
+        sideTopMax,
+      );
+
+      if (rightSideLeft + width <= this.scale.width - layout.margin) {
+        left = rightSideLeft;
+        top = sideTop;
+      } else if (leftSideRight - width >= layout.margin) {
+        left = leftSideRight - width;
+        top = sideTop;
+      } else {
+        width = Math.max(132, Math.min(width, this.scale.width - layout.margin * 2));
+        left = (this.scale.width - width) / 2;
+        top = Math.max(layout.margin, bottomDockTop);
+      }
+    }
+
+    top = Phaser.Math.Clamp(top, layout.margin, Math.max(layout.margin, controlsTop - gap - height));
 
     return new Phaser.Geom.Rectangle(
-      centerX - width / 2,
-      centerY - height / 2,
+      left,
+      top,
       width,
       height,
     );
