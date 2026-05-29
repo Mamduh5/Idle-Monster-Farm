@@ -2299,16 +2299,68 @@ export class FarmScene extends Phaser.Scene {
         );
       });
 
-      if (pageCount > 1) {
-        this.addPaginationControls(panel, panelWidth, panelHeight, pageIndex, pageCount, (nextPageIndex) => {
-          this.elementForgePageIndex = nextPageIndex;
-          this.openElementForgePanel();
-        });
-      }
+      this.addElementForgePaginationControls(panel, panelWidth, -panelHeight / 2 + 104, pageIndex, pageCount);
     }
 
     this.addElementForgeApplyControls(panel, panelWidth, panelHeight, isCompactPanel);
     this.elementForgePanel = panel;
+  }
+
+  private addElementForgePaginationControls(
+    panel: Phaser.GameObjects.Container,
+    panelWidth: number,
+    y: number,
+    pageIndex: number,
+    pageCount: number,
+  ): void {
+    if (pageCount <= 1) {
+      return;
+    }
+
+    const isCompactPanel = panelWidth < 390;
+    const nextX = panelWidth / 2 - (isCompactPanel ? 48 : 54);
+    const previousX = nextX - (isCompactPanel ? 102 : 116);
+    const pageLabelX = (previousX + nextX) / 2;
+    const buttonWidth = isCompactPanel ? 44 : 52;
+
+    this.addBattleButton(
+      panel,
+      previousX,
+      y,
+      buttonWidth,
+      24,
+      this.t('common.prev'),
+      pageIndex > 0 ? THEME.button : THEME.lockedInner,
+      pageIndex > 0 ? THEME.text : '#9ca79f',
+      () => {
+        this.elementForgePageIndex = pageIndex - 1;
+        this.openElementForgePanel();
+      },
+      pageIndex > 0,
+    ).setFontSize(isCompactPanel ? '10px' : '11px');
+
+    panel.add(this.add.text(pageLabelX, y, `${pageIndex + 1}/${pageCount}`, {
+      color: THEME.mutedText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '10px' : '11px',
+      fontStyle: 'bold',
+    }).setOrigin(0.5));
+
+    this.addBattleButton(
+      panel,
+      nextX,
+      y,
+      buttonWidth,
+      24,
+      this.t('common.next'),
+      pageIndex < pageCount - 1 ? THEME.button : THEME.lockedInner,
+      pageIndex < pageCount - 1 ? THEME.text : '#9ca79f',
+      () => {
+        this.elementForgePageIndex = pageIndex + 1;
+        this.openElementForgePanel();
+      },
+      pageIndex < pageCount - 1,
+    ).setFontSize(isCompactPanel ? '10px' : '11px');
   }
 
   private addElementForgeInventory(
