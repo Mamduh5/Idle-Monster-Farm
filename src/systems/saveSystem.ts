@@ -1,6 +1,11 @@
 import { STARTING_EGG_COST } from '../data/economy';
 import { BOSS_BATTLE_DEFINITIONS, BOSS_BATTLE_STAGE_IDS } from '../data/bossBattles';
-import { sanitizeElementFragmentInventory, type ElementFragmentInventory } from '../data/elements';
+import {
+  isElementType,
+  sanitizeElementFragmentInventory,
+  type ElementFragmentInventory,
+  type ElementType,
+} from '../data/elements';
 import { MISSION_DEFINITIONS, MISSION_IDS, type MissionId } from '../data/missions';
 import { ORDER_IDS, type OrderId } from '../data/orders';
 import { UPGRADE_DEFINITIONS, type UpgradeId } from '../data/upgrades';
@@ -19,6 +24,7 @@ const BOSS_DAILY_CLEAR_LIMIT = 2;
 export type SavedMonsterSlot = {
   family: MonsterFamily;
   level: number;
+  element?: ElementType;
 } | null;
 
 export type SavedMonsterDiscovery = {
@@ -316,7 +322,7 @@ function normalizeSavedSlot(rawSlot: unknown): SavedMonsterSlot {
   return normalizeSavedMonsterReference(rawSlot);
 }
 
-function normalizeSavedMonsterReference(rawMonster: unknown): SavedMonsterDiscovery | null {
+function normalizeSavedMonsterReference(rawMonster: unknown): NonNullable<SavedMonsterSlot> | null {
   if (!isRecord(rawMonster)) {
     return null;
   }
@@ -327,10 +333,16 @@ function normalizeSavedMonsterReference(rawMonster: unknown): SavedMonsterDiscov
     return null;
   }
 
-  return {
+  const savedMonster: NonNullable<SavedMonsterSlot> = {
     family: rawMonster.family,
     level,
   };
+
+  if (isElementType(rawMonster.element)) {
+    savedMonster.element = rawMonster.element;
+  }
+
+  return savedMonster;
 }
 
 function normalizeTimestamp(rawTimestamp: unknown): number {

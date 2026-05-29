@@ -9,6 +9,9 @@ export type ElementDefinition = {
 
 export type ElementFragmentInventory = Record<ElementType, number>;
 
+export const ELEMENT_FORGE_APPLY_COST = 10;
+export const ELEMENT_INCOME_MULTIPLIER = 1.1;
+
 export const ELEMENT_DEFINITIONS: ElementDefinition[] = [
   {
     id: 'Spark',
@@ -37,6 +40,10 @@ export const ELEMENT_DEFINITIONS: ElementDefinition[] = [
 ];
 
 export const ELEMENT_TYPES = ELEMENT_DEFINITIONS.map((element) => element.id);
+
+export function isElementType(value: unknown): value is ElementType {
+  return typeof value === 'string' && ELEMENT_TYPES.includes(value as ElementType);
+}
 
 export function createInitialElementFragments(): ElementFragmentInventory {
   return Object.fromEntries(ELEMENT_TYPES.map((element) => [element, 0])) as ElementFragmentInventory;
@@ -77,8 +84,33 @@ export function addElementFragments(
   };
 }
 
+export function canAffordElementForge(
+  inventory: ElementFragmentInventory,
+  element: ElementType,
+  cost = ELEMENT_FORGE_APPLY_COST,
+): boolean {
+  return sanitizeElementFragmentAmount(inventory[element]) >= sanitizeElementFragmentAmount(cost);
+}
+
+export function spendElementFragments(
+  inventory: ElementFragmentInventory,
+  element: ElementType,
+  amount: number,
+): ElementFragmentInventory {
+  const safeAmount = sanitizeElementFragmentAmount(amount);
+
+  return {
+    ...inventory,
+    [element]: Math.max(0, sanitizeElementFragmentAmount(inventory[element]) - safeAmount),
+  };
+}
+
 export function getElementDefinition(element: ElementType): ElementDefinition {
   return ELEMENT_DEFINITIONS.find((definition) => definition.id === element) ?? ELEMENT_DEFINITIONS[0];
+}
+
+export function getElementIncomeMultiplier(element?: ElementType): number {
+  return element ? ELEMENT_INCOME_MULTIPLIER : 1;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

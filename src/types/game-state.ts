@@ -1,3 +1,5 @@
+import type { ElementType } from '../data/elements';
+
 export type CurrencyState = {
   coins: number;
 };
@@ -26,6 +28,7 @@ export type MonsterDefinition = {
 
 export type MonsterInstance = MonsterDefinition & {
   id: string;
+  element?: ElementType;
 };
 
 export type FarmSlotState = {

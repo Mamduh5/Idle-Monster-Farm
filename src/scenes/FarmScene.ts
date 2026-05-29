@@ -30,9 +30,15 @@ import {
 } from '../data/bossBattles';
 import {
   addElementFragments,
+  canAffordElementForge,
   createInitialElementFragments,
   ELEMENT_TYPES,
+  ELEMENT_FORGE_APPLY_COST,
+  getElementDefinition,
+  getElementIncomeMultiplier,
+  spendElementFragments,
   type ElementFragmentInventory,
+  type ElementType,
 } from '../data/elements';
 import { MISSION_DEFINITIONS, type MissionDefinition, type MissionId, type MissionReward } from '../data/missions';
 import { ORDER_DEFINITIONS, type OrderDefinition, type OrderId, type OrderReward } from '../data/orders';
@@ -199,6 +205,7 @@ const MODAL_OVERLAY_DEPTH = 18;
 const BOSS_SELECT_PAGE_SIZE = 4;
 const BOSS_STAGE_PAGE_SIZE = 5;
 const BOSS_DAILY_CLEAR_LIMIT = 2;
+const ELEMENT_FORGE_MONSTERS_PER_PAGE = 4;
 const COMPENDIUM_FAMILIES_PER_PAGE = 9;
 const COMPENDIUM_MONSTERS_PER_PAGE = 15;
 const UI_FONT_FAMILY = 'Arial, Tahoma, "Noto Sans Thai", sans-serif';
@@ -236,7 +243,7 @@ const THEME = {
 
 type MonsterDragZone = Phaser.GameObjects.Zone;
 type UiLayoutMode = 'mobile' | 'desktop';
-type ModalKind = 'compendium' | 'upgrade-shop' | 'goals' | 'orders' | 'battle' | 'default';
+type ModalKind = 'compendium' | 'upgrade-shop' | 'goals' | 'orders' | 'battle' | 'element-forge' | 'default';
 type BossBattlePlayerVisualEffect = {
   kind: 'damage' | 'support';
   amount: number;
@@ -394,6 +401,7 @@ export class FarmScene extends Phaser.Scene {
   private missionsPanel?: Phaser.GameObjects.Container;
   private ordersPanel?: Phaser.GameObjects.Container;
   private bossBattlePanel?: Phaser.GameObjects.Container;
+  private elementForgePanel?: Phaser.GameObjects.Container;
   private upgradeShopPanel?: Phaser.GameObjects.Container;
   private prestigePanel?: Phaser.GameObjects.Container;
   private hatchPoolPanel?: Phaser.GameObjects.Container;
@@ -430,6 +438,8 @@ export class FarmScene extends Phaser.Scene {
   private bossBattleStagePageIndex = 0;
   private selectedBossBattleBossId?: BossBattleBossId;
   private bossBattleStageIndex = 0;
+  private elementForgePageIndex = 0;
+  private selectedElementForgeSlotId?: number;
   private bossBattleSession?: BattleSessionState;
   private bossBattleStatusText = '';
   private bossBattleLogText = '';
@@ -605,6 +615,7 @@ export class FarmScene extends Phaser.Scene {
     this.missionsPanel = undefined;
     this.ordersPanel = undefined;
     this.bossBattlePanel = undefined;
+    this.elementForgePanel = undefined;
     this.upgradeShopPanel = undefined;
     this.prestigePanel = undefined;
     this.hatchPoolPanel = undefined;
@@ -1283,6 +1294,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeMissionsPanel();
     this.closeOrdersPanel();
     this.closeBossBattlePanel();
+    this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -1294,6 +1306,7 @@ export class FarmScene extends Phaser.Scene {
       { label: this.t('ui.menu.settings'), openPanel: () => this.openSettingsPanel() },
       { label: this.t('ui.menu.help'), openPanel: () => this.openHelpPanel() },
       { label: this.t('ui.menu.patchNotes'), openPanel: () => this.openPatchNotesPanel() },
+      { label: this.t('ui.menu.elementForge'), openPanel: () => this.openElementForgePanel() },
       { label: this.t('ui.menu.hatchPool'), openPanel: () => this.openHatchPoolPanel() },
       { label: this.t('ui.menu.compendium'), openPanel: () => this.openCompendiumPanel() },
       { label: this.t('ui.menu.zone'), openPanel: () => this.openZonePanel() },
@@ -1329,6 +1342,10 @@ export class FarmScene extends Phaser.Scene {
 
   private getLocalizedMonsterName(monster: MonsterDefinition): string {
     return this.t(`monster.${monster.family}.${monster.level}`);
+  }
+
+  private getLocalizedElementName(element: ElementType): string {
+    return this.t(`element.${element}`);
   }
 
   private getLocalizedUpgradeName(upgrade: UpgradeDefinition): string {
@@ -1382,7 +1399,12 @@ export class FarmScene extends Phaser.Scene {
 
     if (mode === 'mobile') {
       const inset = 12;
-      const isListModal = kind === 'compendium' || kind === 'upgrade-shop' || kind === 'goals' || kind === 'orders' || kind === 'battle';
+      const isListModal = kind === 'compendium'
+        || kind === 'upgrade-shop'
+        || kind === 'goals'
+        || kind === 'orders'
+        || kind === 'battle'
+        || kind === 'element-forge';
       const mobileMaxWidth = isListModal ? 390 : preferredWidth;
 
       return getInsetPanelSize(
@@ -1515,6 +1537,7 @@ export class FarmScene extends Phaser.Scene {
       || this.missionsPanel
       || this.ordersPanel
       || this.bossBattlePanel
+      || this.elementForgePanel
       || this.upgradeShopPanel
       || this.prestigePanel
       || this.hatchPoolPanel
@@ -1574,6 +1597,11 @@ export class FarmScene extends Phaser.Scene {
 
     if (this.bossBattlePanel) {
       this.closeBossBattlePanel();
+      return;
+    }
+
+    if (this.elementForgePanel) {
+      this.closeElementForgePanel();
       return;
     }
 
@@ -1793,6 +1821,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeMissionsPanel();
     this.closeOrdersPanel();
     this.closeBossBattlePanel();
+    this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -2001,6 +2030,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeMissionsPanel();
     this.closeOrdersPanel();
     this.closeBossBattlePanel();
+    this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -2030,7 +2060,7 @@ export class FarmScene extends Phaser.Scene {
       [this.t('ui.help.merge.label'), this.t('ui.help.merge.description')],
       [this.t('ui.help.upgrades.label'), this.t('ui.help.upgrades.description')],
       [this.t('ui.help.orders.label'), this.t('ui.help.orders.description')],
-      [this.t('ui.help.fragments.label'), this.t('ui.help.fragments.description')],
+      [this.t('ui.help.elementForge.label'), this.t('ui.help.elementForge.description')],
       [this.t('ui.help.info.label'), this.t('ui.help.info.description')],
       [this.t('ui.help.compendium.label'), this.t('ui.help.compendium.description')],
       [this.t('ui.help.settings.label'), this.t('ui.help.settings.description')],
@@ -2110,6 +2140,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeMissionsPanel();
     this.closeOrdersPanel();
     this.closeBossBattlePanel();
+    this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeHatchPoolPanel();
@@ -2125,6 +2156,7 @@ export class FarmScene extends Phaser.Scene {
     const patchNoteKeys = [
       'ui.patchNotes.bossBranches',
       'ui.patchNotes.elementFragments',
+      'ui.patchNotes.elementForge',
       'ui.patchNotes.hatchPool',
       'ui.patchNotes.rareHatch',
       'ui.patchNotes.hatchBlessing',
@@ -2180,6 +2212,366 @@ export class FarmScene extends Phaser.Scene {
     }
   }
 
+  private openElementForgePanel(resetPage = false): void {
+    this.closeElementForgePanel(false, { resetSelection: false });
+    this.closeNavigationMenuPanel();
+    this.closeCompendiumPanel();
+    this.closeSettingsPanel();
+    this.closeHelpPanel();
+    this.closePatchNotesPanel();
+    this.closeZonePanel();
+    this.closeMissionsPanel();
+    this.closeOrdersPanel();
+    this.closeBossBattlePanel();
+    this.closeUpgradeShopPanel();
+    this.closePrestigePanel();
+    this.closeHatchPoolPanel();
+    this.closeEconomyDebugPanel();
+    this.cancelActiveDrag();
+    this.clearSelectedSlot();
+    this.showModalOverlay();
+
+    const ownedSlots = this.getElementForgeMonsterSlots();
+
+    if (resetPage) {
+      this.elementForgePageIndex = 0;
+    }
+
+    if (!ownedSlots.some((slot) => slot.id === this.selectedElementForgeSlotId)) {
+      this.selectedElementForgeSlotId = ownedSlots[0]?.id;
+    }
+
+    const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
+    const { width: panelWidth, height: panelHeight } = this.getModalSize('element-forge', 560, 620);
+    const isCompactPanel = panelWidth < 390;
+    const contentWidth = panelWidth - 42;
+    const contentX = -panelWidth / 2 + 21;
+    const pageCount = this.getPageCount(ownedSlots.length, ELEMENT_FORGE_MONSTERS_PER_PAGE);
+    const pageIndex = Math.min(Math.max(0, this.elementForgePageIndex), pageCount - 1);
+    const pageSlots = ownedSlots.slice(
+      pageIndex * ELEMENT_FORGE_MONSTERS_PER_PAGE,
+      pageIndex * ELEMENT_FORGE_MONSTERS_PER_PAGE + ELEMENT_FORGE_MONSTERS_PER_PAGE,
+    );
+
+    this.elementForgePageIndex = pageIndex;
+    panel.setDepth(26);
+    addPanelBackground(this, panel, panelWidth, panelHeight, THEME);
+
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 20, this.t('ui.elementForge.title'), {
+      color: THEME.text,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: getPanelTitleFontSize(panelWidth),
+      fontStyle: 'bold',
+    }));
+
+    this.addModalCloseButton(panel, panelWidth, panelHeight, () => this.closeElementForgePanel());
+    this.addElementForgeInventory(panel, panelWidth, panelHeight, isCompactPanel);
+
+    panel.add(this.add.text(contentX, -panelHeight / 2 + 104, this.t('ui.elementForge.selectMonster'), {
+      color: THEME.goldText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '12px' : '14px',
+      fontStyle: 'bold',
+    }));
+
+    if (ownedSlots.length === 0) {
+      panel.add(this.add.text(0, -panelHeight / 2 + 180, this.t('ui.elementForge.noMonsters'), {
+        align: 'center',
+        color: THEME.mutedText,
+        fixedWidth: contentWidth,
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: isCompactPanel ? '13px' : '15px',
+      }).setOrigin(0.5));
+    } else {
+      const rowHeight = isCompactPanel ? 50 : 56;
+      const rowGap = isCompactPanel ? 6 : 8;
+      const firstRowY = -panelHeight / 2 + 132;
+
+      pageSlots.forEach((slot, index) => {
+        this.addElementForgeMonsterRow(
+          panel,
+          slot,
+          contentX,
+          firstRowY + index * (rowHeight + rowGap),
+          contentWidth,
+          rowHeight,
+          isCompactPanel,
+        );
+      });
+
+      if (pageCount > 1) {
+        this.addPaginationControls(panel, panelWidth, panelHeight, pageIndex, pageCount, (nextPageIndex) => {
+          this.elementForgePageIndex = nextPageIndex;
+          this.openElementForgePanel();
+        });
+      }
+    }
+
+    this.addElementForgeApplyControls(panel, panelWidth, panelHeight, isCompactPanel);
+    this.elementForgePanel = panel;
+  }
+
+  private addElementForgeInventory(
+    panel: Phaser.GameObjects.Container,
+    panelWidth: number,
+    panelHeight: number,
+    isCompactPanel: boolean,
+  ): void {
+    const inventoryLines = this.getElementFragmentInventoryLines();
+    const titleY = -panelHeight / 2 + 58;
+    const lineY = -panelHeight / 2 + (isCompactPanel ? 78 : 80);
+
+    panel.add(this.add.text(-panelWidth / 2 + 22, titleY, this.t('ui.elementForge.fragments'), {
+      color: THEME.goldText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '11px' : '12px',
+      fontStyle: 'bold',
+    }));
+
+    panel.add(this.add.text(0, lineY, inventoryLines.join('\n'), {
+      align: 'center',
+      color: THEME.mutedText,
+      fixedWidth: panelWidth - 42,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '10px' : '11px',
+      lineSpacing: 2,
+    }).setOrigin(0.5));
+  }
+
+  private addElementForgeMonsterRow(
+    panel: Phaser.GameObjects.Container,
+    slot: FarmSlotState,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    isCompactPanel: boolean,
+  ): void {
+    const monster = slot.monster;
+
+    if (!monster) {
+      return;
+    }
+
+    const isSelected = slot.id === this.selectedElementForgeSlotId;
+    const rowBackground = this.add.rectangle(x, y, width, height, isSelected ? 0x2f6b45 : THEME.panelAlt, 0.94)
+      .setOrigin(0)
+      .setStrokeStyle(2, isSelected ? THEME.panelBorder : THEME.lockedBorder, isSelected ? 0.88 : 0.52)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation();
+        this.playButtonClickSound();
+        this.selectedElementForgeSlotId = slot.id;
+        this.openElementForgePanel();
+      });
+    const icon = this.add.container(x + 28, y + height / 2);
+
+    this.monsterRenderer.addMonsterVisual(icon, monster, 0, 0, isCompactPanel ? 0.26 : 0.3);
+    if (monster.element) {
+      this.addElementBadge(icon, monster.element, 14, -15, 0.72);
+    }
+
+    panel.add(rowBackground);
+    panel.add(icon);
+    panel.add(this.add.text(x + 54, y + 8, this.getCompactBossBattleText(this.getLocalizedMonsterName(monster), isCompactPanel ? 18 : 24), {
+      color: THEME.text,
+      fixedWidth: width - 116,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '11px' : '12px',
+      fontStyle: 'bold',
+    }));
+    panel.add(this.add.text(x + 54, y + (isCompactPanel ? 27 : 30), this.t('ui.elementForge.monsterMeta', {
+      level: monster.level,
+      slot: slot.id + 1,
+    }), {
+      color: THEME.mutedText,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '9px' : '10px',
+    }));
+    panel.add(this.add.text(x + width - 8, y + height / 2, this.getMonsterElementLabel(monster), {
+      align: 'right',
+      color: monster.element ? '#fff4a8' : THEME.mutedText,
+      fixedWidth: isCompactPanel ? 68 : 82,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '9px' : '10px',
+      fontStyle: monster.element ? 'bold' : 'normal',
+    }).setOrigin(1, 0.5));
+  }
+
+  private addElementForgeApplyControls(
+    panel: Phaser.GameObjects.Container,
+    panelWidth: number,
+    panelHeight: number,
+    isCompactPanel: boolean,
+  ): void {
+    const selectedMonster = this.getSelectedElementForgeMonster();
+    const selectedText = selectedMonster
+      ? `${this.getLocalizedMonsterName(selectedMonster)} - ${this.getMonsterElementLabel(selectedMonster)}`
+      : this.t('ui.elementForge.noMonsters');
+    const startY = panelHeight / 2 - (isCompactPanel ? 210 : 218);
+    const buttonWidth = Math.floor((panelWidth - 58) / 2);
+    const buttonHeight = isCompactPanel ? 56 : 60;
+    const gapX = 10;
+    const gapY = 10;
+    const firstX = -buttonWidth / 2 - gapX / 2;
+    const secondX = buttonWidth / 2 + gapX / 2;
+
+    panel.add(this.add.text(0, startY - 30, selectedText, {
+      align: 'center',
+      color: THEME.goldText,
+      fixedWidth: panelWidth - 44,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '11px' : '12px',
+      fontStyle: 'bold',
+    }).setOrigin(0.5));
+
+    panel.add(this.add.text(0, startY - 10, this.t('ui.elementForge.incomeBonus', {
+      percent: Math.round((getElementIncomeMultiplier('Spark') - 1) * 100),
+    }), {
+      align: 'center',
+      color: THEME.mutedText,
+      fixedWidth: panelWidth - 44,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isCompactPanel ? '9px' : '10px',
+    }).setOrigin(0.5));
+
+    ELEMENT_TYPES.forEach((element, index) => {
+      const owned = this.elementFragments[element] ?? 0;
+      const hasSelectedMonster = Boolean(selectedMonster);
+      const alreadyApplied = selectedMonster?.element === element;
+      const canAfford = canAffordElementForge(this.elementFragments, element);
+      const enabled = hasSelectedMonster && canAfford && !alreadyApplied;
+      let status = this.t('ui.elementForge.apply');
+
+      if (!hasSelectedMonster) {
+        status = this.t('ui.elementForge.needMonster');
+      } else if (alreadyApplied) {
+        status = this.t('ui.elementForge.alreadyApplied');
+      } else if (!canAfford) {
+        status = this.t('ui.elementForge.needFragments');
+      }
+
+      const label = `${this.getLocalizedElementName(element)}\n${this.t('ui.elementForge.cost', {
+        amount: ELEMENT_FORGE_APPLY_COST,
+        element: this.getLocalizedElementName(element),
+      })}\n${status}`;
+      const x = index % 2 === 0 ? firstX : secondX;
+      const y = startY + Math.floor(index / 2) * (buttonHeight + gapY) + buttonHeight / 2 + 18;
+      const buttonBackground = this.add.rectangle(
+        x,
+        y,
+        buttonWidth,
+        buttonHeight,
+        enabled ? getElementDefinition(element).color : THEME.lockedInner,
+        0.96,
+      ).setStrokeStyle(2, enabled ? THEME.panelBorder : THEME.lockedBorder, enabled ? 0.72 : 0.5);
+
+      if (enabled) {
+        buttonBackground
+          .setInteractive({ useHandCursor: true })
+          .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            pointer.event?.stopPropagation();
+            this.playButtonClickSound();
+            this.applyElementToSelectedMonster(element);
+          });
+      }
+
+      panel.add(buttonBackground);
+      panel.add(this.add.text(x, y, label, {
+        align: 'center',
+        color: enabled ? '#10291a' : '#cdebb3',
+        fixedWidth: buttonWidth - 8,
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: isCompactPanel ? '9px' : '10px',
+        fontStyle: 'bold',
+        lineSpacing: 1,
+      }).setOrigin(0.5));
+      panel.add(this.add.text(x, y + buttonHeight / 2 + (isCompactPanel ? 11 : 13), this.t('ui.elementForge.owned', {
+        amount: owned,
+      }), {
+        align: 'center',
+        color: THEME.mutedText,
+        fixedWidth: buttonWidth,
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: isCompactPanel ? '8px' : '9px',
+      }).setOrigin(0.5));
+    });
+
+    if (selectedMonster?.element) {
+      panel.add(this.add.text(0, panelHeight / 2 - 32, this.t('ui.elementForge.replaces'), {
+        align: 'center',
+        color: THEME.mutedText,
+        fixedWidth: panelWidth - 44,
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: isCompactPanel ? '9px' : '10px',
+      }).setOrigin(0.5));
+    }
+  }
+
+  private closeElementForgePanel(
+    hideOverlay = true,
+    options: { resetSelection?: boolean } = {},
+  ): void {
+    if (this.elementForgePanel) {
+      this.elementForgePanel.destroy();
+      this.elementForgePanel = undefined;
+
+      if (hideOverlay) {
+        this.hideModalOverlay();
+      }
+    }
+
+    if (options.resetSelection ?? true) {
+      this.selectedElementForgeSlotId = undefined;
+      this.elementForgePageIndex = 0;
+    }
+  }
+
+  private getElementForgeMonsterSlots(): FarmSlotState[] {
+    return this.getUnlockedFarmSlots().filter((slot) => Boolean(slot.monster));
+  }
+
+  private getSelectedElementForgeMonster(): MonsterInstance | undefined {
+    if (this.selectedElementForgeSlotId === undefined) {
+      return undefined;
+    }
+
+    return this.farmSlots[this.selectedElementForgeSlotId]?.monster ?? undefined;
+  }
+
+  private applyElementToSelectedMonster(element: ElementType): void {
+    const slotId = this.selectedElementForgeSlotId;
+    const monster = slotId === undefined ? undefined : this.farmSlots[slotId]?.monster;
+
+    if (slotId === undefined || !monster || monster.element === element) {
+      return;
+    }
+
+    if (!canAffordElementForge(this.elementFragments, element)) {
+      this.showToast(this.t('ui.elementForge.needFragments'), 'warning');
+      return;
+    }
+
+    this.elementFragments = spendElementFragments(this.elementFragments, element, ELEMENT_FORGE_APPLY_COST);
+    this.farmSlots = setSlotMonster(this.farmSlots, slotId, {
+      ...monster,
+      element,
+    });
+    this.renderMonsterInSlot(this.farmSlots[slotId]);
+    this.updateHud();
+    this.skipSavingUntilProgress = false;
+    this.saveProgress();
+    this.openElementForgePanel();
+    this.showToast(this.t('toast.elementApplied', {
+      element: this.getLocalizedElementName(element),
+      monster: this.getLocalizedMonsterName(monster),
+    }), 'success');
+  }
+
+  private getMonsterElementLabel(monster: Pick<MonsterInstance, 'element'>): string {
+    return monster.element ? this.getLocalizedElementName(monster.element) : this.t('element.none');
+  }
+
   private toggleZonePanel(): void {
     if (this.zonePanel) {
       this.closeZonePanel();
@@ -2199,6 +2591,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeMissionsPanel();
     this.closeOrdersPanel();
     this.closeBossBattlePanel();
+    this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -2380,6 +2773,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeOrdersPanel();
     this.closeBossBattlePanel();
+    this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -2800,6 +3194,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeZonePanel();
     this.closeMissionsPanel();
     this.closeOrdersPanel();
+    this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -3532,6 +3927,9 @@ export class FarmScene extends Phaser.Scene {
       panel.add(cardBackground);
       const monsterIcon = this.add.container(leftX + 29, y + 27).setAlpha(isDown ? 0.46 : 1);
       this.monsterRenderer.addMonsterVisual(monsterIcon, monster, 0, 0, isCompactPanel ? 0.34 : 0.39);
+      if (monster.element) {
+        this.addElementBadge(monsterIcon, monster.element, 15, -17, 0.72);
+      }
       panel.add(monsterIcon);
       panel.add(this.add.text(leftX + 58, y + 5, this.t('ui.bossBattle.monsterTurnName', {
         family: this.t(`family.${monster.family}`),
@@ -3551,6 +3949,14 @@ export class FarmScene extends Phaser.Scene {
         fontFamily: UI_FONT_FAMILY,
         fontSize: isCompactPanel ? '9px' : '10px',
       }));
+      if (monster.element) {
+        panel.add(this.add.text(leftX + 58, y + 34, this.getLocalizedElementName(monster.element), {
+          color: '#fff4a8',
+          fontFamily: UI_FONT_FAMILY,
+          fontSize: isCompactPanel ? '8px' : '9px',
+          fontStyle: 'bold',
+        }));
+      }
       panel.add(this.add.text(leftX + width - 8, y + 21, isDown ? this.t('ui.bossBattle.down') : isActive ? this.t('ui.bossBattle.active') : '', {
         align: 'right',
         color: isDown ? '#ffb5a8' : '#fff4a8',
@@ -5188,6 +5594,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeMissionsPanel();
     this.closeOrdersPanel();
     this.closeBossBattlePanel();
+    this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.clearSelectedSlot();
@@ -5299,6 +5706,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeMissionsPanel();
     this.closeOrdersPanel();
     this.closeBossBattlePanel();
+    this.closeElementForgePanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
     this.cancelActiveDrag();
@@ -5472,6 +5880,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeMissionsPanel();
     this.closeOrdersPanel();
     this.closeBossBattlePanel();
+    this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
     this.closeEconomyDebugPanel();
     this.cancelActiveDrag();
@@ -7464,13 +7873,14 @@ export class FarmScene extends Phaser.Scene {
     );
   }
 
-  private createMonsterInstance(definition = BABY_SLIME): MonsterInstance {
+  private createMonsterInstance(definition = BABY_SLIME, element?: ElementType): MonsterInstance {
     const monsterId = this.nextMonsterId;
     this.nextMonsterId += 1;
 
     return {
       ...definition,
       id: `monster-${monsterId}`,
+      ...(element ? { element } : {}),
     };
   }
 
@@ -7568,6 +7978,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeMissionsPanel();
     this.closeOrdersPanel();
     this.closeBossBattlePanel();
+    this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -7785,6 +8196,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeMissionsPanel();
     this.closeOrdersPanel();
     this.closeBossBattlePanel();
+    this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeEconomyDebugPanel();
@@ -8341,6 +8753,10 @@ export class FarmScene extends Phaser.Scene {
 
     this.monsterRenderer.addMonsterVisual(visual, monster, 0, 0, visualScale);
 
+    if (monster.element) {
+      this.addElementBadge(visual, monster.element, 24 * visualScale, -25 * visualScale, visualScale);
+    }
+
     visual.add(this.add.text(0, 27 * visualScale, this.t('common.levelShort', { level: monster.level }), {
       color: '#f7ffe8',
       fontFamily: UI_FONT_FAMILY,
@@ -8350,6 +8766,27 @@ export class FarmScene extends Phaser.Scene {
 
     this.monsterVisuals[slot.id] = visual;
     this.createMonsterDragZone(slot.id);
+  }
+
+  private addElementBadge(
+    container: Phaser.GameObjects.Container,
+    element: ElementType,
+    x: number,
+    y: number,
+    scale = 1,
+  ): void {
+    const definition = getElementDefinition(element);
+    const radius = Math.max(6, 10 * scale);
+    const badge = this.add.circle(x, y, radius, definition.color, 0.96)
+      .setStrokeStyle(Math.max(1, Math.floor(2 * scale)), 0x10291a, 0.9);
+    const letter = this.add.text(x, y, this.getLocalizedElementName(element).charAt(0).toUpperCase(), {
+      color: '#10291a',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: `${Math.max(8, Math.floor(12 * scale))}px`,
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+
+    container.add([badge, letter]);
   }
 
   private createMonsterDragZone(slotId: number): void {
@@ -8547,7 +8984,7 @@ export class FarmScene extends Phaser.Scene {
     this.farmSlots = setSlotMonster(
       clearSlotMonster(this.farmSlots, sourceSlotId),
       targetSlotId,
-      this.createMonsterInstance(nextMonsterDefinition),
+      this.createMonsterInstance(nextMonsterDefinition, this.getMergedMonsterElement(sourceMonster, targetMonster)),
     );
     this.discoverMonster(nextMonsterDefinition);
 
@@ -8567,6 +9004,17 @@ export class FarmScene extends Phaser.Scene {
     this.clearMonsterDragZone(slotId);
     this.monsterVisuals[slotId]?.destroy();
     this.monsterVisuals[slotId] = null;
+  }
+
+  private getMergedMonsterElement(
+    sourceMonster: MonsterInstance | null | undefined,
+    targetMonster: MonsterInstance | null | undefined,
+  ): ElementType | undefined {
+    if (sourceMonster?.element && targetMonster?.element) {
+      return sourceMonster.element === targetMonster.element ? sourceMonster.element : targetMonster.element;
+    }
+
+    return targetMonster?.element ?? sourceMonster?.element;
   }
 
   private returnMonsterVisualToSlot(slotId: number, visual: MonsterVisual): void {
@@ -8641,7 +9089,7 @@ export class FarmScene extends Phaser.Scene {
         return;
       }
 
-      this.farmSlots = setSlotMonster(this.farmSlots, slotId, this.createMonsterInstance(monsterDefinition));
+      this.farmSlots = setSlotMonster(this.farmSlots, slotId, this.createMonsterInstance(monsterDefinition, savedSlot.element));
       this.discoverMonster(monsterDefinition);
       this.renderMonsterInSlot(this.farmSlots[slotId]);
     });
@@ -8815,6 +9263,8 @@ export class FarmScene extends Phaser.Scene {
     this.bossBattleBossPageIndex = 0;
     this.bossBattleStagePageIndex = 0;
     this.bossBattleStageIndex = 0;
+    this.elementForgePageIndex = 0;
+    this.selectedElementForgeSlotId = undefined;
     this.unlockedZones = createInitialUnlockedZones(GRASS_FARM_ZONE_ID);
     this.currentZone = GRASS_FARM_ZONE_ID;
     this.hasPrestigedOnce = false;
@@ -8855,6 +9305,7 @@ export class FarmScene extends Phaser.Scene {
     this.closeMissionsPanel();
     this.closeOrdersPanel();
     this.closeBossBattlePanel();
+    this.closeElementForgePanel();
     this.closeUpgradeShopPanel();
     this.closePrestigePanel();
     this.closeHatchPoolPanel();

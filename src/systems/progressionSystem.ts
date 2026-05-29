@@ -1,4 +1,5 @@
 import { EGG_COST_MULTIPLIER, STARTING_EGG_COST } from '../data/economy';
+import { getElementIncomeMultiplier, type ElementType } from '../data/elements';
 import { MUSHROOM_FOREST_ZONE_ID, type ZoneId } from '../data/zones';
 import type { FarmSlotState, MonsterDefinition, MonsterFamily } from '../types/game-state';
 
@@ -110,7 +111,7 @@ export function getPrestigeIncomeMultiplier(totalRitualsPerformed: number): numb
 }
 
 export function getEffectiveMonsterIncome(
-  monster: Pick<MonsterDefinition, 'family' | 'incomePerSecond'> | null | undefined,
+  monster: (Pick<MonsterDefinition, 'family' | 'incomePerSecond'> & { element?: ElementType }) | null | undefined,
   slimeIncomeBoostLevel: number,
   mushroomIncomeBoostLevel: number,
   totalRitualsPerformed: number,
@@ -134,7 +135,8 @@ export function getEffectiveMonsterIncome(
       cellIncomeBoostLevel,
       plantIncomeBoostLevel,
     )
-    * getPrestigeIncomeMultiplier(totalRitualsPerformed),
+    * getPrestigeIncomeMultiplier(totalRitualsPerformed)
+    * getElementIncomeMultiplier(monster.element),
   );
 }
 

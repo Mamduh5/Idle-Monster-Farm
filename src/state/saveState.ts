@@ -2,7 +2,7 @@ import type { MissionId } from '../data/missions';
 import type { OrderId } from '../data/orders';
 import type { UpgradeId } from '../data/upgrades';
 import type { ZoneId } from '../data/zones';
-import type { ElementFragmentInventory } from '../data/elements';
+import { isElementType, type ElementFragmentInventory } from '../data/elements';
 import type {
   LocalSaveData,
   SavedMonsterDiscovery,
@@ -88,10 +88,16 @@ export function createSavedGrid(farmSlots: readonly FarmSlotState[]): SavedMonst
       return null;
     }
 
-    return {
+    const savedSlot: NonNullable<SavedMonsterSlot> = {
       family: slot.monster.family,
       level: slot.monster.level,
     };
+
+    if (isElementType(slot.monster.element)) {
+      savedSlot.element = slot.monster.element;
+    }
+
+    return savedSlot;
   });
 }
 

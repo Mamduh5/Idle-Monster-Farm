@@ -1,4 +1,5 @@
 import type { BossBattleDefinition, BossBattleStage } from '../data/bossBattles';
+import type { ElementType } from '../data/elements';
 import type { FarmSlotState, MonsterFamily, MonsterInstance } from '../types/game-state';
 
 export type BattleSkillId =
@@ -42,6 +43,7 @@ export type BattleMonsterSnapshot = {
   level: number;
   name: string;
   incomePerSecond: number;
+  element?: ElementType;
   power: number;
   maxHp: number;
   hp: number;
@@ -547,6 +549,7 @@ function createBattleMonsterSnapshot(monster: MonsterInstance): BattleMonsterSna
     level: monster.level,
     name: monster.name,
     incomePerSecond: monster.incomePerSecond,
+    element: monster.element,
     power: stats.power,
     maxHp: stats.maxHp,
     hp: stats.maxHp,
