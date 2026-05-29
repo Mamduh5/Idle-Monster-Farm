@@ -158,6 +158,7 @@ const EN: TranslationTable = {
   'ui.questWidget.title': 'Next Quest',
   'ui.questWidget.reward': 'Reward: {reward}',
   'ui.questWidget.ready': 'Ready to claim',
+  'ui.questWidget.readyShort': 'Ready',
   'ui.questWidget.allDone': 'All quests done. More quests soon.',
   'ui.quests.focusExpansion': 'Unlock expansion from the farm slots.',
   'ui.quests.focusHatch': 'Use Hatch to make progress.',

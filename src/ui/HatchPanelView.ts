@@ -63,7 +63,8 @@ export class HatchPanelView {
     const panelHeight = layout.hatchHeight;
     const x = layout.hatchX;
     const y = layout.hatchY;
-    const isSideBySideCompact = layout.isNarrow && panelWidth < 220;
+    const isShortPanel = panelHeight < 70;
+    const isSideBySideCompact = (layout.isNarrow && panelWidth < 220) || isShortPanel;
     const eggX = x + Math.min(isSideBySideCompact ? 34 : layout.isNarrow ? 40 : 48, panelWidth * 0.17);
     const eggY = y + panelHeight / 2;
     const eggWidth = isSideBySideCompact ? 32 : layout.isNarrow ? 36 : 44;
