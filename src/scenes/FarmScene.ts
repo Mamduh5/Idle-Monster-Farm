@@ -229,7 +229,7 @@ const QUEST_GUIDE_TEXT_KEYS: Record<QuestGuideStepId, string> = {
   'forge-open': 'ui.guide.openForge',
   'essence-upgrade': 'ui.guide.essenceUpgrade',
 };
-const UI_FONT_FAMILY = 'Arial, Tahoma, "Noto Sans Thai", sans-serif';
+const UI_FONT_FAMILY = '"Noto Sans Thai", Tahoma, Arial, sans-serif';
 const MONO_FONT_FAMILY = 'Consolas, monospace';
 const THEME = {
   sky: 0x9bd7f2,
@@ -604,6 +604,7 @@ export class FarmScene extends Phaser.Scene {
       fontFamily: UI_FONT_FAMILY,
       getLayout: () => this.getLayout(),
       getNextQuest: () => this.getNextQuest(),
+      getQuestTitle: (quest) => this.getLocalizedQuestName(quest),
       getQuestProgressText: (quest) => this.getQuestProgressText(quest),
       getQuestRewardText: (reward) => this.getQuestRewardText(reward),
       isModalOpen: () => this.isModalOpen(),
@@ -1435,7 +1436,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getLocalizedQuestName(quest: QuestDefinition): string {
-    return this.t(`quest.${quest.id}.name`);
+    return this.t(quest.titleKey);
   }
 
   private getLocalizedZoneName(zone: ZoneDefinition): string {

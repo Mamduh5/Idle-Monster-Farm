@@ -24,6 +24,7 @@ type NextQuestWidgetViewOptions = {
   fontFamily: string;
   getLayout: () => NextQuestWidgetLayout;
   getNextQuest: () => QuestDefinition | undefined;
+  getQuestTitle: (quest: QuestDefinition) => string;
   getQuestProgressText: (quest: QuestDefinition) => string;
   getQuestRewardText: (reward: QuestReward) => string;
   isModalOpen: () => boolean;
@@ -60,7 +61,7 @@ export class NextQuestWidgetView {
     const inset = isCompact ? 8 : 10;
     const contentX = x + inset;
     const contentWidth = width - inset * 2;
-    const rightActionWidth = isCompact ? 54 : 70;
+    const rightActionWidth = isCompact ? 60 : 74;
     const titleWidth = contentWidth - (isCompact ? 30 : 36);
     const container = this.scene.add.container(0, 0).setDepth(7);
 
@@ -117,20 +118,20 @@ export class NextQuestWidgetView {
       return;
     }
 
-    container.add(this.scene.add.text(contentX, y + (isCompact ? 24 : 26), quest.name, {
+    container.add(this.scene.add.text(contentX, y + (isCompact ? 24 : 26), this.options.getQuestTitle(quest), {
       color: theme.text,
       fontFamily,
-      fontSize: isCompact ? '11px' : '12px',
+      fontSize: isCompact ? '10px' : '12px',
       fontStyle: 'bold',
       fixedWidth: contentWidth,
-      fixedHeight: isCompact ? 26 : 28,
+      fixedHeight: isCompact ? 30 : 28,
       wordWrap: {
         width: contentWidth,
         useAdvancedWrap: true,
       },
     }));
 
-    const statusWidth = isClaimable ? contentWidth - rightActionWidth - 6 : Math.floor(contentWidth * 0.48);
+    const statusWidth = isClaimable ? contentWidth - rightActionWidth - 8 : Math.floor(contentWidth * 0.42);
     container.add(this.scene.add.text(contentX, y + height - (isCompact ? 22 : 24), isClaimable
       ? this.options.t('ui.questWidget.readyShort')
       : this.options.getQuestProgressText(quest), {
@@ -139,7 +140,7 @@ export class NextQuestWidgetView {
       fontSize: isCompact ? '10px' : '11px',
       fontStyle: isClaimable ? 'bold' : 'normal',
       fixedWidth: statusWidth,
-      fixedHeight: isCompact ? 18 : 20,
+      fixedHeight: isCompact ? 17 : 20,
       wordWrap: {
         width: statusWidth,
         useAdvancedWrap: true,
@@ -171,7 +172,7 @@ export class NextQuestWidgetView {
 
       container.add(claimText);
     } else {
-      const rewardWidth = contentWidth - statusWidth - 6;
+      const rewardWidth = contentWidth - statusWidth - 8;
       container.add(this.scene.add.text(x + width - inset, y + height - (isCompact ? 14 : 16), this.options.getQuestRewardText(quest.reward), {
         color: theme.goldText,
         fontFamily,

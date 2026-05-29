@@ -38,7 +38,7 @@ export type QuestId =
 
 export type QuestDefinition = {
   id: QuestId;
-  name: string;
+  titleKey: string;
   goal: number;
   reward: QuestReward;
   focusTarget: QuestFocusTarget;
@@ -48,7 +48,7 @@ export type QuestDefinition = {
 export const QUEST_DEFINITIONS: QuestDefinition[] = [
   {
     id: 'hatch-3',
-    name: 'Hatch 3 monsters',
+    titleKey: 'quest.hatch-3.name',
     goal: 3,
     reward: {
       type: 'coins',
@@ -59,7 +59,7 @@ export const QUEST_DEFINITIONS: QuestDefinition[] = [
   },
   {
     id: 'merge-1',
-    name: 'Merge 1 pair',
+    titleKey: 'quest.merge-1.name',
     goal: 1,
     reward: {
       type: 'coins',
@@ -70,7 +70,7 @@ export const QUEST_DEFINITIONS: QuestDefinition[] = [
   },
   {
     id: 'own-level-3-slime',
-    name: 'Own a Level 3 Slime',
+    titleKey: 'quest.own-level-3-slime.name',
     goal: 1,
     reward: {
       type: 'coins',
@@ -81,7 +81,7 @@ export const QUEST_DEFINITIONS: QuestDefinition[] = [
   },
   {
     id: 'unlock-expansion',
-    name: 'Unlock Expansion',
+    titleKey: 'quest.unlock-expansion.name',
     goal: 1,
     reward: {
       type: 'coins',
@@ -92,7 +92,7 @@ export const QUEST_DEFINITIONS: QuestDefinition[] = [
   },
   {
     id: 'discover-mushroom',
-    name: 'Discover Mushroom',
+    titleKey: 'quest.discover-mushroom.name',
     goal: 1,
     reward: {
       type: 'coins',
@@ -103,7 +103,7 @@ export const QUEST_DEFINITIONS: QuestDefinition[] = [
   },
   {
     id: 'prestige-once',
-    name: 'Perform first Ritual',
+    titleKey: 'quest.prestige-once.name',
     goal: 1,
     reward: {
       type: 'essence',
@@ -114,7 +114,7 @@ export const QUEST_DEFINITIONS: QuestDefinition[] = [
   },
   {
     id: 'clear-first-boss-stage',
-    name: 'Clear first Boss stage',
+    titleKey: 'quest.clear-first-boss-stage.name',
     goal: 1,
     reward: {
       type: 'fragments',
@@ -126,7 +126,7 @@ export const QUEST_DEFINITIONS: QuestDefinition[] = [
   },
   {
     id: 'apply-first-element',
-    name: 'Apply first Element',
+    titleKey: 'quest.apply-first-element.name',
     goal: 1,
     reward: {
       type: 'fragments',
@@ -138,7 +138,7 @@ export const QUEST_DEFINITIONS: QuestDefinition[] = [
   },
   {
     id: 'upgrade-element-lv2',
-    name: 'Upgrade an Element to Lv2',
+    titleKey: 'quest.upgrade-element-lv2.name',
     goal: 1,
     reward: {
       type: 'essence',

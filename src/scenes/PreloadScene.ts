@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { getText } from '../i18n/translations';
+import { loadSettings } from '../systems/settingsSystem';
 
 export class PreloadScene extends Phaser.Scene {
   constructor() {
@@ -7,10 +9,11 @@ export class PreloadScene extends Phaser.Scene {
 
   preload(): void {
     const { width, height } = this.scale;
+    const language = loadSettings().language;
 
-    this.add.text(width / 2, height / 2, 'Loading...', {
+    this.add.text(width / 2, height / 2, getText(language, 'ui.loading'), {
       color: '#f7ffe8',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: '"Noto Sans Thai", Tahoma, Arial, sans-serif',
       fontSize: '24px',
     }).setOrigin(0.5);
   }
