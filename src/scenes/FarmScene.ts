@@ -2883,10 +2883,10 @@ export class FarmScene extends Phaser.Scene {
     const visibleBosses = this.getVisibleBossBattleDefinitions();
     const headerY = -panelHeight / 2 + (isCompactPanel ? 62 : 70);
     const cardGap = isCompactPanel ? 8 : 12;
-    const rowGap = isCompactPanel ? 10 : 12;
+    const rowGap = isCompactPanel ? 8 : 10;
     const cardWidth = (contentWidth - cardGap) / 2;
-    const cardHeight = isCompactPanel ? 164 : 178;
-    const gridTop = headerY + (isCompactPanel ? 58 : 64);
+    const cardHeight = isCompactPanel ? 176 : 196;
+    const gridTop = headerY + (isCompactPanel ? 54 : 62);
     const startX = -contentWidth / 2 + cardWidth / 2;
     const pageControlsY = gridTop + cardHeight * 2 + rowGap + (isCompactPanel ? 26 : 30);
 
@@ -3026,7 +3026,7 @@ export class FarmScene extends Phaser.Scene {
       fontFamily: UI_FONT_FAMILY,
       fontSize: isCompactPanel ? '10px' : '11px',
     }).setOrigin(0.5, 0));
-    panel.add(this.add.text(centerX, cardTop + (isCompactPanel ? 130 : 146), this.getCompactBossBattleText(rewardText, isCompactPanel ? 28 : 38), {
+    panel.add(this.add.text(centerX, cardTop + (isCompactPanel ? 128 : 145), this.getCompactBossBattleText(rewardText, isCompactPanel ? 26 : 36), {
       align: 'center',
       color: THEME.mutedText,
       fixedWidth: cardWidth - 14,
