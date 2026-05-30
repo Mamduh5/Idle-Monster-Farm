@@ -90,7 +90,7 @@ export class HudView {
     });
     hudContainer.add(this.essenceText);
 
-    this.incomeText = this.scene.add.text(layout.hudX + layout.hudWidth - 10, layout.hudY + (layout.isNarrow ? 35 : 40), this.options.t('common.perSecond', { amount: '+0' }), {
+    this.incomeText = this.scene.add.text(layout.hudX + layout.hudWidth - 10, layout.hudY + (layout.isNarrow ? 12 : 15), this.options.t('common.perSecond', { amount: '+0' }), {
       align: 'right',
       color: '#d9f6ba',
       fontFamily,
@@ -100,31 +100,31 @@ export class HudView {
     }).setOrigin(1, 0);
     hudContainer.add(this.incomeText);
 
-    hudContainer.add(this.scene.add.rectangle(layout.statsX + 3, layout.statsY + 4, layout.statsWidth, layout.statsHeight, theme.shadow, 0.2)
-      .setOrigin(0));
+    // hudContainer.add(this.scene.add.rectangle(layout.statsX + 3, layout.statsY + 4, layout.statsWidth, layout.statsHeight, theme.shadow, 0.2)
+    //   .setOrigin(0));
 
-    hudContainer.add(this.scene.add.rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight, theme.panel, 0.8)
-      .setOrigin(0)
-      .setStrokeStyle(2, theme.slot, 0.62));
+    // hudContainer.add(this.scene.add.rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight, theme.panel, 0.8)
+    //   .setOrigin(0)
+    //   .setStrokeStyle(2, theme.slot, 0.62));
 
-    hudContainer.add(this.scene.add.text(layout.statsX + 18, layout.statsY + 9, this.options.t('ui.hud.production'), {
-      color: theme.text,
-      fontFamily,
-      fontSize: productionTitleFontSize,
-      fontStyle: 'bold',
-    }));
+    // hudContainer.add(this.scene.add.text(layout.statsX + 18, layout.statsY + 9, this.options.t('ui.hud.production'), {
+    //   color: theme.text,
+    //   fontFamily,
+    //   fontSize: productionTitleFontSize,
+    //   fontStyle: 'bold',
+    // }));
 
-    this.productionStatsText = this.scene.add.text(layout.statsX + 18, layout.statsY + 32, '', {
-      color: theme.mutedText,
-      fontFamily,
-      fontSize: productionTextFontSize,
-      lineSpacing: productionLineSpacing,
-      fixedWidth: layout.statsWidth - 30,
-      wordWrap: {
-        width: layout.statsWidth - 30,
-      },
-    });
-    hudContainer.add(this.productionStatsText);
+    // this.productionStatsText = this.scene.add.text(layout.statsX + 18, layout.statsY + 32, '', {
+    //   color: theme.mutedText,
+    //   fontFamily,
+    //   fontSize: productionTextFontSize,
+    //   lineSpacing: productionLineSpacing,
+    //   fixedWidth: layout.statsWidth - 30,
+    //   wordWrap: {
+    //     width: layout.statsWidth - 30,
+    //   },
+    // });
+    // hudContainer.add(this.productionStatsText);
 
     this.container = hudContainer;
   }
@@ -148,17 +148,17 @@ export class HudView {
     this.incomeText?.setText(this.options.t('common.perSecond', {
       amount: `+${this.options.formatCoinAmount(this.options.getTotalIncomePerSecond())}`,
     }));
-    this.productionStatsText?.setText([
-      this.options.t('ui.hud.incomePerSecond', {
-        amount: this.options.formatCoinAmount(this.options.getTotalIncomePerSecond()),
-      }),
-      this.options.t('ui.hud.nextEgg', {
-        amount: this.options.formatCoinAmount(this.options.getEffectiveEggCost()),
-      }),
-      this.options.t('ui.hud.offlineCap', {
-        duration: this.options.formatDuration(this.options.getOfflineCapSeconds()),
-      }),
-    ].join('\n'));
+    // this.productionStatsText?.setText([
+    //   this.options.t('ui.hud.incomePerSecond', {
+    //     amount: this.options.formatCoinAmount(this.options.getTotalIncomePerSecond()),
+    //   }),
+    //   this.options.t('ui.hud.nextEgg', {
+    //     amount: this.options.formatCoinAmount(this.options.getEffectiveEggCost()),
+    //   }),
+    //   this.options.t('ui.hud.offlineCap', {
+    //     duration: this.options.formatDuration(this.options.getOfflineCapSeconds()),
+    //   }),
+    // ].join('\n'));
   }
 
   private addCoinIcon(container: Phaser.GameObjects.Container, x: number, y: number): void {

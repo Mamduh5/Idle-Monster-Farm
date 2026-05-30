@@ -984,9 +984,11 @@ export class FarmScene extends Phaser.Scene {
     const hudX = margin;
     const hudY = isNarrow ? 8 : 20;
     const statsWidth = hudWidth;
-    const statsHeight = isNarrow ? 88 : 104;
+    // const statsHeight = isNarrow ? 88 : 104;
+    const statsHeight = 0;
     const statsX = margin;
-    const statsY = isNarrow ? hudY + hudHeight + 6 : 94;
+    const statsY = hudY + hudHeight;
+    // const statsY = isNarrow ? hudY + hudHeight + 6 : 94;
     const menuX = width - margin;
     const menuY = isNarrow ? 8 : 22;
     const menuGap = isNarrow ? 25 : 40;
@@ -998,7 +1000,10 @@ export class FarmScene extends Phaser.Scene {
     const questWidgetHeight = isNarrow ? 80 : 88;
     const questWidgetX = width - margin - questWidgetWidth;
     const questWidgetY = isNarrow ? menuY + 38 : menuY + 44;
-    const topContentBottom = isNarrow ? Math.max(statsY + statsHeight, menuBottom) : 126;
+    // const topContentBottom = isNarrow ? Math.max(statsY + statsHeight, menuBottom) : 126;
+    const topContentBottom = isNarrow
+  ? Math.max(hudY + hudHeight, questWidgetY + questWidgetHeight, menuBottom)
+  : 126;
     const bottomSafePadding = isNarrow ? (height < 700 ? 14 : 18) : 18;
     const actionBarWidth = isNarrow ? Math.min(width - margin * 2, 366) : 420;
     const actionBarHeight = isNarrow ? (height < 680 ? 58 : 64) : 64;

@@ -84,10 +84,10 @@ export class TapFarmView {
       fixedWidth: textWidth,
     }));
 
-    this.statusText = this.scene.add.text(textX, y + (isSideBySideCompact ? 34 : panelHeight - (layout.isNarrow ? 16 : 18)), '', {
+    this.statusText = this.scene.add.text(textX, y + (isSideBySideCompact ? 28 : panelHeight - (layout.isNarrow ? 21 : 26)), '', {
       color: '#d9f6ba',
       fontFamily,
-      fontSize: isSideBySideCompact ? '9px' : layout.isNarrow ? '10px' : '12px',
+      fontSize: isSideBySideCompact ? '9px' : layout.isNarrow ? '8px' : '10px',
       fontStyle: 'bold',
       fixedWidth: textWidth,
       wordWrap: {
