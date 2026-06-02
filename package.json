@@ -11,7 +11,9 @@
     "android:add": "npx cap add android",
     "android:build:web": "npm run build",
     "android:sync": "npm run build && npx cap sync android",
-    "android:open": "npx cap open android"
+    "android:open": "npx cap open android",
+    "apk:dev": "npm run android:sync && cd android && gradlew.bat assembleDebug"
+
   },
   "dependencies": {
     "@capacitor-community/admob": "^7.2.0",
