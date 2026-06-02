@@ -48,6 +48,7 @@ export type SaveSourceState = {
   hasPrestigedOnce: boolean;
   hasUsedGuidedFreeForge: boolean;
   hasUsedGuidedFreeSafeRitual: boolean;
+  hasClaimedFirstBossClearX2Bonus: boolean;
 };
 
 export type LoadedSceneStateFragments = {
@@ -89,6 +90,7 @@ export function createLocalSaveData(sourceState: SaveSourceState): LocalSaveData
     hasPrestigedOnce: sourceState.hasPrestigedOnce,
     hasUsedGuidedFreeForge: sourceState.hasUsedGuidedFreeForge,
     hasUsedGuidedFreeSafeRitual: sourceState.hasUsedGuidedFreeSafeRitual,
+    hasClaimedFirstBossClearX2Bonus: sourceState.hasClaimedFirstBossClearX2Bonus,
   };
 }
 

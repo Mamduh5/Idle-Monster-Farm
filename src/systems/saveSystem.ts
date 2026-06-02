@@ -66,6 +66,7 @@ export type LocalSaveData = {
   hasPrestigedOnce: boolean;
   hasUsedGuidedFreeForge: boolean;
   hasUsedGuidedFreeSafeRitual: boolean;
+  hasClaimedFirstBossClearX2Bonus: boolean;
 };
 
 export function loadSaveData(slotCount: number): LocalSaveData | null {
@@ -158,6 +159,7 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
     hasPrestigedOnce,
     hasUsedGuidedFreeForge: rawData.hasUsedGuidedFreeForge === true,
     hasUsedGuidedFreeSafeRitual: rawData.hasUsedGuidedFreeSafeRitual === true,
+    hasClaimedFirstBossClearX2Bonus: rawData.hasClaimedFirstBossClearX2Bonus === true,
   };
 }
 

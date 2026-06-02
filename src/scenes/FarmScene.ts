@@ -167,7 +167,7 @@ import { getMonsterMergeResult } from '../systems/monsterMergeSystem';
 import { audioSystem } from '../systems/audioSystem';
 import { getText, type LanguageCode } from '../i18n/translations';
 import { loadSettings, writeSettings, type GameSettings } from '../systems/settingsSystem';
-import { showRewardedAd } from '../services/rewardedAdService';
+import { showRewardedAd, type RewardedAdReason } from '../services/rewardedAdService';
 import type {
   CurrencyState,
   FarmSlotState,
@@ -198,6 +198,7 @@ const SHOW_DEBUG_PANEL = false;
 const SHOW_DEBUG_PRODUCTION_PANEL = false;
 const SHOW_MONSTER_HITBOX_DEBUG = false;
 const MODAL_OVERLAY_DEPTH = 18;
+const REWARDED_AD_OVERLAY_DEPTH = 120;
 const BOSS_SELECT_PAGE_SIZE = 4;
 const BOSS_STAGE_PAGE_SIZE = 5;
 const BOSS_DAILY_CLEAR_LIMIT = 2;
@@ -473,6 +474,10 @@ export class FarmScene extends Phaser.Scene {
   private resetConfirmationArmed = false;
   private prestigeConfirmationArmed = false;
   private safeRitualInProgress = false;
+  private rewardedAdInProgress = false;
+  private rewardedAdOverlay?: Phaser.GameObjects.Container;
+  private rewardedAdOverlayPulseTween?: Phaser.Tweens.Tween;
+  private rewardedAdOverlayMessageKey = 'ui.ads.loading';
   private selectedCompendiumFamily?: MonsterFamily;
   private compendiumFamilyHomePageIndex = 0;
   private compendiumFamilyPageIndex = 0;
@@ -493,6 +498,7 @@ export class FarmScene extends Phaser.Scene {
   private bossBattleBossVisualEffect?: BossBattleBossVisualEffect;
   private bossBattleRewardX2Opportunity?: BossBattleRewardX2Opportunity;
   private nextBossBattleRewardX2OpportunityId = 1;
+  private hasClaimedFirstBossClearX2Bonus = false;
   private battleAnimationEvents: Phaser.Time.TimerEvent[] = [];
   private battleAnimationInProgress = false;
   private upgradeBuyMode: UpgradeBuyMode = 'x1';
@@ -547,6 +553,7 @@ export class FarmScene extends Phaser.Scene {
 
   private readonly handleScaleResize = (): void => {
     this.rebuildResponsiveFarmView();
+    this.updateRewardedAdOverlay();
     this.syncQuestGuide();
   };
 
@@ -690,6 +697,8 @@ export class FarmScene extends Phaser.Scene {
     this.resetConfirmationArmed = false;
     this.prestigeConfirmationArmed = false;
     this.safeRitualInProgress = false;
+    this.rewardedAdInProgress = false;
+    this.hideRewardedAdOverlay();
     this.selectedCompendiumFamily = undefined;
     this.compendiumFamilyHomePageIndex = 0;
     this.compendiumFamilyPageIndex = 0;
@@ -698,6 +707,7 @@ export class FarmScene extends Phaser.Scene {
     this.clearBattleAnimationEvents();
     this.bossBattleRewardX2Opportunity = undefined;
     this.nextBossBattleRewardX2OpportunityId = 1;
+    this.hasClaimedFirstBossClearX2Bonus = false;
     this.battleAnimationInProgress = false;
     this.upgradeBuyMode = 'x1';
     this.lastBlockedOutsideTapToastAt = 0;
@@ -1646,8 +1656,106 @@ export class FarmScene extends Phaser.Scene {
       || this.prestigePanel
       || this.hatchPoolPanel
       || this.navigationMenuPanelView.isOpen()
+      || this.rewardedAdOverlay
       || this.modalOverlay
     );
+  }
+
+  private async runRewardedAdWithOverlay(
+    reason: RewardedAdReason,
+    messageKey = 'ui.ads.loading',
+  ): Promise<boolean> {
+    if (this.rewardedAdInProgress) {
+      return false;
+    }
+
+    this.rewardedAdInProgress = true;
+    this.showRewardedAdOverlay(messageKey);
+
+    try {
+      return await showRewardedAd(reason).catch(() => false);
+    } finally {
+      this.rewardedAdInProgress = false;
+      this.hideRewardedAdOverlay();
+    }
+  }
+
+  private showRewardedAdOverlay(messageKey = 'ui.ads.loading'): void {
+    this.rewardedAdOverlayMessageKey = messageKey;
+    this.hideRewardedAdOverlay();
+
+    const width = this.scale.width;
+    const height = this.scale.height;
+    const isNarrow = width < 520;
+    const panelWidth = Math.min(width - 32, isNarrow ? 280 : 320);
+    const panelHeight = isNarrow ? 112 : 124;
+    const panelX = width / 2;
+    const panelY = height / 2;
+    const overlay = this.add.container(0, 0).setDepth(REWARDED_AD_OVERLAY_DEPTH);
+    const blocker = this.add.rectangle(0, 0, width, height, 0x06120c, 0.72)
+      .setOrigin(0)
+      .setInteractive(
+        new Phaser.Geom.Rectangle(0, 0, width, height),
+        Phaser.Geom.Rectangle.Contains,
+      );
+
+    blocker.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.stopPropagation();
+    });
+    blocker.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.stopPropagation();
+    });
+    blocker.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.stopPropagation();
+    });
+
+    const panel = this.add.rectangle(panelX, panelY, panelWidth, panelHeight, THEME.panel, 0.96)
+      .setStrokeStyle(2, THEME.panelBorder, 0.9);
+    const message = this.add.text(panelX, panelY - 12, this.t(messageKey), {
+      align: 'center',
+      color: THEME.text,
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isNarrow ? '16px' : '18px',
+      fontStyle: 'bold',
+      fixedWidth: panelWidth - 32,
+      wordWrap: {
+        width: panelWidth - 36,
+        useAdvancedWrap: true,
+      },
+    }).setOrigin(0.5);
+    const dots = this.add.text(panelX, panelY + 24, '...', {
+      align: 'center',
+      color: '#fff4a8',
+      fontFamily: UI_FONT_FAMILY,
+      fontSize: isNarrow ? '20px' : '22px',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+
+    overlay.add([blocker, panel, message, dots]);
+    this.rewardedAdOverlay = overlay;
+    this.rewardedAdOverlayPulseTween = this.tweens.add({
+      targets: dots,
+      alpha: 0.35,
+      duration: 420,
+      ease: 'Sine.easeInOut',
+      yoyo: true,
+      repeat: -1,
+    });
+  }
+
+  private updateRewardedAdOverlay(messageKey = this.rewardedAdOverlayMessageKey): void {
+    if (!this.rewardedAdOverlay) {
+      return;
+    }
+
+    this.showRewardedAdOverlay(messageKey);
+  }
+
+  private hideRewardedAdOverlay(): void {
+    this.rewardedAdOverlayPulseTween?.stop();
+    this.rewardedAdOverlayPulseTween = undefined;
+    this.rewardedAdOverlay?.destroy();
+    this.rewardedAdOverlay = undefined;
   }
 
   private handleModalOverlayTap(): void {
@@ -5936,7 +6044,7 @@ export class FarmScene extends Phaser.Scene {
     this.bossBattleLogText = '';
     this.refreshBossBattlePanel();
 
-    const adCompleted = await showRewardedAd('boss-auto-clear-x2').catch(() => false);
+    const adCompleted = await this.runRewardedAdWithOverlay('boss-auto-clear-x2', 'ui.ads.loadingBonus');
     const currentOpportunity = this.bossBattleRewardX2Opportunity;
 
     if (!currentOpportunity || currentOpportunity.id !== opportunity.id || currentOpportunity.consumed) {
@@ -5945,7 +6053,7 @@ export class FarmScene extends Phaser.Scene {
 
     if (!adCompleted) {
       this.clearBossBattleRewardX2Opportunity();
-      this.showToast(this.t('toast.adNotCompleted'), 'warning');
+      this.showToast(this.t('ui.ads.notCompleted'), 'warning');
       this.refreshBossBattlePanel();
       return;
     }
@@ -5986,8 +6094,8 @@ export class FarmScene extends Phaser.Scene {
     opportunity.adInProgress = true;
     this.refreshBossBattlePanel();
 
-    const adReason = source === 'first-clear' ? 'boss-first-clear-x2' : 'boss-auto-clear-x2';
-    const adCompleted = await showRewardedAd(adReason).catch(() => false);
+    const adReason: RewardedAdReason = source === 'first-clear' ? 'boss-first-clear-x2' : 'boss-auto-clear-x2';
+    const adCompleted = await this.runRewardedAdWithOverlay(adReason, 'ui.ads.loadingBonus');
     const currentOpportunity = this.bossBattleRewardX2Opportunity;
 
     if (!currentOpportunity || currentOpportunity.id !== opportunity.id || currentOpportunity.consumed) {
@@ -5997,7 +6105,7 @@ export class FarmScene extends Phaser.Scene {
     currentOpportunity.adInProgress = false;
 
     if (!adCompleted) {
-      this.showToast(this.t('toast.adNotCompleted'), 'warning');
+      this.showToast(this.t('ui.ads.notCompleted'), 'warning');
       this.refreshBossBattlePanel();
       return;
     }
@@ -6194,10 +6302,19 @@ export class FarmScene extends Phaser.Scene {
 
         const fragmentReward = stage.firstClearFragmentReward;
         const fullRewardText = this.getBossBattleFullRewardText(stage.firstClearReward, fragmentReward);
+        const isFirstEverBossClear = this.claimedBossBattleStageIds.size === 0;
+        let grantedFirstBossClearX2Bonus = false;
 
         this.grantBossBattleReward(stage.firstClearReward);
         this.grantElementFragmentReward(fragmentReward);
-        this.setBossBattleRewardX2Opportunity(stage, 'first-clear', fragmentReward);
+        if (isFirstEverBossClear && !this.hasClaimedFirstBossClearX2Bonus) {
+          this.grantElementFragmentReward(fragmentReward);
+          this.hasClaimedFirstBossClearX2Bonus = true;
+          grantedFirstBossClearX2Bonus = Boolean(fragmentReward);
+        }
+        if (!grantedFirstBossClearX2Bonus) {
+          this.setBossBattleRewardX2Opportunity(stage, 'first-clear', fragmentReward);
+        }
         this.claimedBossBattleStageIds.add(stage.id);
         this.bossBattleStatusText = this.t('ui.bossBattle.firstClearGranted', {
           reward: fullRewardText,
@@ -6209,6 +6326,9 @@ export class FarmScene extends Phaser.Scene {
         this.showToast(this.t('toast.bossBattleFirstClear', {
           reward: fullRewardText,
         }), 'success');
+        if (grantedFirstBossClearX2Bonus) {
+          this.showToast(this.t('toast.bossFirstBonusX2'), 'success');
+        }
         this.syncQuestGuide();
         return;
       }
@@ -6230,10 +6350,10 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    const adCompleted = await showRewardedAd('boss-revive').catch(() => false);
+    const adCompleted = await this.runRewardedAdWithOverlay('boss-revive', 'ui.ads.loadingRevive');
 
     if (!adCompleted) {
-      this.showToast(this.t('toast.adNotCompleted'), 'warning');
+      this.showToast(this.t('ui.ads.notCompleted'), 'warning');
       return;
     }
 
@@ -8403,12 +8523,12 @@ export class FarmScene extends Phaser.Scene {
     const isGuidedFreeSafeRitual = this.isGuidedFreeSafeRitualAvailable();
     const adCompleted = isGuidedFreeSafeRitual
       ? true
-      : await showRewardedAd('safe-ritual').catch(() => false);
+      : await this.runRewardedAdWithOverlay('safe-ritual', 'ui.ads.loadingSafeRitual');
     this.safeRitualInProgress = false;
 
     if (!adCompleted) {
       this.openPrestigePanel();
-      this.showToast(this.t('toast.adNotCompleted'), 'warning');
+      this.showToast(this.t('ui.ads.notCompleted'), 'warning');
       return;
     }
 
@@ -10152,6 +10272,7 @@ export class FarmScene extends Phaser.Scene {
     this.hasPrestigedOnce = saveData.hasPrestigedOnce;
     this.hasUsedGuidedFreeForge = saveData.hasUsedGuidedFreeForge;
     this.hasUsedGuidedFreeSafeRitual = saveData.hasUsedGuidedFreeSafeRitual;
+    this.hasClaimedFirstBossClearX2Bonus = saveData.hasClaimedFirstBossClearX2Bonus;
     this.syncZoneUnlockFromPrestigeProgress();
     this.createFarmBackground();
     this.refreshNextQuestWidget();
@@ -10242,6 +10363,7 @@ export class FarmScene extends Phaser.Scene {
       hasPrestigedOnce: this.hasPrestigedOnce,
       hasUsedGuidedFreeForge: this.hasUsedGuidedFreeForge,
       hasUsedGuidedFreeSafeRitual: this.hasUsedGuidedFreeSafeRitual,
+      hasClaimedFirstBossClearX2Bonus: this.hasClaimedFirstBossClearX2Bonus,
     }));
 
     this.hasUnsavedProgress = false;
@@ -10272,6 +10394,8 @@ export class FarmScene extends Phaser.Scene {
     this.resetConfirmationArmed = false;
     this.prestigeConfirmationArmed = false;
     this.safeRitualInProgress = false;
+    this.rewardedAdInProgress = false;
+    this.hideRewardedAdOverlay();
     this.discoveredMonsters = new Set<DiscoveryKey>();
     this.onboardingHintsSeen = new Set<OnboardingHintId>();
     this.activeQuestGuideStepId = undefined;
@@ -10307,6 +10431,7 @@ export class FarmScene extends Phaser.Scene {
     this.hasPrestigedOnce = false;
     this.hasUsedGuidedFreeForge = false;
     this.hasUsedGuidedFreeSafeRitual = false;
+    this.hasClaimedFirstBossClearX2Bonus = false;
     this.monsterEssence = 0;
     this.essencePowerLevel = 0;
     this.rareHatchLevel = 0;
@@ -10365,6 +10490,7 @@ export class FarmScene extends Phaser.Scene {
       this.cancelActiveDrag();
       this.clearCoinBugs();
       this.clearToast();
+      this.hideRewardedAdOverlay();
       this.scale.off(Phaser.Scale.Events.RESIZE, this.handleScaleResize);
       this.input.off('pointermove', this.handleManualDragPointerMove);
       this.input.off('pointerup', this.handleManualDragPointerUp);
@@ -10387,6 +10513,7 @@ export class FarmScene extends Phaser.Scene {
       || this.totalRitualsPerformed > 0
       || this.expansionUnlocked
       || this.hasPrestigedOnce
+      || this.hasClaimedFirstBossClearX2Bonus
       || this.currentZone !== GRASS_FARM_ZONE_ID
       || this.unlockedZones.size > 1
       || this.completedQuestIds.size > 0
