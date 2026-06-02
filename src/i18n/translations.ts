@@ -123,9 +123,9 @@ const EN: TranslationTable = {
   'ui.help.info.label': 'Monster info',
   'ui.help.info.description': 'Click/tap a monster to show its tooltip.',
   'ui.help.compendium.label': 'Compendium',
-  'ui.help.compendium.description': 'Open Menu or press C.',
+  'ui.help.compendium.description': 'Collection of Monster Family',
   'ui.help.settings.label': 'Settings',
-  'ui.help.settings.description': 'Open Menu or press S.',
+  'ui.help.settings.description': 'Game Setting',
   'ui.help.resetHints': 'Reset hints',
 
   'ui.zone.title': 'Zone',
@@ -707,9 +707,9 @@ const TH: TranslationTable = {
   'ui.help.info.label': 'ข้อมูลมอนสเตอร์',
   'ui.help.info.description': 'แตะมอนสเตอร์เพื่อดูข้อมูล',
   'ui.help.compendium.label': 'สารบัญ',
-  'ui.help.compendium.description': 'เปิดเมนู หรือกด C',
+  'ui.help.compendium.description': 'แหล่งรวมมอนสเตอร์',
   'ui.help.settings.label': 'ตั้งค่า',
-  'ui.help.settings.description': 'เปิดเมนู หรือกด S',
+  'ui.help.settings.description': 'การตั้งค่าเกม',
   'ui.help.resetHints': 'รีเซ็ตคำแนะนำ',
 
   'ui.zone.title': 'โซน',
