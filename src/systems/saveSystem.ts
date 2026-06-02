@@ -59,6 +59,7 @@ export type LocalSaveData = {
   claimedQuestIds: QuestId[];
   claimedBossBattleStageIds: string[];
   elementFragments: ElementFragmentInventory;
+  pendingBossFirstClearX2StageIds: string[];
   bossDailyClearCounts: Record<string, number>;
   bossDailyClearLastResetDay: string;
   unlockedZones: ZoneId[];
@@ -152,6 +153,7 @@ function normalizeSaveData(rawData: unknown, slotCount: number): LocalSaveData |
     claimedQuestIds: normalizeQuestIds(rawData.claimedQuestIds),
     claimedBossBattleStageIds: normalizeBossBattleStageIds(rawData.claimedBossBattleStageIds),
     elementFragments: sanitizeElementFragmentInventory(rawData.elementFragments),
+    pendingBossFirstClearX2StageIds: normalizeBossBattleStageIds(rawData.pendingBossFirstClearX2StageIds),
     bossDailyClearCounts: normalizeBossDailyClearCounts(rawData.bossDailyClearCounts),
     bossDailyClearLastResetDay: normalizeBossDailyClearLastResetDay(rawData.bossDailyClearLastResetDay),
     unlockedZones: normalizeUnlockedZones(rawData.unlockedZones),

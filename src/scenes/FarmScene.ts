@@ -499,6 +499,7 @@ export class FarmScene extends Phaser.Scene {
   private bossBattleRewardX2Opportunity?: BossBattleRewardX2Opportunity;
   private nextBossBattleRewardX2OpportunityId = 1;
   private hasClaimedFirstBossClearX2Bonus = false;
+  private pendingBossFirstClearX2StageIds = new Set<string>();
   private battleAnimationEvents: Phaser.Time.TimerEvent[] = [];
   private battleAnimationInProgress = false;
   private upgradeBuyMode: UpgradeBuyMode = 'x1';
@@ -708,6 +709,7 @@ export class FarmScene extends Phaser.Scene {
     this.bossBattleRewardX2Opportunity = undefined;
     this.nextBossBattleRewardX2OpportunityId = 1;
     this.hasClaimedFirstBossClearX2Bonus = false;
+    this.pendingBossFirstClearX2StageIds = new Set<string>();
     this.battleAnimationInProgress = false;
     this.upgradeBuyMode = 'x1';
     this.lastBlockedOutsideTapToastAt = 0;
@@ -4655,11 +4657,13 @@ export class FarmScene extends Phaser.Scene {
     );
 
     if (firstClearX2Opportunity) {
+      const gap = isCompactPanel ? 8 : 10;
+      const twoButtonWidth = Math.min(isCompactPanel ? 132 : 158, (contentWidth - gap) / 2);
       this.addBattleButton(
         panel,
-        0,
+        -twoButtonWidth / 2 - gap / 2,
         y,
-        buttonWidth,
+        twoButtonWidth,
         isCompactPanel ? 34 : 38,
         this.t('ui.bossBattle.watchAdX2'),
         THEME.buttonHover,
@@ -4669,11 +4673,25 @@ export class FarmScene extends Phaser.Scene {
         },
         controlsEnabled && !firstClearX2Opportunity.adInProgress,
       );
+      this.addBattleButton(
+        panel,
+        twoButtonWidth / 2 + gap / 2,
+        y,
+        twoButtonWidth,
+        isCompactPanel ? 34 : 38,
+        this.t('ui.bossBattle.skipBonus'),
+        THEME.button,
+        '#ffffff',
+        () => {
+          this.dismissBossBattleFirstClearX2(stage);
+        },
+        controlsEnabled && !firstClearX2Opportunity.adInProgress,
+      );
       this.addBossBattleAdDetail(
         panel,
         0,
         y + (isCompactPanel ? 23 : 26),
-        buttonWidth,
+        contentWidth,
         firstClearX2Opportunity.adInProgress
           ? this.t('ui.bossBattle.adPending')
           : this.t('ui.bossBattle.firstClearX2Detail'),
@@ -5672,6 +5690,14 @@ export class FarmScene extends Phaser.Scene {
     this.bossBattleRewardX2Opportunity = undefined;
   }
 
+  private clearPendingBossFirstClearX2StageId(stageId: string): void {
+    if (!this.pendingBossFirstClearX2StageIds.delete(stageId)) {
+      return;
+    }
+
+    this.hasUnsavedProgress = true;
+  }
+
   private setBossBattleRewardX2Opportunity(
     stage: BossBattleStage,
     source: BossBattleRewardX2Source,
@@ -5680,6 +5706,11 @@ export class FarmScene extends Phaser.Scene {
     if (!reward) {
       this.clearBossBattleRewardX2Opportunity();
       return;
+    }
+
+    if (source === 'first-clear' && !this.pendingBossFirstClearX2StageIds.has(stage.id)) {
+      this.pendingBossFirstClearX2StageIds.add(stage.id);
+      this.hasUnsavedProgress = true;
     }
 
     this.bossBattleRewardX2Opportunity = {
@@ -5700,15 +5731,75 @@ export class FarmScene extends Phaser.Scene {
     const opportunity = this.bossBattleRewardX2Opportunity;
 
     if (
-      !opportunity
-      || opportunity.consumed
-      || opportunity.stageId !== stageId
-      || (source && opportunity.source !== source)
+      opportunity
+      && !opportunity.consumed
+      && opportunity.stageId === stageId
+      && (!source || opportunity.source === source)
     ) {
+      return opportunity;
+    }
+
+    if (source === 'first-clear' || source === undefined) {
+      return this.restorePendingBossFirstClearX2Opportunity(stageId);
+    }
+
+    return undefined;
+  }
+
+  private restorePendingBossFirstClearX2Opportunity(stageId: string): BossBattleRewardX2Opportunity | undefined {
+    if (!this.pendingBossFirstClearX2StageIds.has(stageId)) {
       return undefined;
     }
 
-    return opportunity;
+    const stage = this.getBossBattleStageById(stageId);
+
+    if (!stage || !stage.firstClearFragmentReward || !isBossStageCleared(stageId, this.claimedBossBattleStageIds)) {
+      this.clearPendingBossFirstClearX2StageId(stageId);
+      return undefined;
+    }
+
+    this.bossBattleRewardX2Opportunity = {
+      id: this.nextBossBattleRewardX2OpportunityId,
+      source: 'first-clear',
+      stageId: stage.id,
+      reward: stage.firstClearFragmentReward,
+      consumed: false,
+      adInProgress: false,
+    };
+    this.nextBossBattleRewardX2OpportunityId += 1;
+
+    return this.bossBattleRewardX2Opportunity;
+  }
+
+  private prunePendingBossFirstClearX2StageIds(): void {
+    const validPendingStageIds = Array.from(this.pendingBossFirstClearX2StageIds).filter((stageId) => {
+      const stage = this.getBossBattleStageById(stageId);
+
+      return Boolean(
+        stage
+        && stage.firstClearFragmentReward
+        && isBossStageCleared(stageId, this.claimedBossBattleStageIds),
+      );
+    });
+
+    if (validPendingStageIds.length === this.pendingBossFirstClearX2StageIds.size) {
+      return;
+    }
+
+    this.pendingBossFirstClearX2StageIds = new Set(validPendingStageIds);
+    this.hasUnsavedProgress = true;
+  }
+
+  private getBossBattleStageById(stageId: string): BossBattleStage | undefined {
+    for (const boss of BOSS_BATTLE_DEFINITIONS) {
+      const stage = boss.stages.find((bossStage) => bossStage.id === stageId);
+
+      if (stage) {
+        return stage;
+      }
+    }
+
+    return undefined;
   }
 
   private selectBossBattleBossPage(pageIndex: number): void {
@@ -6112,6 +6203,10 @@ export class FarmScene extends Phaser.Scene {
 
     currentOpportunity.consumed = true;
     this.grantElementFragmentReward(currentOpportunity.reward);
+    if (currentOpportunity.source === 'first-clear') {
+      this.clearPendingBossFirstClearX2StageId(currentOpportunity.stageId);
+    }
+    this.clearBossBattleRewardX2Opportunity();
     const rewardText = this.getElementFragmentRewardText(currentOpportunity.reward);
     this.bossBattleStatusText = this.t('ui.bossBattle.rewardX2Granted', {
       reward: rewardText,
@@ -6124,6 +6219,23 @@ export class FarmScene extends Phaser.Scene {
     this.showToast(this.t('toast.bossBattleRewardX2', {
       reward: rewardText,
     }), 'success');
+  }
+
+  private dismissBossBattleFirstClearX2(stage: BossBattleStage): void {
+    const opportunity = this.getBossBattleRewardX2Opportunity(stage.id, 'first-clear');
+
+    if (!opportunity || opportunity.adInProgress || opportunity.consumed) {
+      return;
+    }
+
+    this.clearPendingBossFirstClearX2StageId(stage.id);
+    this.clearBossBattleRewardX2Opportunity();
+    this.bossBattleStatusText = this.t('ui.bossBattle.victory');
+    this.bossBattleLogText = '';
+    this.skipSavingUntilProgress = false;
+    this.saveProgress();
+    this.refreshBossBattlePanel();
+    this.showToast(this.t('toast.bossBattleBonusSkipped'), 'info');
   }
 
   private useBossBattleSkill(skillId: BattleSkillId): void {
@@ -10263,6 +10375,7 @@ export class FarmScene extends Phaser.Scene {
     this.claimedQuestIds = loadedSets.claimedQuestIds;
     this.claimedBossBattleStageIds = loadedSets.claimedBossBattleStageIds;
     this.elementFragments = { ...saveData.elementFragments };
+    this.pendingBossFirstClearX2StageIds = new Set(saveData.pendingBossFirstClearX2StageIds);
     this.bossDailyClearCounts = { ...saveData.bossDailyClearCounts };
     this.bossDailyClearLastResetDay = saveData.bossDailyClearLastResetDay;
     this.syncBossDailyClearReset();
@@ -10273,6 +10386,7 @@ export class FarmScene extends Phaser.Scene {
     this.hasUsedGuidedFreeForge = saveData.hasUsedGuidedFreeForge;
     this.hasUsedGuidedFreeSafeRitual = saveData.hasUsedGuidedFreeSafeRitual;
     this.hasClaimedFirstBossClearX2Bonus = saveData.hasClaimedFirstBossClearX2Bonus;
+    this.prunePendingBossFirstClearX2StageIds();
     this.syncZoneUnlockFromPrestigeProgress();
     this.createFarmBackground();
     this.refreshNextQuestWidget();
@@ -10356,6 +10470,7 @@ export class FarmScene extends Phaser.Scene {
       claimedQuestIds: this.claimedQuestIds,
       claimedBossBattleStageIds: this.claimedBossBattleStageIds,
       elementFragments: this.elementFragments,
+      pendingBossFirstClearX2StageIds: this.pendingBossFirstClearX2StageIds,
       bossDailyClearCounts: { ...this.bossDailyClearCounts },
       bossDailyClearLastResetDay: this.bossDailyClearLastResetDay || this.getCurrentLocalDayKey(),
       unlockedZones: this.unlockedZones,
@@ -10421,6 +10536,7 @@ export class FarmScene extends Phaser.Scene {
     this.bossBattleBossVisualEffect = undefined;
     this.bossBattleRewardX2Opportunity = undefined;
     this.nextBossBattleRewardX2OpportunityId = 1;
+    this.pendingBossFirstClearX2StageIds = new Set<string>();
     this.bossBattleBossPageIndex = 0;
     this.bossBattleStagePageIndex = 0;
     this.bossBattleStageIndex = 0;
@@ -10518,7 +10634,8 @@ export class FarmScene extends Phaser.Scene {
       || this.unlockedZones.size > 1
       || this.completedQuestIds.size > 0
       || this.claimedQuestIds.size > 0
-            || this.claimedBossBattleStageIds.size > 0
+      || this.claimedBossBattleStageIds.size > 0
+      || this.pendingBossFirstClearX2StageIds.size > 0
       || Object.values(this.elementFragments).some((amount) => amount > 0)
       || Object.values(this.bossDailyClearCounts).some((count) => count > 0)
       || Object.values(this.questProgress).some((progress) => progress > 0)

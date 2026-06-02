@@ -41,6 +41,7 @@ export type SaveSourceState = {
   claimedQuestIds: ReadonlySet<QuestId>;
   claimedBossBattleStageIds: ReadonlySet<string>;
   elementFragments: ElementFragmentInventory;
+  pendingBossFirstClearX2StageIds: ReadonlySet<string>;
   bossDailyClearCounts: Record<string, number>;
   bossDailyClearLastResetDay: string;
   unlockedZones: ReadonlySet<ZoneId>;
@@ -83,6 +84,7 @@ export function createLocalSaveData(sourceState: SaveSourceState): LocalSaveData
     claimedQuestIds: Array.from(sourceState.claimedQuestIds),
     claimedBossBattleStageIds: Array.from(sourceState.claimedBossBattleStageIds),
     elementFragments: { ...sourceState.elementFragments },
+    pendingBossFirstClearX2StageIds: Array.from(sourceState.pendingBossFirstClearX2StageIds),
     bossDailyClearCounts: { ...sourceState.bossDailyClearCounts },
     bossDailyClearLastResetDay: sourceState.bossDailyClearLastResetDay,
     unlockedZones: Array.from(sourceState.unlockedZones),
