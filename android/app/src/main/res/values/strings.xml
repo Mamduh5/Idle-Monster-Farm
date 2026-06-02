@@ -4,5 +4,5 @@
     <string name="title_activity_main">Idle Monster Farm</string>
     <string name="package_name">com.mamduh.idlemonsterfarm</string>
     <string name="custom_url_scheme">com.mamduh.idlemonsterfarm</string>
-    <string name="admob_app_id">REPLACE_WITH_ADMOB_APP_ID</string>
+    <string name="admob_app_id">ca-app-pub-3940256099942544~3347511713</string>
 </resources>

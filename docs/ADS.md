@@ -18,6 +18,6 @@ VITE_ADMOB_REWARDED_BOSS_AUTO_CLEAR_X2_ANDROID=
 ```
 
 Use Google test ad IDs only for testing. Production ad unit IDs and the Android AdMob app ID must be supplied by the app owner's AdMob account before release.
-For Android, replace `REPLACE_WITH_ADMOB_APP_ID` in `android/app/src/main/res/values/strings.xml` before enabling the real AdMob provider.
+For Android debug builds, `android/app/src/main/res/values/strings.xml` uses Google's official test app ID so the native metadata is valid at startup. Replace it with the app owner's production AdMob app ID before release, and do not commit production IDs.
 
 Rewards are granted only after the rewarded ad reports completion. Missing IDs, load failures, show failures, dismissals without reward, and timeouts return `false` and grant nothing.
