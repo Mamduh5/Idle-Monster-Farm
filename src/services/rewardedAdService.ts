@@ -12,6 +12,7 @@ export interface RewardedAdProvider {
 }
 
 const REWARDED_AD_TIMEOUT_MS = 45_000;
+const ADS_LOG_PREFIX = '[IdleMonsterFarm][ads]';
 
 const AD_UNIT_ENV_BY_REASON: Record<RewardedAdReason, string> = {
   'safe-ritual': 'VITE_ADMOB_REWARDED_SAFE_RITUAL_ANDROID',
@@ -21,7 +22,8 @@ const AD_UNIT_ENV_BY_REASON: Record<RewardedAdReason, string> = {
 };
 
 class MockRewardedAdProvider implements RewardedAdProvider {
-  async showRewardedAd(_reason: RewardedAdReason): Promise<boolean> {
+  async showRewardedAd(reason: RewardedAdReason): Promise<boolean> {
+    logAd('mock reward granted', reason);
     await Promise.resolve();
 
     return true;
@@ -33,16 +35,19 @@ class CapacitorAdMobRewardedProvider implements RewardedAdProvider {
 
   async showRewardedAd(reason: RewardedAdReason): Promise<boolean> {
     if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') {
-      return true;
+      logAd('admob requested outside native Android', reason);
+      return false;
     }
 
     const adId = getRewardedAdUnitId(reason);
 
     if (!adId) {
+      logAd('missing rewarded ad unit id', reason);
       return false;
     }
 
     try {
+      logAd('loading rewarded ad', reason);
       await this.initialize();
       await AdMob.prepareRewardVideoAd({
         adId,
@@ -50,8 +55,12 @@ class CapacitorAdMobRewardedProvider implements RewardedAdProvider {
         isTesting: getBooleanEnv('VITE_ADMOB_TESTING'),
       });
 
-      return await this.showPreparedRewardedAd();
-    } catch {
+      const rewarded = await this.showPreparedRewardedAd();
+      logAd(rewarded ? 'rewarded ad completed' : 'rewarded ad not completed', reason);
+
+      return rewarded;
+    } catch (error) {
+      logAd('rewarded ad failed', reason, error);
       return false;
     }
   }
@@ -102,6 +111,7 @@ const mockProvider = new MockRewardedAdProvider();
 const admobProvider = new CapacitorAdMobRewardedProvider();
 
 export async function showRewardedAd(reason: RewardedAdReason): Promise<boolean> {
+  logAd(`provider=${getAdsProviderMode()}`, reason);
   return getRewardedAdProvider().showRewardedAd(reason);
 }
 
@@ -135,6 +145,15 @@ function getEnv(key: string): string | undefined {
 
 function getViteEnv(): ViteEnv {
   return ((import.meta as unknown as { env?: ViteEnv }).env ?? {});
+}
+
+function logAd(message: string, reason: RewardedAdReason, detail?: unknown): void {
+  if (detail === undefined) {
+    console.info(ADS_LOG_PREFIX, message, reason);
+    return;
+  }
+
+  console.warn(ADS_LOG_PREFIX, message, reason, detail);
 }
 
 async function waitForAdToSettle(showPromise: Promise<void>, isSettled: () => boolean): Promise<void> {
