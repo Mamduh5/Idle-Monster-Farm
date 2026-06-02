@@ -325,6 +325,10 @@ type TapFarmReactionTier = {
 type FarmSceneLayout = {
   isNarrow: boolean;
   margin: number;
+  safeTop: number;
+  safeRight: number;
+  safeBottom: number;
+  safeLeft: number;
   cellSize: number;
   gridGap: number;
   gridStartX: number;
@@ -977,36 +981,46 @@ export class FarmScene extends Phaser.Scene {
     const width = this.scale.width;
     const height = this.scale.height;
     const isNarrow = width < 700;
+    const cssSafeTop = this.getCssSafeAreaInset('--imf-safe-area-top');
+    const cssSafeRight = this.getCssSafeAreaInset('--imf-safe-area-right');
+    const cssSafeBottom = this.getCssSafeAreaInset('--imf-safe-area-bottom');
+    const cssSafeLeft = this.getCssSafeAreaInset('--imf-safe-area-left');
+    const safeTop = isNarrow ? Math.max(cssSafeTop, height < 700 ? 18 : 22) : cssSafeTop;
+    const safeRight = cssSafeRight;
+    const safeBottom = isNarrow ? Math.max(cssSafeBottom, height < 700 ? 28 : 34) : Math.max(cssSafeBottom, 18);
+    const safeLeft = cssSafeLeft;
+    const contentLeft = safeLeft;
+    const contentWidth = width - safeLeft - safeRight;
     const margin = isNarrow ? 12 : 24;
     const gridGap = isNarrow && height < 680 ? 8 : GRID_GAP;
     const hudWidth = isNarrow ? 158 : 220;
     const hudHeight = isNarrow ? 54 : 64;
-    const hudX = margin;
-    const hudY = isNarrow ? 8 : 20;
-    const menuX = width - margin;
-    const menuY = isNarrow ? 8 : 22;
+    const hudX = contentLeft + margin;
+    const hudY = isNarrow ? safeTop : 20 + safeTop;
+    const menuX = width - safeRight - margin;
+    const menuY = isNarrow ? safeTop : 22 + safeTop;
     const menuGap = isNarrow ? 25 : 40;
     const menuButtonCount = SHOW_DEBUG_PANEL ? 2 : 1;
     const menuBottom = menuY + (menuButtonCount - 1) * menuGap + 30;
     const questWidgetWidth = isNarrow
-      ? Math.max(146, Math.min(168, width - hudWidth - margin * 3))
+      ? Math.max(146, Math.min(168, contentWidth - hudWidth - margin * 3))
       : 236;
     const questWidgetHeight = isNarrow ? 80 : 88;
-    const questWidgetX = width - margin - questWidgetWidth;
+    const questWidgetX = width - safeRight - margin - questWidgetWidth;
     const questWidgetY = isNarrow ? menuY + 38 : menuY + 44;
     const topContentBottom = isNarrow
       ? Math.max(hudY + hudHeight, questWidgetY + questWidgetHeight, menuBottom)
       : 126;
-    const bottomSafePadding = isNarrow ? (height < 700 ? 14 : 18) : 18;
-    const actionBarWidth = isNarrow ? Math.min(width - margin * 2, 366) : 420;
+    const bottomSafePadding = safeBottom;
+    const actionBarWidth = isNarrow ? Math.min(contentWidth - margin * 2, 366) : 420;
     const actionBarHeight = isNarrow ? (height < 680 ? 58 : 64) : 64;
     const actionBarButtonGap = isNarrow ? 6 : 8;
-    const actionBarX = (width - actionBarWidth) / 2;
+    const actionBarX = contentLeft + (contentWidth - actionBarWidth) / 2;
     const actionBarY = height - bottomSafePadding - actionBarHeight;
     const controlGap = isNarrow ? (height < 680 ? 6 : 8) : 10;
     const sharedControlHeight = isNarrow ? (height < 680 ? 72 : 80) : 0;
-    const sharedControlWidth = Math.min(width - margin * 2, actionBarWidth);
-    const sharedControlX = (width - sharedControlWidth) / 2;
+    const sharedControlWidth = Math.min(contentWidth - margin * 2, actionBarWidth);
+    const sharedControlX = contentLeft + (contentWidth - sharedControlWidth) / 2;
     const sharedControlY = actionBarY - controlGap - sharedControlHeight;
     const mobileControlGap = height < 680 ? 6 : 8;
     const mobileHatchWidth = Math.floor((sharedControlWidth - mobileControlGap) * 0.6);
@@ -1023,7 +1037,7 @@ export class FarmScene extends Phaser.Scene {
     const expansionLabelToRowGap = isNarrow ? (height < 680 ? 18 : 24) : 34;
     const expansionToControlsGap = isNarrow ? (height < 680 ? 6 : 8) : 12;
     const minGridStartY = topContentBottom + gridTopGap;
-    const widthLimitedCellSize = Math.floor((width - margin * 2 - (GRID_COLUMNS - 1) * gridGap) / GRID_COLUMNS);
+    const widthLimitedCellSize = Math.floor((contentWidth - margin * 2 - (GRID_COLUMNS - 1) * gridGap) / GRID_COLUMNS);
     const availableStackHeight = Math.max(0, tapFarmY - minGridStartY);
     const heightLimitedCellSize = Math.floor(
       (
@@ -1051,12 +1065,12 @@ export class FarmScene extends Phaser.Scene {
 
     if (!isNarrow) {
       const desktopControlGap = 10;
-      const desktopControlWidth = Math.min(430, Math.max(330, width - margin * 2));
+      const desktopControlWidth = Math.min(430, Math.max(330, contentWidth - margin * 2));
       hatchWidth = Math.min(270, Math.floor(desktopControlWidth * 0.62));
       tapFarmWidth = desktopControlWidth - hatchWidth - desktopControlGap;
       hatchHeight = 58;
       tapFarmHeight = hatchHeight;
-      hatchX = (width - desktopControlWidth) / 2;
+      hatchX = contentLeft + (contentWidth - desktopControlWidth) / 2;
       tapFarmX = hatchX + hatchWidth + desktopControlGap;
       const desktopFooterGap = 16;
       const maxControlY = actionBarY - desktopFooterGap - hatchHeight;
@@ -1067,9 +1081,13 @@ export class FarmScene extends Phaser.Scene {
     return {
       isNarrow,
       margin,
+      safeTop,
+      safeRight,
+      safeBottom,
+      safeLeft,
       cellSize,
       gridGap,
-      gridStartX: (width - gridWidth) / 2,
+      gridStartX: contentLeft + (contentWidth - gridWidth) / 2,
       gridStartY,
       hudX,
       hudY,
@@ -1085,7 +1103,7 @@ export class FarmScene extends Phaser.Scene {
       menuFontSize: isNarrow ? '13px' : '15px',
       bottomSafePadding,
       expansionLabelY,
-      expansionStartX: (width - gridWidth) / 2,
+      expansionStartX: contentLeft + (contentWidth - gridWidth) / 2,
       expansionStartY,
       tapFarmX,
       tapFarmY,
@@ -1101,6 +1119,17 @@ export class FarmScene extends Phaser.Scene {
       hatchWidth,
       hatchHeight,
     };
+  }
+
+  private getCssSafeAreaInset(variableName: string): number {
+    if (typeof window === 'undefined') {
+      return 0;
+    }
+
+    const rawValue = window.getComputedStyle(document.documentElement).getPropertyValue(variableName).trim();
+    const parsedValue = Number.parseFloat(rawValue);
+
+    return Number.isFinite(parsedValue) ? Math.max(0, parsedValue) : 0;
   }
 
   private createFarmGrid(): void {
@@ -9601,10 +9630,11 @@ export class FarmScene extends Phaser.Scene {
     if (bottomDockTop < expansionBottom + gap) {
       const rightSideLeft = Math.max(gridRight, expansionRight) + gap;
       const leftSideRight = Math.min(gridLeft, expansionLeft) - gap;
-      const sideTopMax = Math.max(layout.margin, controlsTop - gap - height);
+      const minTop = layout.safeTop + layout.margin;
+      const sideTopMax = Math.max(minTop, controlsTop - gap - height);
       const sideTop = Phaser.Math.Clamp(
         gridTop + (gridHeight - height) / 2,
-        layout.margin,
+        minTop,
         sideTopMax,
       );
 
@@ -9617,11 +9647,11 @@ export class FarmScene extends Phaser.Scene {
       } else {
         width = Math.max(132, Math.min(width, this.scale.width - layout.margin * 2));
         left = (this.scale.width - width) / 2;
-        top = Math.max(layout.margin, bottomDockTop);
+        top = Math.max(minTop, bottomDockTop);
       }
     }
 
-    top = Phaser.Math.Clamp(top, layout.margin, Math.max(layout.margin, controlsTop - gap - height));
+    top = Phaser.Math.Clamp(top, layout.safeTop + layout.margin, Math.max(layout.safeTop + layout.margin, controlsTop - gap - height));
 
     return new Phaser.Geom.Rectangle(
       left,
@@ -10400,7 +10430,13 @@ export class FarmScene extends Phaser.Scene {
   private showOfflineEarningsMessage(offlineCoins: number): void {
     const layout = this.getLayout();
     const popupWidth = Math.min(layout.isNarrow ? 300 : 380, this.scale.width - 32);
-    const popupY = Phaser.Math.Clamp(layout.isNarrow ? 86 : 96, 52, this.scale.height - 52);
+    const popupY = Phaser.Math.Clamp(
+      layout.isNarrow
+        ? Math.max(layout.questWidgetY + layout.questWidgetHeight + 18, layout.gridStartY + 24)
+        : 96,
+      layout.safeTop + 52,
+      this.scale.height - layout.safeBottom - 52,
+    );
     const popup = this.add.text(
       this.scale.width / 2,
       popupY,
