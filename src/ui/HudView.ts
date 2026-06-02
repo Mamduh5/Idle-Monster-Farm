@@ -6,10 +6,6 @@ type HudLayout = {
   hudY: number;
   hudWidth: number;
   hudHeight: number;
-  statsX: number;
-  statsY: number;
-  statsWidth: number;
-  statsHeight: number;
 };
 
 type HudTheme = {
@@ -25,11 +21,8 @@ type HudTheme = {
 type HudViewOptions = {
   fontFamily: string;
   formatCoinAmount: (amount: number) => string;
-  formatDuration: (seconds: number) => string;
-  getEffectiveEggCost: () => number;
   getLayout: () => HudLayout;
   getMonsterEssence: () => number;
-  getOfflineCapSeconds: () => number;
   getTotalIncomePerSecond: () => number;
   t: (key: string, params?: Record<string, string | number>) => string;
   theme: HudTheme;
@@ -40,7 +33,6 @@ export class HudView {
   private container?: Phaser.GameObjects.Container;
   private essenceText?: Phaser.GameObjects.Text;
   private incomeText?: Phaser.GameObjects.Text;
-  private productionStatsText?: Phaser.GameObjects.Text;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -54,9 +46,6 @@ export class HudView {
     const layout = this.options.getLayout();
     const coinFontSize = layout.isNarrow ? '17px' : '22px';
     const essenceFontSize = layout.isNarrow ? '12px' : '14px';
-    const productionTitleFontSize = layout.isNarrow ? '15px' : '16px';
-    const productionTextFontSize = layout.isNarrow ? '12px' : '14px';
-    const productionLineSpacing = layout.isNarrow ? 2 : 5;
     const hudContainer = this.scene.add.container(0, 0);
 
     hudContainer.add(this.scene.add.rectangle(layout.hudX + 3, layout.hudY + 4, layout.hudWidth, layout.hudHeight, theme.shadow, 0.25)
@@ -100,32 +89,6 @@ export class HudView {
     }).setOrigin(1, 0);
     hudContainer.add(this.incomeText);
 
-    // hudContainer.add(this.scene.add.rectangle(layout.statsX + 3, layout.statsY + 4, layout.statsWidth, layout.statsHeight, theme.shadow, 0.2)
-    //   .setOrigin(0));
-
-    // hudContainer.add(this.scene.add.rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight, theme.panel, 0.8)
-    //   .setOrigin(0)
-    //   .setStrokeStyle(2, theme.slot, 0.62));
-
-    // hudContainer.add(this.scene.add.text(layout.statsX + 18, layout.statsY + 9, this.options.t('ui.hud.production'), {
-    //   color: theme.text,
-    //   fontFamily,
-    //   fontSize: productionTitleFontSize,
-    //   fontStyle: 'bold',
-    // }));
-
-    // this.productionStatsText = this.scene.add.text(layout.statsX + 18, layout.statsY + 32, '', {
-    //   color: theme.mutedText,
-    //   fontFamily,
-    //   fontSize: productionTextFontSize,
-    //   lineSpacing: productionLineSpacing,
-    //   fixedWidth: layout.statsWidth - 30,
-    //   wordWrap: {
-    //     width: layout.statsWidth - 30,
-    //   },
-    // });
-    // hudContainer.add(this.productionStatsText);
-
     this.container = hudContainer;
   }
 
@@ -135,7 +98,6 @@ export class HudView {
     this.coinText = undefined;
     this.essenceText = undefined;
     this.incomeText = undefined;
-    this.productionStatsText = undefined;
   }
 
   refresh(currentCoins: number): void {
@@ -148,17 +110,6 @@ export class HudView {
     this.incomeText?.setText(this.options.t('common.perSecond', {
       amount: `+${this.options.formatCoinAmount(this.options.getTotalIncomePerSecond())}`,
     }));
-    // this.productionStatsText?.setText([
-    //   this.options.t('ui.hud.incomePerSecond', {
-    //     amount: this.options.formatCoinAmount(this.options.getTotalIncomePerSecond()),
-    //   }),
-    //   this.options.t('ui.hud.nextEgg', {
-    //     amount: this.options.formatCoinAmount(this.options.getEffectiveEggCost()),
-    //   }),
-    //   this.options.t('ui.hud.offlineCap', {
-    //     duration: this.options.formatDuration(this.options.getOfflineCapSeconds()),
-    //   }),
-    // ].join('\n'));
   }
 
   private addCoinIcon(container: Phaser.GameObjects.Container, x: number, y: number): void {

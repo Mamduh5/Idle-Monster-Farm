@@ -51,16 +51,12 @@ export type CoinBugSpawnStateResult = {
 
 export type CoinBugSpawnLayout = {
   isNarrow: boolean;
-  statsY: number;
-  statsHeight: number;
   gridStartY: number;
   hatchY: number;
   hudX: number;
   hudY: number;
   hudWidth: number;
   hudHeight: number;
-  statsX: number;
-  statsWidth: number;
   questWidgetX: number;
   questWidgetY: number;
   questWidgetWidth: number;
@@ -156,7 +152,7 @@ export function getCoinBugSpawnBounds(layout: CoinBugSpawnLayout, worldWidth: nu
 
   return {
     margin,
-    minY: Math.max(layout.statsY + layout.statsHeight + 18, layout.gridStartY - 42, 96),
+    minY: Math.max(layout.hudY + layout.hudHeight + 18, layout.gridStartY - 42, 96),
     maxY: layout.hatchY - 34,
     minX: margin,
     maxX: Math.max(margin, worldWidth - margin),
@@ -229,7 +225,6 @@ export function shouldExpireCoinBug(lifetimeMs: number): boolean {
 function getCoinBugCriticalRects(layout: CoinBugSpawnLayout, worldWidth: number): PlainRect[] {
   return [
     { x: layout.hudX, y: layout.hudY, width: layout.hudWidth, height: layout.hudHeight },
-    { x: layout.statsX, y: layout.statsY, width: layout.statsWidth, height: layout.statsHeight },
     { x: layout.questWidgetX, y: layout.questWidgetY, width: layout.questWidgetWidth, height: layout.questWidgetHeight },
     { x: layout.tapFarmX, y: layout.tapFarmY, width: layout.tapFarmWidth, height: layout.tapFarmHeight },
     { x: layout.hatchX, y: layout.hatchY, width: layout.hatchWidth, height: layout.hatchHeight },

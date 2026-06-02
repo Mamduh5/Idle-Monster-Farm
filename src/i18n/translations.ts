@@ -43,10 +43,6 @@ const EN: TranslationTable = {
 
   'ui.hud.coins': '{amount}',
   'ui.hud.essence': '{amount}',
-  'ui.hud.production': 'Production',
-  'ui.hud.incomePerSecond': 'Income / sec  {amount}',
-  'ui.hud.nextEgg': 'Next Egg  {amount}',
-  'ui.hud.offlineCap': 'Offline Cap  {duration}',
 
   'ui.hatch.label': 'Hatch Egg',
   'ui.hatch.ready': 'Ready',
@@ -625,10 +621,6 @@ const TH: TranslationTable = {
 
   'ui.hud.coins': '{amount}',
   'ui.hud.essence': '{amount}',
-  'ui.hud.production': 'การผลิต',
-  'ui.hud.incomePerSecond': 'รายได้/วิ  {amount}',
-  'ui.hud.nextEgg': 'ไข่ถัดไป  {amount}',
-  'ui.hud.offlineCap': 'ออฟไลน์  {duration}',
 
   'ui.hatch.label': 'ฟักไข่',
   'ui.hatch.ready': 'พร้อม',

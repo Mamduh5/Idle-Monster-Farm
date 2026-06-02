@@ -195,6 +195,7 @@ const RARE_HATCH_COST = 1;
 const HATCH_POOL_HOLD_MS = 800;
 const HATCH_POOL_HINT_HATCH_COUNT = 3;
 const SHOW_DEBUG_PANEL = false;
+const SHOW_DEBUG_PRODUCTION_PANEL = false;
 const SHOW_MONSTER_HITBOX_DEBUG = false;
 const MODAL_OVERLAY_DEPTH = 18;
 const BOSS_SELECT_PAGE_SIZE = 4;
@@ -330,10 +331,6 @@ type FarmSceneLayout = {
   hudY: number;
   hudWidth: number;
   hudHeight: number;
-  statsX: number;
-  statsY: number;
-  statsWidth: number;
-  statsHeight: number;
   questWidgetX: number;
   questWidgetY: number;
   questWidgetWidth: number;
@@ -571,11 +568,8 @@ export class FarmScene extends Phaser.Scene {
     this.hudView = new HudView(this, {
       fontFamily: UI_FONT_FAMILY,
       formatCoinAmount: (amount) => this.formatCoinAmount(amount),
-      formatDuration: (seconds) => this.formatDuration(seconds),
-      getEffectiveEggCost: () => this.getEffectiveEggCost(),
       getLayout: () => this.getLayout(),
       getMonsterEssence: () => this.monsterEssence,
-      getOfflineCapSeconds: () => this.getOfflineCapSeconds(),
       getTotalIncomePerSecond: () => this.getTotalIncomePerSecond(),
       t: (key, params) => this.t(key, params),
       theme: THEME,
@@ -983,12 +977,6 @@ export class FarmScene extends Phaser.Scene {
     const hudHeight = isNarrow ? 54 : 64;
     const hudX = margin;
     const hudY = isNarrow ? 8 : 20;
-    const statsWidth = hudWidth;
-    // const statsHeight = isNarrow ? 88 : 104;
-    const statsHeight = 0;
-    const statsX = margin;
-    const statsY = hudY + hudHeight;
-    // const statsY = isNarrow ? hudY + hudHeight + 6 : 94;
     const menuX = width - margin;
     const menuY = isNarrow ? 8 : 22;
     const menuGap = isNarrow ? 25 : 40;
@@ -1000,10 +988,9 @@ export class FarmScene extends Phaser.Scene {
     const questWidgetHeight = isNarrow ? 80 : 88;
     const questWidgetX = width - margin - questWidgetWidth;
     const questWidgetY = isNarrow ? menuY + 38 : menuY + 44;
-    // const topContentBottom = isNarrow ? Math.max(statsY + statsHeight, menuBottom) : 126;
     const topContentBottom = isNarrow
-  ? Math.max(hudY + hudHeight, questWidgetY + questWidgetHeight, menuBottom)
-  : 126;
+      ? Math.max(hudY + hudHeight, questWidgetY + questWidgetHeight, menuBottom)
+      : 126;
     const bottomSafePadding = isNarrow ? (height < 700 ? 14 : 18) : 18;
     const actionBarWidth = isNarrow ? Math.min(width - margin * 2, 366) : 420;
     const actionBarHeight = isNarrow ? (height < 680 ? 58 : 64) : 64;
@@ -1082,10 +1069,6 @@ export class FarmScene extends Phaser.Scene {
       hudY,
       hudWidth,
       hudHeight,
-      statsX,
-      statsY,
-      statsWidth,
-      statsHeight,
       questWidgetX,
       questWidgetY,
       questWidgetWidth,
@@ -1850,7 +1833,6 @@ export class FarmScene extends Phaser.Scene {
     const layout = this.getLayout();
     const farmControlRects = [
       new Phaser.Geom.Rectangle(layout.hudX, layout.hudY, layout.hudWidth, layout.hudHeight),
-      new Phaser.Geom.Rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight),
       new Phaser.Geom.Rectangle(layout.questWidgetX, layout.questWidgetY, layout.questWidgetWidth, layout.questWidgetHeight),
       new Phaser.Geom.Rectangle(layout.tapFarmX, layout.tapFarmY, layout.tapFarmWidth, layout.tapFarmHeight),
       new Phaser.Geom.Rectangle(layout.actionBarX, layout.actionBarY, layout.actionBarWidth, layout.actionBarHeight),
@@ -3666,7 +3648,7 @@ export class FarmScene extends Phaser.Scene {
     }
 
     if (target === 'coins') {
-      return new Phaser.Geom.Rectangle(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight);
+      return new Phaser.Geom.Rectangle(layout.hudX, layout.hudY, layout.hudWidth, layout.hudHeight);
     }
 
     if (target === 'remove') {
@@ -6239,13 +6221,19 @@ export class FarmScene extends Phaser.Scene {
     const hatchState = this.isHatchReady()
       ? 'Ready'
       : `${(remainingMs / MILLISECONDS_PER_SECOND).toFixed(1)}s remaining`;
+    const productionLines = SHOW_DEBUG_PRODUCTION_PANEL
+      ? [
+        `Egg cost: ${this.getEffectiveEggCost()} effective / ${this.currentEggCost} raw`,
+        `Income/sec: ${this.formatCoinAmount(this.getTotalIncomePerSecond())}`,
+        `Offline cap: ${this.formatDuration(this.getOfflineCapSeconds())}`,
+      ]
+      : [];
     const upgradeLines = UPGRADE_DEFINITIONS
       .map((upgrade) => `${upgrade.name}: Lv ${this.getUpgradeLevel(upgrade.id)}/${upgrade.maxLevel}`)
       .join('\n');
 
     return [
-      `Egg cost: ${this.getEffectiveEggCost()} effective / ${this.currentEggCost} raw`,
-      `Income/sec: ${this.formatCoinAmount(this.getTotalIncomePerSecond())}`,
+      ...productionLines,
       `Rituals performed: ${this.totalRitualsPerformed}`,
       `Ritual Power: ${getFarmRitualPower(this.farmSlots)} / ${ritualRequirement}`,
       `Ritual sacrifice power: ${ritualSacrificeCandidate?.ritualPower ?? 0}`,
@@ -6256,7 +6244,6 @@ export class FarmScene extends Phaser.Scene {
       `Rare Hatch: Lv ${this.rareHatchLevel} (rare weight x${getRareHatchWeightMultiplier(this.rareHatchLevel).toFixed(2)})`,
       `Hatch cooldown: ${(cooldownMs / MILLISECONDS_PER_SECOND).toFixed(1)}s`,
       `Hatch state: ${hatchState}`,
-      `Offline cap: ${this.formatDuration(this.getOfflineCapSeconds())}`,
       '',
       'Upgrade levels:',
       upgradeLines,
