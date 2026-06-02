@@ -362,6 +362,7 @@ type FarmSceneLayout = {
 type GuideTargetKey =
   | 'upgrade-buy'
   | 'boss-start'
+  | 'modal-close'
   | 'forge-apply'
   | 'safe-ritual'
   | 'essence-hatch-blessing'
@@ -1519,7 +1520,7 @@ export class FarmScene extends Phaser.Scene {
       yOffset?: number;
     } = {},
   ): void {
-    addCloseButton(this, panel, {
+    const closeButton = addCloseButton(this, panel, {
       color: options.color ?? THEME.text,
       fontFamily: UI_FONT_FAMILY,
       label: options.label ?? this.t('common.close'),
@@ -1531,6 +1532,7 @@ export class FarmScene extends Phaser.Scene {
       x: panelWidth / 2 - (options.xOffset ?? 24),
       y: -panelHeight / 2 + (options.yOffset ?? 22),
     });
+    this.registerGuideTargetFromText('modal-close', closeButton, 10);
   }
 
   private addPaginationControls(
@@ -3194,6 +3196,10 @@ export class FarmScene extends Phaser.Scene {
     }
 
     const guideState = this.getQuestGuideRenderState(this.activeQuestGuideStepId);
+    if (this.shouldGuideClosePanelBeforeForge() && !this.guideTargetRects.has('modal-close')) {
+      this.destroyQuestGuideOverlay();
+      return;
+    }
     this.renderQuestGuideOverlay(guideState.target, guideState.text);
   }
 
@@ -3509,6 +3515,13 @@ export class FarmScene extends Phaser.Scene {
     }
 
     if (stepId === 'forge-open') {
+      if (this.shouldGuideClosePanelBeforeForge()) {
+        return {
+          target: 'modal-close',
+          text: this.t('ui.guide.closePanelFirst'),
+        };
+      }
+
       if (this.elementForgePanel && this.guideTargetRects.has('forge-apply')) {
         return {
           target: 'forge-apply',
@@ -3732,6 +3745,12 @@ export class FarmScene extends Phaser.Scene {
     return canPerformSafeRitual(this.farmSlots, this.totalRitualsPerformed);
   }
 
+  private shouldGuideClosePanelBeforeForge(): boolean {
+    return this.activeQuestGuideStepId === 'forge-open'
+      && !this.elementForgePanel
+      && this.isModalOpen();
+  }
+
   private canGuideUpgradeNow(): boolean {
     return UPGRADE_DEFINITIONS.some((upgrade) => {
       const level = this.getUpgradeLevel(upgrade.id);
@@ -3778,6 +3797,7 @@ export class FarmScene extends Phaser.Scene {
       || target === 'ritual'
       || target === 'upgrade-buy'
       || target === 'boss-start'
+      || target === 'modal-close'
       || target === 'forge-apply'
       || target === 'safe-ritual'
       || target === 'essence-hatch-blessing'
@@ -3887,7 +3907,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getGuideTargetRect(target: QuestGuideFocusTarget, layout: FarmSceneLayout): Phaser.Geom.Rectangle {
-    if (target === 'upgrade-buy' || target === 'boss-start' || target === 'forge-apply' || target === 'safe-ritual' || target === 'essence-hatch-blessing' || target === 'essence-rare-hatch') {
+    if (target === 'upgrade-buy' || target === 'boss-start' || target === 'modal-close' || target === 'forge-apply' || target === 'safe-ritual' || target === 'essence-hatch-blessing' || target === 'essence-rare-hatch') {
       return this.guideTargetRects.get(target) ?? new Phaser.Geom.Rectangle(this.scale.width / 2 - 70, this.scale.height / 2 - 22, 140, 44);
     }
 
@@ -5485,6 +5505,7 @@ export class FarmScene extends Phaser.Scene {
       }
       this.bossBattlePanel.destroy();
       this.bossBattlePanel = undefined;
+      this.guideTargetRects.delete('modal-close');
       if (resetBossBattleState) {
         this.selectedBossBattleBossId = undefined;
         this.bossBattleSession = undefined;
@@ -5498,6 +5519,9 @@ export class FarmScene extends Phaser.Scene {
         this.bossBattleStagePageIndex = 0;
       }
       this.hideModalOverlay();
+      if (this.activeQuestGuideStepId === 'forge-open') {
+        this.syncQuestGuide();
+      }
     }
   }
 
@@ -6156,6 +6180,7 @@ export class FarmScene extends Phaser.Scene {
         this.showToast(this.t('toast.bossBattleFirstClear', {
           reward: fullRewardText,
         }), 'success');
+        this.syncQuestGuide();
         return;
       }
 
