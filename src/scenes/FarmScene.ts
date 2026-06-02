@@ -204,14 +204,16 @@ const BOSS_DAILY_CLEAR_LIMIT = 2;
 const ELEMENT_FORGE_MONSTERS_PER_PAGE = 4;
 const COMPENDIUM_FAMILIES_PER_PAGE = 9;
 const COMPENDIUM_MONSTERS_PER_PAGE = 15;
-const QUEST_GUIDE_SEQUENCE: QuestGuideStepId[] = [
+const BASIC_QUEST_GUIDE_SEQUENCE: QuestGuideStepId[] = [
   'hatch-1',
   'hatch-2',
   'merge-1',
   'income',
   'shop-open',
   'shop-buy',
-  'remove-tip',
+];
+const QUEST_GUIDE_SEQUENCE: QuestGuideStepId[] = [
+  ...BASIC_QUEST_GUIDE_SEQUENCE,
   'battle-open',
   'forge-open',
   'ritual-open',
@@ -225,7 +227,7 @@ const QUEST_GUIDE_TEXT_KEYS: Record<QuestGuideStepId, string> = {
   'shop-open': 'ui.guide.openShop',
   'shop-buy': 'ui.guide.buyUpgrade',
   'remove-tip': 'ui.guide.remove',
-  'ritual-open': 'ui.guide.openRitual',
+  'ritual-open': 'guide.ritualReady',
   'battle-open': 'ui.guide.openBattle',
   'forge-open': 'ui.guide.openForge',
   'essence-upgrade': 'ui.guide.essenceUpgrade',
@@ -359,6 +361,7 @@ type FarmSceneLayout = {
 };
 type GuideTargetKey =
   | 'upgrade-buy'
+  | 'boss-start'
   | 'forge-apply'
   | 'safe-ritual'
   | 'essence-hatch-blessing'
@@ -428,6 +431,7 @@ export class FarmScene extends Phaser.Scene {
   private isFirstGuideSkipped = false;
   private questGuideOverlay?: Phaser.GameObjects.Container;
   private questGuideStartedAt = 0;
+  private pausedQuestGuideAfterStepId?: QuestGuideStepId;
   private guideTargetRects = new Map<GuideTargetKey, Phaser.Geom.Rectangle>();
   private compendiumPanel?: Phaser.GameObjects.Container;
   private settingsPanel?: Phaser.GameObjects.Container;
@@ -598,8 +602,8 @@ export class FarmScene extends Phaser.Scene {
       fontFamily: UI_FONT_FAMILY,
       getLayout: () => this.getLayout(),
       getNextQuest: () => this.getNextQuest(),
-      getQuestTitle: (quest) => this.getLocalizedQuestName(quest),
-      getQuestProgressText: (quest) => this.getQuestProgressText(quest),
+      getQuestTitle: (quest) => this.getNextQuestWidgetTitle(quest),
+      getQuestProgressText: (quest) => this.getNextQuestWidgetProgressText(quest),
       getQuestRewardText: (reward) => this.getQuestRewardText(reward),
       isModalOpen: () => this.isModalOpen(),
       isQuestClaimed: (questId) => this.claimedQuestIds.has(questId),
@@ -647,6 +651,7 @@ export class FarmScene extends Phaser.Scene {
     this.isFirstGuideComplete = false;
     this.isFirstGuideSkipped = false;
     this.questGuideStartedAt = 0;
+    this.pausedQuestGuideAfterStepId = undefined;
     this.compendiumPanel = undefined;
     this.settingsPanel = undefined;
     this.helpPanel = undefined;
@@ -1307,8 +1312,11 @@ export class FarmScene extends Phaser.Scene {
     }
 
     if (action === 'battle') {
-      this.completeQuestGuideStep('battle-open');
-      this.openBossBattlePanel();
+      if (this.activeQuestGuideStepId === 'battle-open') {
+        this.openGuidedBossBattlePanel();
+      } else {
+        this.openBossBattlePanel();
+      }
       return;
     }
 
@@ -3118,6 +3126,10 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
+    if (this.focusPausedGuideQuest()) {
+      return;
+    }
+
     this.showGuideFocusForQuest(quest);
 
     if (quest.focusTarget === 'shop') {
@@ -3141,6 +3153,16 @@ export class FarmScene extends Phaser.Scene {
     this.renderQuestGuideOverlay(_quest.focusTarget, this.getLocalizedQuestName(_quest));
   }
 
+  private getNextQuestWidgetTitle(quest: QuestDefinition): string {
+    const pausedTitleKey = this.getPausedQuestGuideTitleKey();
+
+    return pausedTitleKey ? this.t(pausedTitleKey) : this.getLocalizedQuestName(quest);
+  }
+
+  private getNextQuestWidgetProgressText(quest: QuestDefinition): string {
+    return this.getQuestProgressText(quest);
+  }
+
   private syncQuestGuide(): void {
     if (this.isFirstGuideComplete || this.isFirstGuideSkipped) {
       this.destroyQuestGuideOverlay();
@@ -3148,14 +3170,21 @@ export class FarmScene extends Phaser.Scene {
     }
 
     this.skipCompletedQuestGuideSteps();
+    this.refreshQuestGuideCheckpointPause();
     if (this.activeQuestGuideStepId && this.completedQuestGuideStepIds.has(this.activeQuestGuideStepId)) {
       this.activeQuestGuideStepId = undefined;
       this.questGuideStartedAt = 0;
     }
-    this.activeQuestGuideStepId ??= QUEST_GUIDE_SEQUENCE.find((stepId) => !this.completedQuestGuideStepIds.has(stepId));
+    if (this.pausedQuestGuideAfterStepId && !this.activeQuestGuideStepId) {
+      this.destroyQuestGuideOverlay();
+      return;
+    }
+    this.activeQuestGuideStepId ??= this.getNextEligibleQuestGuideStep();
 
     if (!this.activeQuestGuideStepId) {
-      this.isFirstGuideComplete = true;
+      if (this.areAllQuestGuideStepsComplete()) {
+        this.isFirstGuideComplete = true;
+      }
       this.destroyQuestGuideOverlay();
       return;
     }
@@ -3166,6 +3195,152 @@ export class FarmScene extends Phaser.Scene {
 
     const guideState = this.getQuestGuideRenderState(this.activeQuestGuideStepId);
     this.renderQuestGuideOverlay(guideState.target, guideState.text);
+  }
+
+  private getNextEligibleQuestGuideStep(): QuestGuideStepId | undefined {
+    const basicStep = BASIC_QUEST_GUIDE_SEQUENCE.find((stepId) => !this.completedQuestGuideStepIds.has(stepId));
+
+    if (basicStep) {
+      return basicStep;
+    }
+
+    if (!this.completedQuestGuideStepIds.has('battle-open')) {
+      return this.canAutoStartBattleGuideNow() ? 'battle-open' : undefined;
+    }
+
+    if (!this.completedQuestGuideStepIds.has('forge-open')) {
+      return this.canStartForgeGuideNow() ? 'forge-open' : undefined;
+    }
+
+    if (!this.completedQuestGuideStepIds.has('ritual-open')) {
+      return this.canGuideRitualNow() ? 'ritual-open' : undefined;
+    }
+
+    if (!this.completedQuestGuideStepIds.has('essence-upgrade')) {
+      return this.canGuideEssenceUpgradeNow() ? 'essence-upgrade' : undefined;
+    }
+
+    return undefined;
+  }
+
+  private areAllQuestGuideStepsComplete(): boolean {
+    return QUEST_GUIDE_SEQUENCE.every((stepId) => this.completedQuestGuideStepIds.has(stepId));
+  }
+
+  private startQuestGuideStep(stepId: QuestGuideStepId): boolean {
+    if (
+      this.isFirstGuideComplete
+      || this.isFirstGuideSkipped
+      || this.completedQuestGuideStepIds.has(stepId)
+      || !this.canStartQuestGuideStep(stepId)
+    ) {
+      return false;
+    }
+
+    this.activeQuestGuideStepId = stepId;
+    this.pausedQuestGuideAfterStepId = undefined;
+    this.questGuideStartedAt = 0;
+    this.hasUnsavedProgress = true;
+    this.syncQuestGuide();
+    return true;
+  }
+
+  private canStartQuestGuideStep(stepId: QuestGuideStepId): boolean {
+    if (BASIC_QUEST_GUIDE_SEQUENCE.includes(stepId)) {
+      return true;
+    }
+
+    if (stepId === 'battle-open') {
+      return this.canGuideBattleNow();
+    }
+
+    if (stepId === 'forge-open') {
+      return this.canStartForgeGuideNow();
+    }
+
+    if (stepId === 'ritual-open') {
+      return this.canGuideRitualNow();
+    }
+
+    if (stepId === 'essence-upgrade') {
+      return this.canGuideEssenceUpgradeNow();
+    }
+
+    return false;
+  }
+
+  private focusPausedGuideQuest(): boolean {
+    const pausedTitleKey = this.getPausedQuestGuideTitleKey();
+
+    if (!pausedTitleKey) {
+      return false;
+    }
+
+    if (!this.completedQuestGuideStepIds.has('battle-open')) {
+      if (this.startQuestGuideStep('battle-open')) {
+        this.openGuidedBossBattlePanel();
+      } else {
+        this.showToast(this.t('quest.powerUpForBoss'), 'info');
+      }
+      return true;
+    }
+
+    if (!this.completedQuestGuideStepIds.has('forge-open')) {
+      if (this.startQuestGuideStep('forge-open')) {
+        this.openElementForgePanel(true);
+      } else {
+        this.showToast(this.t(this.hasBossProgressForForge() ? 'quest.earnFragmentsForForge' : 'quest.powerUpBeatBoss'), 'info');
+      }
+      return true;
+    }
+
+    if (!this.completedQuestGuideStepIds.has('ritual-open')) {
+      if (this.startQuestGuideStep('ritual-open')) {
+        this.openPrestigePanel();
+      } else {
+        this.showToast(this.t('quest.buildStrongerForRitual'), 'info');
+      }
+      return true;
+    }
+
+    if (!this.completedQuestGuideStepIds.has('essence-upgrade')) {
+      if (this.startQuestGuideStep('essence-upgrade')) {
+        this.openPrestigePanel();
+      } else {
+        this.showToast(this.t('quest.earnEssenceFromRitual'), 'info');
+      }
+      return true;
+    }
+
+    return false;
+  }
+
+  private getPausedQuestGuideTitleKey(): string | undefined {
+    if (this.isFirstGuideComplete || this.isFirstGuideSkipped || !this.isBasicQuestGuideComplete()) {
+      return undefined;
+    }
+
+    if (!this.completedQuestGuideStepIds.has('battle-open')) {
+      return 'quest.powerUpForBoss';
+    }
+
+    if (!this.completedQuestGuideStepIds.has('forge-open')) {
+      return this.hasBossProgressForForge() ? 'quest.earnFragmentsForForge' : 'quest.powerUpBeatBoss';
+    }
+
+    if (!this.completedQuestGuideStepIds.has('ritual-open')) {
+      return 'quest.buildStrongerForRitual';
+    }
+
+    if (!this.completedQuestGuideStepIds.has('essence-upgrade')) {
+      return 'quest.earnEssenceFromRitual';
+    }
+
+    return undefined;
+  }
+
+  private isBasicQuestGuideComplete(): boolean {
+    return BASIC_QUEST_GUIDE_SEQUENCE.every((stepId) => this.completedQuestGuideStepIds.has(stepId));
   }
 
   private completeQuestGuideStep(stepId: QuestGuideStepId): void {
@@ -3180,14 +3355,40 @@ export class FarmScene extends Phaser.Scene {
       this.questGuideStartedAt = 0;
     }
 
+    if (this.shouldPauseQuestGuideAfterStep(stepId)) {
+      this.pausedQuestGuideAfterStepId = stepId;
+    }
+
     this.hasUnsavedProgress = true;
     this.syncQuestGuide();
+  }
+
+  private shouldPauseQuestGuideAfterStep(stepId: QuestGuideStepId): boolean {
+    return stepId === 'shop-buy'
+      || stepId === 'battle-open'
+      || stepId === 'forge-open';
+  }
+
+  private refreshQuestGuideCheckpointPause(): void {
+    if (this.pausedQuestGuideAfterStepId === 'battle-open' && this.hasBossProgressForForge()) {
+      this.pausedQuestGuideAfterStepId = undefined;
+      return;
+    }
+
+    if (
+      this.pausedQuestGuideAfterStepId === 'forge-open'
+      && !this.elementForgePanel
+      && this.canGuideRitualNow()
+    ) {
+      this.pausedQuestGuideAfterStepId = undefined;
+    }
   }
 
   private skipQuestGuide(): void {
     this.isFirstGuideSkipped = true;
     this.isFirstGuideComplete = true;
     this.activeQuestGuideStepId = undefined;
+    this.pausedQuestGuideAfterStepId = undefined;
     this.destroyQuestGuideOverlay();
     this.skipSavingUntilProgress = false;
     this.saveProgress();
@@ -3208,6 +3409,15 @@ export class FarmScene extends Phaser.Scene {
 
     if (this.getTotalIncomePerSecond() > 0) {
       this.completedQuestGuideStepIds.add('income');
+    }
+
+    if (Object.values(this.upgradeLevels).some((level) => level > 0)) {
+      this.completedQuestGuideStepIds.add('shop-open');
+      this.completedQuestGuideStepIds.add('shop-buy');
+    }
+
+    if (this.hasBossProgressForForge()) {
+      this.completedQuestGuideStepIds.add('battle-open');
     }
 
     if (this.farmSlots.some((slot) => slot.monster?.element) || this.hasUsedGuidedFreeForge) {
@@ -3265,8 +3475,9 @@ export class FarmScene extends Phaser.Scene {
     if (stepId === 'ritual-open') {
       if (!this.canGuideRitualNow()) {
         return {
-          target: this.canGuideMergeNow() ? 'monster' : this.canGuideHatchNow() ? 'hatch' : 'monster',
-          text: this.t('ui.guide.buildStrongerForRitual'),
+          target: 'monster',
+          text: this.t('guide.ritualNotReady'),
+          autoCompleteAfterMs: 2200,
         };
       }
 
@@ -3279,11 +3490,18 @@ export class FarmScene extends Phaser.Scene {
 
       return {
         target: 'ritual',
-        text: this.t('ui.guide.safeRitual'),
+        text: this.t('guide.ritualReady'),
       };
     }
 
     if (stepId === 'battle-open') {
+      if (this.bossBattlePanel && this.guideTargetRects.has('boss-start')) {
+        return {
+          target: 'boss-start',
+          text: this.t('ui.guide.openBattle'),
+        };
+      }
+
       return {
         target: 'battle',
         text: this.getQuestGuideText(stepId),
@@ -3300,7 +3518,7 @@ export class FarmScene extends Phaser.Scene {
 
       return {
         target: this.canGuideForgeNow() ? 'forge' : 'battle',
-        text: this.canGuideForgeNow() ? this.getQuestGuideText(stepId) : this.t('ui.guide.bossFragments'),
+        text: this.canGuideForgeNow() ? this.t('guide.forgeReady') : this.t('guide.bossTryAgainLater'),
       };
     }
 
@@ -3447,7 +3665,40 @@ export class FarmScene extends Phaser.Scene {
     return false;
   }
 
+  private canAutoStartBattleGuideNow(): boolean {
+    return this.canGuideBattleNow() && this.completedQuestIds.has('own-level-3-slime');
+  }
+
+  private canGuideBattleNow(): boolean {
+    const firstStage = BOSS_BATTLE_DEFINITIONS[0]?.stages[0];
+
+    return firstStage !== undefined
+      && !this.hasBossProgressForForge()
+      && getAutoBattleTeam(this.farmSlots, firstStage.teamSize).length > 0;
+  }
+
+  private hasBossProgressForForge(): boolean {
+    return this.claimedBossBattleStageIds.size > 0
+      || Object.values(this.elementFragments).some((amount) => amount > 0);
+  }
+
+  private canStartForgeGuideNow(): boolean {
+    if (!this.hasBossProgressForForge()) {
+      return false;
+    }
+
+    if (!this.hasUsedGuidedFreeForge && this.getElementForgeMonsterSlots().some((slot) => slot.monster && !slot.monster.element)) {
+      return true;
+    }
+
+    return this.canGuideForgeNow();
+  }
+
   private canGuideForgeNow(): boolean {
+    if (!this.hasBossProgressForForge()) {
+      return false;
+    }
+
     if (this.isGuidedFreeForgeAvailable()) {
       return this.getElementForgeMonsterSlots().some((slot) => slot.monster && !slot.monster.element);
     }
@@ -3526,6 +3777,7 @@ export class FarmScene extends Phaser.Scene {
       || target === 'forge'
       || target === 'ritual'
       || target === 'upgrade-buy'
+      || target === 'boss-start'
       || target === 'forge-apply'
       || target === 'safe-ritual'
       || target === 'essence-hatch-blessing'
@@ -3635,7 +3887,7 @@ export class FarmScene extends Phaser.Scene {
   }
 
   private getGuideTargetRect(target: QuestGuideFocusTarget, layout: FarmSceneLayout): Phaser.Geom.Rectangle {
-    if (target === 'upgrade-buy' || target === 'forge-apply' || target === 'safe-ritual' || target === 'essence-hatch-blessing' || target === 'essence-rare-hatch') {
+    if (target === 'upgrade-buy' || target === 'boss-start' || target === 'forge-apply' || target === 'safe-ritual' || target === 'essence-hatch-blessing' || target === 'essence-rare-hatch') {
       return this.guideTargetRects.get(target) ?? new Phaser.Geom.Rectangle(this.scale.width / 2 - 70, this.scale.height / 2 - 22, 140, 44);
     }
 
@@ -3687,6 +3939,13 @@ export class FarmScene extends Phaser.Scene {
     }
 
     this.openBossBattlePanel();
+  }
+
+  private openGuidedBossBattlePanel(): void {
+    this.selectedBossBattleBossId = BOSS_BATTLE_DEFINITIONS[0]?.id;
+    this.bossBattleStageIndex = 0;
+    this.bossBattleStagePageIndex = 0;
+    this.openBossBattlePanel(true);
   }
 
   private openBossBattlePanel(useDefaultStage = true, options: BossBattlePanelRefreshOptions = {}): void {
@@ -4323,9 +4582,12 @@ export class FarmScene extends Phaser.Scene {
         fontSize: isCompactPanel ? '11px' : '12px',
         wordWrap: { width: contentWidth },
       }).setOrigin(0.5, 0));
-      this.addBattleButton(panel, -buttonWidth / 2 - gap / 2, y, buttonWidth, isCompactPanel ? 34 : 38, this.t('ui.bossBattle.startFight'), THEME.buttonWarm, '#ffffff', () => {
+      const startButton = this.addBattleButton(panel, -buttonWidth / 2 - gap / 2, y, buttonWidth, isCompactPanel ? 34 : 38, this.t('ui.bossBattle.startFight'), THEME.buttonWarm, '#ffffff', () => {
         this.startBossBattle(stage);
       }, controlsEnabled && canClearToday);
+      if (this.activeQuestGuideStepId === 'battle-open' && controlsEnabled && canClearToday) {
+        this.registerGuideTargetFromText('boss-start', startButton, 10);
+      }
       this.addBattleButton(panel, buttonWidth / 2 + gap / 2, y, buttonWidth, isCompactPanel ? 34 : 38, this.t('ui.bossBattle.reviveAd'), THEME.buttonRitual, '#ffffff', () => {
         void this.reviveBossBattleWithAd();
       }, controlsEnabled);
@@ -4340,9 +4602,12 @@ export class FarmScene extends Phaser.Scene {
       return;
     }
 
-    this.addBattleButton(panel, 0, y, buttonWidth, isCompactPanel ? 34 : 38, this.t('ui.bossBattle.startFight'), THEME.buttonWarm, '#ffffff', () => {
+    const startButton = this.addBattleButton(panel, 0, y, buttonWidth, isCompactPanel ? 34 : 38, this.t('ui.bossBattle.startFight'), THEME.buttonWarm, '#ffffff', () => {
       this.startBossBattle(stage);
     }, controlsEnabled && canClearToday);
+    if (this.activeQuestGuideStepId === 'battle-open' && controlsEnabled && canClearToday) {
+      this.registerGuideTargetFromText('boss-start', startButton, 10);
+    }
   }
 
   private addBossBattleAdDetail(
@@ -5519,10 +5784,12 @@ export class FarmScene extends Phaser.Scene {
 
     if (team.length === 0) {
       this.bossBattleStatusText = this.t('ui.bossBattle.noTeam');
+      this.completeQuestGuideStep('battle-open');
       this.refreshBossBattlePanel();
       return;
     }
 
+    this.completeQuestGuideStep('battle-open');
     this.bossBattleSession = createBattleSession(stage, team);
     this.bossBattleStatusText = this.t('ui.bossBattle.chooseSkill');
     this.bossBattleLogText = '';
