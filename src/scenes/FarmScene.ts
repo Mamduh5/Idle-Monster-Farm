@@ -265,8 +265,38 @@ const THEME = {
   mutedText: '#d8e8d0',
   goldText: '#fff0a8',
 };
+const FARM_SLOT_READABILITY = {
+  emptyCornerInset: 13,
+  emptyCornerLength: 11,
+  emptyCornerAlpha: 0.24,
+  emptyCornerStrokeWidth: 2,
+  dropIndicatorDepth: 8,
+  dropIndicatorSizePadding: 8,
+  moveFillAlpha: 0.08,
+  moveStrokeAlpha: 0.9,
+  moveStrokeWidth: 3,
+  mergeFillAlpha: 0.06,
+  mergeStrokeAlpha: 0.98,
+  mergeStrokeWidth: 4,
+  mergeInnerPadding: 10,
+  mergeInnerStrokeAlpha: 0.82,
+  mergeInnerStrokeWidth: 2,
+  blockedFillAlpha: 0.06,
+  blockedStrokeAlpha: 0.72,
+  blockedStrokeWidth: 3,
+  blockedCornerLength: 13,
+  hoverScale: 1.04,
+  moveFillColor: 0xd9f6ba,
+  moveStrokeColor: 0xe8ffd6,
+  mergeFillColor: 0xfff0a8,
+  mergeStrokeColor: 0xfff0a8,
+  mergeInnerStrokeColor: 0x8df0ff,
+  blockedFillColor: 0x10291a,
+  blockedStrokeColor: 0xb8a7a0,
+};
 
 type MonsterDragZone = Phaser.GameObjects.Zone;
+type FarmSlotDropIndicatorKind = 'move' | 'merge' | 'blocked';
 type UiLayoutMode = 'mobile' | 'desktop';
 type ModalKind = 'compendium' | 'upgrade-shop' | 'quests' | 'battle' | 'element-forge' | 'default';
 type BossBattlePlayerVisualEffect = {
@@ -414,6 +444,9 @@ export class FarmScene extends Phaser.Scene {
   private slotCenters: Phaser.Math.Vector2[] = [];
   private monsterVisuals: Array<MonsterVisual | null> = [];
   private monsterDragZones: Array<MonsterDragZone | null> = [];
+  private slotDropIndicators: Phaser.GameObjects.Container[] = [];
+  private activeSlotDropSourceSlotId: number | null = null;
+  private activeSlotDropHoverSlotId: number | null = null;
   private hatchCooldownMs = HATCH_COOLDOWN_MS;
   private cellSize = CELL_SIZE;
   private gridGap = GRID_GAP;
@@ -1146,6 +1179,7 @@ export class FarmScene extends Phaser.Scene {
 
   private createFarmGrid(): void {
     this.farmGridContainer?.destroy();
+    this.clearSlotDropIndicators();
 
     const layout = this.getLayout();
     const startX = layout.gridStartX;
@@ -1254,6 +1288,7 @@ export class FarmScene extends Phaser.Scene {
       .setOrigin(0);
 
     container?.add([shadow, slotTile, inner]);
+    this.addEmptySlotReadabilityMarks(container, x, y);
 
     if (enableSlotClick) {
       slotTile
@@ -1312,6 +1347,39 @@ export class FarmScene extends Phaser.Scene {
       fontSize: '12px',
       fontStyle: 'bold',
     }).setOrigin(0.5));
+  }
+
+  private addEmptySlotReadabilityMarks(
+    container: Phaser.GameObjects.Container | undefined,
+    x: number,
+    y: number,
+  ): void {
+    if (!container) {
+      return;
+    }
+
+    const {
+      emptyCornerAlpha,
+      emptyCornerInset,
+      emptyCornerLength,
+      emptyCornerStrokeWidth,
+    } = FARM_SLOT_READABILITY;
+    const left = x + emptyCornerInset;
+    const right = x + this.cellSize - emptyCornerInset;
+    const top = y + emptyCornerInset;
+    const bottom = y + this.cellSize - emptyCornerInset;
+    const marks = this.add.graphics();
+
+    marks.lineStyle(emptyCornerStrokeWidth, THEME.slotBorder, emptyCornerAlpha);
+    marks.lineBetween(left, top, left + emptyCornerLength, top);
+    marks.lineBetween(left, top, left, top + emptyCornerLength);
+    marks.lineBetween(right, top, right - emptyCornerLength, top);
+    marks.lineBetween(right, top, right, top + emptyCornerLength);
+    marks.lineBetween(left, bottom, left + emptyCornerLength, bottom);
+    marks.lineBetween(left, bottom, left, bottom - emptyCornerLength);
+    marks.lineBetween(right, bottom, right - emptyCornerLength, bottom);
+    marks.lineBetween(right, bottom, right, bottom - emptyCornerLength);
+    container.add(marks);
   }
 
   private createHud(): void {
@@ -9731,6 +9799,7 @@ export class FarmScene extends Phaser.Scene {
     visual.setDepth(16);
     visual.setPosition(pointer.worldX, pointer.worldY);
     this.showMonsterRemoveZone();
+    this.updateSlotDropIndicators(slotId, pointer.worldX, pointer.worldY);
   }
 
   private updateManualMonsterDrag(pointer: Phaser.Input.Pointer): void {
@@ -9751,6 +9820,7 @@ export class FarmScene extends Phaser.Scene {
 
     this.activeDragVisual.setPosition(pointer.worldX, pointer.worldY);
     this.setMonsterRemoveZoneHot(this.isPointInMonsterRemoveZone(pointer.worldX, pointer.worldY));
+    this.updateSlotDropIndicators(this.activeDragSlotId, pointer.worldX, pointer.worldY);
   }
 
   private finishManualMonsterDrag(pointer: Phaser.Input.Pointer): void {
@@ -9789,6 +9859,7 @@ export class FarmScene extends Phaser.Scene {
     this.activeDragSlotId = null;
     this.activeDragVisual = undefined;
     this.activeDragPointerId = null;
+    this.clearSlotDropIndicators();
     this.hideMonsterRemoveZone();
   }
 
@@ -9931,6 +10002,149 @@ export class FarmScene extends Phaser.Scene {
     dropZone.pulseTween?.stop();
     dropZone.pulseTween = undefined;
     dropZone.container.setScale(1);
+  }
+
+  private updateSlotDropIndicators(sourceSlotId: number, worldX: number, worldY: number): void {
+    const hoverSlotId = this.findSlotIdAtPoint(worldX, worldY);
+
+    if (
+      this.activeSlotDropSourceSlotId === sourceSlotId
+      && this.activeSlotDropHoverSlotId === hoverSlotId
+    ) {
+      return;
+    }
+
+    this.slotDropIndicators.forEach((indicator) => {
+      indicator.destroy();
+    });
+    this.slotDropIndicators = [];
+    this.activeSlotDropSourceSlotId = sourceSlotId;
+    this.activeSlotDropHoverSlotId = hoverSlotId;
+
+    for (let slotId = 0; slotId < TOTAL_SLOT_COUNT; slotId += 1) {
+      if (slotId === sourceSlotId) {
+        continue;
+      }
+
+      const isHoverSlot = hoverSlotId === slotId;
+
+      if (!this.isSlotUnlocked(slotId)) {
+        if (isHoverSlot) {
+          this.addSlotDropIndicator(slotId, 'blocked', true);
+        }
+
+        continue;
+      }
+
+      if (this.canMoveSlots(sourceSlotId, slotId)) {
+        this.addSlotDropIndicator(slotId, 'move', isHoverSlot);
+        continue;
+      }
+
+      if (this.canMergeSlots(sourceSlotId, slotId)) {
+        this.addSlotDropIndicator(slotId, 'merge', isHoverSlot);
+        continue;
+      }
+
+      if (isHoverSlot) {
+        this.addSlotDropIndicator(slotId, 'blocked', true);
+      }
+    }
+  }
+
+  private addSlotDropIndicator(slotId: number, kind: FarmSlotDropIndicatorKind, isHoverSlot: boolean): void {
+    const center = this.slotCenters[slotId];
+
+    if (!center || center.x < 0 || center.y < 0) {
+      return;
+    }
+
+    const {
+      blockedFillAlpha,
+      blockedFillColor,
+      blockedStrokeAlpha,
+      blockedStrokeColor,
+      blockedStrokeWidth,
+      dropIndicatorDepth,
+      dropIndicatorSizePadding,
+      hoverScale,
+      mergeFillAlpha,
+      mergeFillColor,
+      mergeInnerPadding,
+      mergeInnerStrokeAlpha,
+      mergeInnerStrokeColor,
+      mergeInnerStrokeWidth,
+      mergeStrokeAlpha,
+      mergeStrokeColor,
+      mergeStrokeWidth,
+      moveFillAlpha,
+      moveFillColor,
+      moveStrokeAlpha,
+      moveStrokeColor,
+      moveStrokeWidth,
+    } = FARM_SLOT_READABILITY;
+    const indicatorSize = this.cellSize + dropIndicatorSizePadding;
+    const container = this.add.container(center.x, center.y)
+      .setDepth(dropIndicatorDepth)
+      .setScale(isHoverSlot ? hoverScale : 1);
+    const isMerge = kind === 'merge';
+    const isBlocked = kind === 'blocked';
+    const fillColor = isMerge ? mergeFillColor : isBlocked ? blockedFillColor : moveFillColor;
+    const fillAlpha = isMerge ? mergeFillAlpha : isBlocked ? blockedFillAlpha : moveFillAlpha;
+    const strokeColor = isMerge ? mergeStrokeColor : isBlocked ? blockedStrokeColor : moveStrokeColor;
+    const strokeAlpha = isMerge ? mergeStrokeAlpha : isBlocked ? blockedStrokeAlpha : moveStrokeAlpha;
+    const strokeWidth = isMerge ? mergeStrokeWidth : isBlocked ? blockedStrokeWidth : moveStrokeWidth;
+    const outline = this.add.rectangle(0, 0, indicatorSize, indicatorSize, fillColor, fillAlpha)
+      .setStrokeStyle(strokeWidth, strokeColor, strokeAlpha);
+
+    container.add(outline);
+
+    if (isMerge) {
+      container.add(this.add.rectangle(
+        0,
+        0,
+        indicatorSize - mergeInnerPadding,
+        indicatorSize - mergeInnerPadding,
+        mergeFillColor,
+        0,
+      ).setStrokeStyle(mergeInnerStrokeWidth, mergeInnerStrokeColor, mergeInnerStrokeAlpha));
+    }
+
+    if (isBlocked) {
+      this.addBlockedSlotDropCornerMarks(container, indicatorSize);
+    }
+
+    this.slotDropIndicators.push(container);
+  }
+
+  private addBlockedSlotDropCornerMarks(container: Phaser.GameObjects.Container, indicatorSize: number): void {
+    const {
+      blockedCornerLength,
+      blockedStrokeAlpha,
+      blockedStrokeColor,
+      blockedStrokeWidth,
+    } = FARM_SLOT_READABILITY;
+    const half = indicatorSize / 2;
+    const inset = 9;
+    const start = half - inset - blockedCornerLength;
+    const end = half - inset;
+    const marks = this.add.graphics();
+
+    marks.lineStyle(blockedStrokeWidth, blockedStrokeColor, blockedStrokeAlpha);
+    marks.lineBetween(-end, -start, -start, -end);
+    marks.lineBetween(start, -end, end, -start);
+    marks.lineBetween(-end, start, -start, end);
+    marks.lineBetween(start, end, end, start);
+    container.add(marks);
+  }
+
+  private clearSlotDropIndicators(): void {
+    this.slotDropIndicators.forEach((indicator) => {
+      indicator.destroy();
+    });
+    this.slotDropIndicators = [];
+    this.activeSlotDropSourceSlotId = null;
+    this.activeSlotDropHoverSlotId = null;
   }
 
   private renderMonsterInSlot(slot: FarmSlotState): void {
