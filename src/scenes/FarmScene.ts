@@ -18,6 +18,7 @@ import {
 } from '../ui/PanelControls';
 import { TapFarmView } from '../ui/TapFarmView';
 import { ToastView, type ToastVariant } from '../ui/ToastView';
+import { FARM_SLOT_STYLE, pollFarmSlotLiveStyle } from '../config/farmSlotStyle';
 import { EXPANSION_UNLOCK_COST, STARTING_EGG_COST } from '../data/economy';
 import {
   BOSS_BATTLE_DEFINITIONS,
@@ -213,6 +214,10 @@ const BASIC_QUEST_GUIDE_SEQUENCE: QuestGuideStepId[] = [
   'shop-open',
   'shop-buy',
 ];
+
+function hexColorToNumber(value: string, fallback: number): number {
+  return /^#[0-9a-f]{6}$/i.test(value) ? Number.parseInt(value.slice(1), 16) : fallback;
+}
 const QUEST_GUIDE_SEQUENCE: QuestGuideStepId[] = [
   ...BASIC_QUEST_GUIDE_SEQUENCE,
   'battle-open',
@@ -816,6 +821,34 @@ export class FarmScene extends Phaser.Scene {
     this.updateOnboardingHints();
     this.saveProgressWhenReady(delta);
     this.refreshEconomyDebugPanel();
+    this.pollFarmSlotLiveStyle();
+  }
+
+  private pollFarmSlotLiveStyle(): void {
+    void pollFarmSlotLiveStyle(this.time.now).then((changed) => {
+      if (!changed || !this.scene.isActive() || this.isModalOpen() || this.activeDragSlotId !== null) {
+        return;
+      }
+
+      this.refreshFarmSlotStyleVisuals();
+    });
+  }
+
+  private refreshFarmSlotStyleVisuals(): void {
+    this.monsterVisuals.forEach((visual) => {
+      visual?.destroy();
+    });
+    this.monsterDragZones.forEach((zone) => {
+      zone?.destroy();
+    });
+    this.monsterVisuals = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
+    this.monsterDragZones = Array.from({ length: TOTAL_SLOT_COUNT }, () => null);
+
+    this.createFarmGrid();
+    this.createExpansionPlaceholder();
+    this.farmSlots.forEach((slot) => {
+      this.renderMonsterInSlot(slot);
+    });
   }
 
   private rebuildResponsiveFarmView(): void {
@@ -1280,11 +1313,11 @@ export class FarmScene extends Phaser.Scene {
     const shadow = this.add.rectangle(x + 4, y + 5, this.cellSize, this.cellSize, THEME.shadow, 0.24)
       .setOrigin(0);
 
-    const slotTile = this.add.rectangle(x, y, this.cellSize, this.cellSize, THEME.slot)
+    const slotTile = this.add.rectangle(x, y, this.cellSize, this.cellSize, hexColorToNumber(FARM_SLOT_STYLE.fillColor, THEME.slot))
       .setOrigin(0)
-      .setStrokeStyle(3, THEME.slotBorder, 0.9);
+      .setStrokeStyle(FARM_SLOT_STYLE.borderWidth, hexColorToNumber(FARM_SLOT_STYLE.borderColor, THEME.slotBorder), 0.9);
 
-    const inner = this.add.rectangle(x + 8, y + 8, this.cellSize - 16, this.cellSize - 16, THEME.slotInner, 0.22)
+    const inner = this.add.rectangle(x + 8, y + 8, this.cellSize - 16, this.cellSize - 16, hexColorToNumber(FARM_SLOT_STYLE.innerFillColor, THEME.slotInner), FARM_SLOT_STYLE.emptySlotOpacity)
       .setOrigin(0);
 
     container?.add([shadow, slotTile, inner]);
@@ -1314,9 +1347,9 @@ export class FarmScene extends Phaser.Scene {
     container.add(this.add.rectangle(x + 3, y + 4, this.cellSize, this.cellSize, THEME.shadow, 0.22)
       .setOrigin(0));
 
-    const lockedTile = this.add.rectangle(x, y, this.cellSize, this.cellSize, THEME.locked, 0.72)
+    const lockedTile = this.add.rectangle(x, y, this.cellSize, this.cellSize, THEME.locked, FARM_SLOT_STYLE.lockedOverlayOpacity)
       .setOrigin(0)
-      .setStrokeStyle(3, THEME.lockedBorder, 0.72);
+      .setStrokeStyle(FARM_SLOT_STYLE.borderWidth, hexColorToNumber(FARM_SLOT_STYLE.borderColor, THEME.lockedBorder), 0.72);
 
     lockedTile
       .setInteractive({ useHandCursor: true })
@@ -10083,7 +10116,7 @@ export class FarmScene extends Phaser.Scene {
       moveStrokeColor,
       moveStrokeWidth,
     } = FARM_SLOT_READABILITY;
-    const indicatorSize = this.cellSize + dropIndicatorSizePadding;
+    const indicatorSize = (this.cellSize + dropIndicatorSizePadding) * FARM_SLOT_STYLE.mergeCandidatePulseScale;
     const container = this.add.container(center.x, center.y)
       .setDepth(dropIndicatorDepth)
       .setScale(isHoverSlot ? hoverScale : 1);
@@ -10158,9 +10191,9 @@ export class FarmScene extends Phaser.Scene {
     this.clearMonsterVisual(slot.id);
 
     const visual = this.add.container(center.x, center.y);
-    const visualScale = Math.min(1, Math.max(0.72, this.cellSize / CELL_SIZE));
+    const visualScale = Math.min(1, Math.max(0.72, this.cellSize / CELL_SIZE)) * FARM_SLOT_STYLE.monsterDisplayScale;
 
-    this.monsterRenderer.addMonsterVisual(visual, monster, 0, 0, visualScale);
+    this.monsterRenderer.addMonsterVisual(visual, monster, 0, FARM_SLOT_STYLE.monsterVerticalOffset, visualScale);
 
     if (monster.element) {
       this.addElementBadge(visual, monster.element, 24 * visualScale, -25 * visualScale, visualScale, monster.elementLevel);
